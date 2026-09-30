@@ -157,14 +157,18 @@ test("launch monitor conserva golpes parciales, exclusiones y resumen robusto", 
   for (const label of ["Driver", "Hierro 7", "Pitching Wedge", "Half Wedge / Approach", "Velocidad del palo", "Velocidad de bola", "Ángulo de lanzamiento", "Spin", "Carry", "Altura máxima", "Ángulo de caída"]) assert.ok(launch.includes(label));
   assert.match(launch, /Excluir/);
   assert.match(launch, /Reactivar/);
-  assert.match(launch, /Mediciones aplicadas/);
+  assert.match(launch, /Revisa el resumen/);
   assert.match(launch, /Ver detalles/);
   assert.match(launch, /shotDetailsOpen/);
   assert.match(launch, /3 golpes válidos/);
   assert.match(launch, /Agregar al resumen/);
   assert.match(launch, /Incluido automáticamente/);
-  assert.match(launch, /setActiveClub\(nextProtocolClub/);
-  assert.doesNotMatch(launch, /Guardar golpe|Guardar captura parcial/);
+  assert.match(launch, /Guardar mediciones/);
+  assert.match(launch, /Continuar con Ball Fit/);
+  assert.match(launch, /visitedClubs\.map/);
+  assert.match(launch, /EQUIPMENT_CATEGORY_ASSETS/);
+  assert.match(launch, /filter\(\(metric\) => Boolean\(activeClubSummary\?\.metrics\[metric\]\)\)/);
+  assert.doesNotMatch(launch, /nextProtocolClub|Guardar y continuar|data-capture-order="[45]"/);
 });
 
 test("Perfil carga el módulo con la misma identidad y la eliminación de cuenta limpia sus datos", () => {

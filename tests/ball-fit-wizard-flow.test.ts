@@ -48,7 +48,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     // Presentation children do not own the fitting state exercised by this harness.
     if (name === "./catalog-product-media") return { CatalogProductMedia: (props: Record<string, unknown>) => ({ type: "catalog-media", props }) };
     if (name === "./backyard-icon") return { BackyardIcon: (props: Record<string, unknown>) => ({ type: "svg", props }) };
-    if (name === "./equipment-visuals") return { GolfBallVisual: (props: Record<string, unknown>) => ({ type: "svg", props }) };
+    if (name === "./equipment-visuals") return { BallFitBallVisual: (props: Record<string, unknown>) => ({ type: "ball-fit-ball", props }) };
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
     if (name.endsWith("/ball-fitting")) return fitting;
     if (name.endsWith("/ball-fitting-api")) return api;
@@ -178,10 +178,10 @@ test("launch monitor choice precedes the manual driver questionnaire", async () 
   const manual = copy.indexOf("Tu juego con driver");
   assert.ok(currentGame >= 0 && currentGame < choice && choice < launch && launch < separator && separator < manual);
   assert.match(copy, /TrackMan, FlightScope, Garmin, GCQuad, Rapsodo u otro/);
-  assert.doesNotMatch(h.text(), /Selecciona el palo, agrega fotos/);
+  assert.doesNotMatch(h.text(), /Selecciona tu palo/);
   await h.click("Agregar mediciones de launch monitor");
   assert.match(h.text(), /Captura y analiza tus golpes/);
-  assert.match(h.text(), /Selecciona el palo, agrega fotos/);
+  assert.match(h.text(), /Sube fotos de tu monitor de lanzamiento/);
 });
 
 test("the active GHIN value is shown before choosing launch monitor or manual entry", async () => {
@@ -324,7 +324,13 @@ function launchCaptureHarness() {
   const exports: Record<string, (props: unknown) => Node> = {};
   const jsx = (type: unknown, props: Record<string, unknown>, key?: string) => ({ type, props: key === undefined ? props : { ...props, key } });
   const react = {
+    useEffect(fn: () => void) { fn(); },
     useMemo(fn: () => unknown) { return fn(); },
+    useRef(initial: unknown) {
+      const index = cursor++;
+      if (!(index in slots)) slots[index] = { current: initial };
+      return slots[index];
+    },
     useState(initial: unknown) {
       const index = cursor++;
       if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial;
@@ -335,9 +341,14 @@ function launchCaptureHarness() {
   runInNewContext(compiled, { exports, require: (name: string) => {
     if (name === "react") return react;
     if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
+    if (name === "next/image") return { __esModule: true, default: "image" };
     if (name.endsWith("/golf-equipment")) return equipment;
     if (name === "./launch-monitor-camera") return { LaunchMonitorCamera: "launch-camera" };
-    if (name === "./equipment-visuals") return { ClubCategoryVisual: "club-visual" };
+    if (name === "./equipment-category-assets") return { EQUIPMENT_CATEGORY_ASSETS: {
+      DRIVER: { src: "/brand/equipment/onboarding-ref-b/driver_ref_b.png", width: 1006, height: 396 },
+      IRON_SET: { src: "/brand/equipment/onboarding-ref-b/hierros_ref_b.png", width: 1006, height: 412 },
+      WEDGE: { src: "/brand/equipment/onboarding-ref-b/wedges_ref_b.png", width: 1006, height: 412 },
+    } };
     if (name.endsWith(".css")) return { default: new Proxy({}, { get: (_target, key) => key }) };
     throw new Error(name);
   } });
@@ -347,7 +358,6 @@ function launchCaptureHarness() {
   render();
   return {
     render,
-    activeStep: () => text(nodes(tree).find((node) => node.type === "span" && node.props.className === "captureFlowActive")),
     text: () => text(tree),
     click(label: string) {
       const button = nodes(tree).find((node) => node.type === "button" && text(node).trim().startsWith(label));
@@ -355,17 +365,25 @@ function launchCaptureHarness() {
       (button.props.onClick as () => void)();
       render();
     },
-    camera() {
-      const camera = nodes(tree).find((node) => node.type === "launch-camera");
-      assert.ok(camera);
+    buttonText(label: string) {
+      const button = nodes(tree).find((node) => node.type === "button" && text(node).trim().startsWith(label));
+      assert.ok(button, label);
+      return text(button);
+    },
+    camera(club: equipment.LaunchMonitorClub) {
+      const camera = nodes(tree).find((node) => node.type === "launch-camera" && node.props.targetClub === club);
+      assert.ok(camera, club);
       return camera.props;
     },
-    focusSave() {
-      const save = nodes(tree).find((node) => node.type === "section" && node.props["data-capture-order"] === "5");
-      assert.ok(save);
-      (save.props.onFocusCapture as () => void)();
-      render();
+    cameraCount() {
+      return nodes(tree).filter((node) => node.type === "launch-camera").length;
     },
+    summaryText() {
+      const summary = nodes(tree).find((node) => node.type === "section" && node.props["data-capture-order"] === "3");
+      assert.ok(summary, "current-club summary");
+      return text(summary);
+    },
+    session: () => session,
     done: () => done,
   };
 }
@@ -388,43 +406,89 @@ function threeDriverShots() {
   }));
 }
 
-test("launch capture progresses through all five stages and keeps summary details collapsed until requested", () => {
-  const h = launchCaptureHarness();
-  assert.match(h.activeStep(), /1\s*Palo/);
-  h.click("Driver");
-  assert.match(h.activeStep(), /2\s*Fotos/);
-  if (h.camera().onAnalysisStateChange) (h.camera().onAnalysisStateChange as (state: string) => void)("analyzing");
-  h.render();
-  assert.match(h.activeStep(), /3\s*Análisis/);
-  (h.camera().onConfirm as (source: string, shots: ReturnType<typeof threeDriverShots>) => void)("TrackMan", threeDriverShots());
-  h.render();
-  (h.camera().onAnalysisStateChange as (state: string) => void)("applied");
-  h.render();
-  assert.match(h.activeStep(), /4\s*Resumen/);
-  assert.match(h.text(), /Driver\s*3\s*golpe\s*s\s*válido\s*s/);
-  for (const metric of ["Carry", "Ball speed", "Launch", "Spin"]) assert.match(h.text(), new RegExp(metric, "i"));
-  assert.doesNotMatch(h.text(), /Golpe\s+1/);
-  h.click("Ver detalles");
-  assert.match(h.text(), /Golpe\s+1/);
-  assert.doesNotMatch(h.text(), /Aún no hay golpes de hierro 7/);
-  h.focusSave();
-  assert.match(h.activeStep(), /5\s*Guardar/);
-  h.click("Guardar y continuar");
-  assert.equal(h.done(), 1);
-});
+function twoIronShots() {
+  return [0, 1].map((index) => ({
+    id: `iron-shot-${index + 1}`,
+    club: "IRON_7" as const,
+    excluded: false,
+    capturedAt: `2026-09-28T12:1${index}:00.000Z`,
+    note: null,
+    clubSpeedMph: null,
+    ballSpeedMph: 121 + index,
+    launchAngleDegrees: null,
+    spinRpm: null,
+    carryYards: 160 + index * 2,
+    totalYards: null,
+    peakHeightYards: null,
+    landingAngleDegrees: null,
+  }));
+}
 
-test("changing the selected club remounts the photo capture instead of reusing its files", () => {
+test("saving each launch-monitor club returns to the selector and only the final Ball Fit action exits", () => {
   const h = launchCaptureHarness();
+  assert.match(h.text(), /Selecciona tu palo/);
   h.click("Driver");
-  const driverCamera = h.camera();
-  assert.equal(driverCamera.targetClub, "DRIVER");
-  assert.equal(driverCamera.key, "launch-camera-DRIVER");
+  (h.camera("DRIVER").onConfirm as (source: string, shots: ReturnType<typeof threeDriverShots>) => void)("TrackMan", threeDriverShots());
+  h.render();
+  assert.match(h.summaryText(), /Driver\s*3\s*golpe\s*s\s*válido\s*s/);
+  for (const metric of ["Ball Speed", "Carry", "Total", "Launch", "Spin"]) assert.match(h.summaryText(), new RegExp(metric, "i"));
+
+  h.click("Guardar mediciones");
+  assert.equal(h.done(), 0, "guardar el palo actual no termina Launch Monitor");
+  assert.match(h.text(), /Driver\s+guardado/);
+  assert.match(h.buttonText("Driver"), /3\s*\/3 golpes válidos\s*✓/);
 
   h.click("Hierro 7");
-  const ironCamera = h.camera();
-  assert.equal(ironCamera.targetClub, "IRON_7");
-  assert.equal(ironCamera.key, "launch-camera-IRON_7");
-  assert.notEqual(ironCamera.key, driverCamera.key, "a new key forces React to discard the prior camera photo state");
+  (h.camera("IRON_7").onConfirm as (source: string, shots: ReturnType<typeof twoIronShots>) => void)("GCQuad", twoIronShots());
+  h.render();
+  assert.match(h.summaryText(), /Hierro 7\s*2\s*golpe\s*s\s*válido\s*s/);
+  for (const metric of ["Ball Speed", "Carry"]) assert.match(h.summaryText(), new RegExp(metric, "i"));
+  for (const absent of ["Total", "Launch", "Spin"]) assert.doesNotMatch(h.summaryText(), new RegExp(absent, "i"));
+
+  const captured = h.session();
+  assert.ok(captured);
+  assert.equal(captured.shots.filter((shot) => shot.club === "DRIVER").length, 3);
+  assert.equal(captured.shots.filter((shot) => shot.club === "IRON_7").length, 2);
+  assert.equal(captured.shots.find((shot) => shot.id === "driver-shot-1")?.carryYards, 245);
+  assert.equal(captured.shots.find((shot) => shot.id === "iron-shot-1")?.carryYards, 160);
+
+  h.click("Guardar mediciones");
+  assert.equal(h.done(), 0);
+  assert.match(h.buttonText("Driver"), /3\s*\/3 golpes válidos\s*✓/);
+  assert.match(h.buttonText("Hierro 7"), /2\s*\/3 golpes válidos\s*✓/);
+  h.click("Continuar con Ball Fit");
+  assert.equal(h.done(), 1, "sólo Continuar con Ball Fit termina el módulo");
+});
+
+test("visited clubs keep their independent camera instances mounted while switching", () => {
+  const h = launchCaptureHarness();
+  h.click("Driver");
+  const driverCamera = h.camera("DRIVER");
+  assert.equal(driverCamera.key, "launch-camera-DRIVER-0");
+
+  h.click("Hierro 7");
+  const ironCamera = h.camera("IRON_7");
+  assert.equal(ironCamera.key, "launch-camera-IRON_7-0");
+  assert.equal(h.camera("DRIVER").key, driverCamera.key, "Driver remains mounted with its in-memory photos");
+  assert.equal(h.cameraCount(), 2);
+});
+
+test("overlapping club analysis callbacks merge against the latest session without losing measurements", () => {
+  const h = launchCaptureHarness();
+  h.click("Driver");
+  const confirmDriver = h.camera("DRIVER").onConfirm as (source: string, shots: ReturnType<typeof threeDriverShots>) => void;
+  h.click("Hierro 7");
+  const confirmIron = h.camera("IRON_7").onConfirm as (source: string, shots: ReturnType<typeof twoIronShots>) => void;
+
+  confirmIron("GCQuad", twoIronShots());
+  confirmDriver("TrackMan", threeDriverShots());
+  h.render();
+
+  const captured = h.session();
+  assert.ok(captured);
+  assert.equal(captured.shots.filter((shot) => shot.club === "DRIVER").length, 3);
+  assert.equal(captured.shots.filter((shot) => shot.club === "IRON_7").length, 2);
+  assert.equal(captured.shots.length, 5);
 });
 
 test("known launch-monitor driver metrics are applied instead of requested again", async () => {

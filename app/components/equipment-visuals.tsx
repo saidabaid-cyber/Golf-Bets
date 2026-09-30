@@ -55,3 +55,23 @@ export function GolfBallVisual({ className }: { className?: string }) {
     <span className={styles.ballBranding} aria-hidden="true"><BackyardMark className={styles.ballBrandMark} /><span>THE BACKYARD</span></span>
   </span>;
 }
+
+/** Ball Fit keeps its approved centered lockup isolated from generic Equipment surfaces. */
+export function BallFitBallVisual({ className }: { className?: string }) {
+  return <span className={`${styles.ballVisual} ${styles.ballFitBallVisual} ${className || ""}`} data-ball-fit-ball="approved">
+    <Image
+      className={styles.productImage}
+      src="/brand/equipment/backyard-ball-clean.png"
+      width={1254}
+      height={1254}
+      sizes="(max-width: 540px) 36vw, 196px"
+      alt=""
+      aria-hidden="true"
+    />
+    <span className={styles.ballFitBallBranding} aria-hidden="true">
+      <BackyardMark className={styles.ballFitBallBrandMark} />
+      <span>THE BACKYARD</span>
+      <i />
+    </span>
+  </span>;
+}

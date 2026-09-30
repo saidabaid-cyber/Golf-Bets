@@ -22,4 +22,9 @@
 .ballBranding { position:absolute;z-index:2;left:62%;top:43%;display:grid;width:28%;justify-items:center;gap:2px;pointer-events:none;transform:translate(-50%,-50%); }
 .ballBrandMark { display:block;width:100%;height:auto;filter:drop-shadow(0 1px 1px rgba(0,0,0,.12)); }
 .ballBranding>span { color:#123d2b;font-size:clamp(4px,1.1cqi,10px);font-weight:850;letter-spacing:.11em;line-height:1;white-space:nowrap; }
+.ballFitBallVisual { isolation:isolate; }
+.ballFitBallBranding { position:absolute;z-index:2;left:50%;top:50%;display:grid;width:58%;justify-items:center;gap:2px;pointer-events:none;transform:translate(-50%,-50%); }
+.ballFitBallBrandMark { display:block;width:36%;height:auto;filter:drop-shadow(0 1px 1px rgba(0,0,0,.12)); }
+.ballFitBallBranding>span { color:#123d2b;font-size:clamp(5px,4.2cqi,10px);font-weight:850;letter-spacing:.1em;line-height:1;white-space:nowrap; }
+.ballFitBallBranding>i { display:block;width:23%;height:1px;margin-top:1px;border-radius:999px;background:#123d2b; }
 @container(max-width:60px) { .clubBranding>span,.ballBranding>span { display:none; } }

@@ -6,7 +6,7 @@ import {
   scorecardImageByteBudget,
 } from "../scorecard/limits";
 
-export const MIN_LAUNCH_MONITOR_PHOTOS = 2;
+export const MIN_LAUNCH_MONITOR_PHOTOS = 1;
 export const MAX_LAUNCH_MONITOR_PHOTOS = 4;
 
 export type LaunchMonitorClientPhoto = { id: string; file: File };
@@ -21,7 +21,7 @@ export async function prepareLaunchMonitorPhotos(
   } = {},
 ) {
   if (photos.length < MIN_LAUNCH_MONITOR_PHOTOS || photos.length > MAX_LAUNCH_MONITOR_PHOTOS) {
-    throw new Error("Selecciona de 2 a 4 fotos del launch monitor.");
+    throw new Error("Selecciona de 1 a 4 fotos del launch monitor.");
   }
   const compress = dependencies.compress || ((file: File, maxBytes?: number) => compressScorecardPhoto(file, { maxBytes }));
   const encode = dependencies.encode || blobToDataUrl;

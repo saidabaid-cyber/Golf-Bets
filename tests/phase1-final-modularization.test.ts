@@ -8,7 +8,7 @@ import { captureRequirementsForPlayer } from "../lib/bets/capture-requirements";
 import { createInternalEquipmentCatalogProvider } from "../lib/equipment-catalog-provider";
 import { golfBallCatalog, golfClubCatalog, golfShaftCatalog } from "../lib/golf-equipment-catalog";
 import { normalizeLaunchMonitorVisionExtraction } from "../lib/backyard-ai/schemas/launch-monitor";
-import { prepareLaunchMonitorPhotos } from "../lib/backyard-ai/launch-monitor/client";
+import { MIN_LAUNCH_MONITOR_PHOTOS, prepareLaunchMonitorPhotos } from "../lib/backyard-ai/launch-monitor/client";
 import { initialBets } from "../lib/new-round-bets";
 import { squareCropRect } from "../lib/profile-image";
 import { buildPlayerRoundStats } from "../lib/round-statistics";
@@ -112,6 +112,17 @@ test("fotos de launch monitor reparten el presupuesto agregado antes del POST", 
   assert.equal(prepared.length, 4);
   assert.equal(new Set(seenBudgets).size, 1);
   assert.ok(seenBudgets[0] > 0 && seenBudgets[0] < 1_000_000);
+});
+
+test("launch monitor acepta una foto válida desde el cliente", async () => {
+  const photo = { id: "photo-1", file: new File(["launch monitor"], "monitor.jpg", { type: "image/jpeg" }) };
+  const prepared = await prepareLaunchMonitorPhotos([photo], {
+    compress: async () => new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xd9])], { type: "image/jpeg" }),
+    encode: async () => "data:image/jpeg;base64,/9j/2Q==",
+  });
+
+  assert.equal(MIN_LAUNCH_MONITOR_PHOTOS, 1);
+  assert.deepEqual(prepared, [{ id: "photo-1", dataUrl: "data:image/jpeg;base64,/9j/2Q==" }]);
 });
 
 test("resumen deriva GIR sin captura manual y conserva putts cero", () => {

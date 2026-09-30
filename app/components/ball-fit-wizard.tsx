@@ -35,7 +35,7 @@ import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
 import { FeedbackLink } from "./feedback-dialog";
 import { useEquipmentCatalogSearch } from "./use-equipment-catalog-search";
 import styles from "./equipment.module.css";
-import { GolfBallVisual } from "./equipment-visuals";
+import { BallFitBallVisual } from "./equipment-visuals";
 
 const FEEL_LABELS = {
   VERY_SOFT: "Muy suave",
@@ -358,8 +358,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
 
   if (launchOpen && !result) return <div className={`${styles.wizard} ${styles.launchWizard}`}>
     <div className={styles.launchWizardHeader}>
-      <button type="button" className="textButton" onClick={() => setLaunchOpen(false)}>← Volver a Ball Fit</button>
-      <div><span>MEDICIONES OPCIONALES</span><h2>Captura y analiza tus golpes</h2><p>Selecciona el palo, agrega fotos y revisa un resumen claro antes de continuar.</p></div>
+      <div><span>MEDICIONES OPCIONALES</span><h2>Captura y analiza tus golpes</h2><p>Sube fotos de tu monitor de lanzamiento y obtén tus datos automáticamente.</p></div>
     </div>
     <LaunchMonitorCapture
       userId={userId}
@@ -377,7 +376,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
     <div className={styles.progressTrack} aria-label={`${progress}% del fitting`}>{[0, 1, 2, 3, 4, 5].map((item) => <span key={item} data-active={result !== null || item <= step} />)}</div>
     {!result && <div className={styles.ballFitLead}><h3>Encuentra la pelota ideal para tu juego</h3><p>Analizamos tu forma de jugar para recomendarte el tipo de bola que mejor se adapta a ti.</p></div>}
     <div className={styles.ballFitHero}>
-      <span className={styles.ballFitOrb}><GolfBallVisual /></span>
+      <span className={styles.ballFitOrb}><BallFitBallVisual /></span>
       <div><small>{currentBall ? "TU BOLA ACTUAL" : "PERFIL DE BOLA"}</small><b>{currentBall ? `${currentBall.ballBrand} ${currentBall.ballModel}` : "Balance en cada golpe"}</b><p>{currentBall ? [currentBall.generation, currentBall.year].filter(Boolean).join(" · ") || "Modelo guardado" : "El equilibrio ideal entre distancia, control y sensación."}</p></div>
     </div>
     {!result && <div className={styles.fitPillars}><span><BackyardIcon name="arrow" size={22} /><b>Distancia</b><small>Llega más lejos</small></span><span><BackyardIcon name="approach" size={22} /><b>Control</b><small>Juega con precisión</small></span><span><BackyardIcon name="ball" size={22} /><b>Sensación</b><small>Siente la diferencia</small></span></div>}
@@ -439,7 +438,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
       <h4>¿Qué tanto importa el precio?</h4><OptionGrid values={BALL_FIT_PRICE_PREFERENCES} labels={PRICE_LABELS} selected={input.pricePreference} onSelect={(value) => patchInput({ pricePreference: value })} />
       <h4>Color preferido</h4><OptionGrid values={BALL_COLOR_PREFERENCES} labels={COLOR_LABELS} selected={input.colorPreference} onSelect={(value) => patchInput({ colorPreference: value })} />
       <h4>Comparación opcional</h4>
-      {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}><GolfBallVisual /></span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>{[currentBall.generation, currentBall.year, currentBall.catalogBallId ? "Catálogo" : "Modelo manual"].filter(Boolean).join(" · ")}</p></div></div>}
+      {currentBall && <div className={styles.ballHero}><span className={styles.ballGlyph}><BallFitBallVisual /></span><div><h3>{currentBall.ballBrand} {currentBall.ballModel}</h3><p>{[currentBall.generation, currentBall.year, currentBall.catalogBallId ? "Catálogo" : "Modelo manual"].filter(Boolean).join(" · ")}</p></div></div>}
       <AnchoredSearch label="Bola actual para comparar (opcional)" value={ballQuery} onChange={(value) => { setBallQuery(value); setBallSearchOpen(true); }} onFocus={() => setBallSearchOpen(true)} placeholder="Escribe marca, modelo, generación o año" expanded={ballSearchOpen} status={ballSearchOpen ? ballSearch.status === "loading" ? "Buscando bolas…" : ballSearch.items.length ? `${ballSearch.items.length} resultados del catálogo` : "Sin coincidencias en el catálogo" : currentCatalogBall ? `✓ Seleccionada: ${currentCatalogBall.brand} ${currentCatalogBall.model}` : "Sin bola fija"}>
         <AnchoredSearchOption label="No comparar con una bola" selected={input.currentBallId === null} onSelect={() => { patchInput({ currentBallId: null }); setBallQuery(""); setBallSearchOpen(false); }}><b>Sin bola fija</b><small>No afecta las recomendaciones.</small></AnchoredSearchOption>
         {ballSearch.items.filter((ball) => ball.active).map((ball) => <AnchoredSearchOption key={ball.id} selected={input.currentBallId === ball.id} label={`Seleccionar ${ball.brand} ${ball.model}`} onSelect={() => { patchInput({ currentBallId: ball.id }); setBallQuery(`${ball.brand} ${ball.model}`); setBallSearchOpen(false); }}><b>{ball.brand} {ball.model}</b>{catalogEditionLabel(ball) && <small>{catalogEditionLabel(ball)}</small>}</AnchoredSearchOption>)}

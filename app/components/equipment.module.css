@@ -880,6 +880,7 @@
 }
 
 .photoButton input { position: absolute; inline-size: 1px; block-size: 1px; opacity: 0; pointer-events: none; }
+.photoButton:focus-within { outline:3px solid color-mix(in srgb,var(--green) 55%,transparent);outline-offset:2px; }
 
 .launchPhotoGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .launchPhotoGrid figure { display: grid; gap: 6px; margin: 0; }
@@ -1608,4 +1609,108 @@
   .launchCard { padding:12px; }
   .cameraCapture .inlineActions { grid-template-columns:1fr; }
   .launchSection>.wizardActions { position:sticky;bottom:0;z-index:3;margin:6px -4px 0;background:rgba(245,247,242,.94);padding:10px 4px calc(10px + env(safe-area-inset-bottom));backdrop-filter:blur(12px); }
+}
+
+/* Final Launch Monitor flow: one selector, one capture card and one current-club summary. */
+.launchWizard { min-width:0;overflow-x:clip;padding-bottom:calc(20px + env(safe-area-inset-bottom)); }
+.launchWizardHeader {
+  position:relative;
+  isolation:isolate;
+  min-height:238px;
+  align-content:end;
+  overflow:hidden;
+  margin-bottom:18px;
+  border-radius:26px;
+  padding:max(24px,env(safe-area-inset-top)) clamp(20px,5vw,34px) 28px;
+  background:url("/brand/onboarding-course-hero.png") center 58% / cover no-repeat;
+  box-shadow:0 16px 38px rgba(20,55,34,.13);
+}
+.launchWizardHeader::before { content:"";position:absolute;z-index:-1;inset:0;background:linear-gradient(90deg,rgba(250,249,243,.97) 0%,rgba(250,249,243,.84) 48%,rgba(250,249,243,.13) 100%),linear-gradient(0deg,rgba(250,249,243,.95),transparent 64%); }
+.launchWizardHeader>div { position:relative;z-index:1;max-width:510px; }
+.launchWizardHeader h2 { max-width:470px;font-size:clamp(42px,8vw,62px);line-height:.93;text-wrap:balance; }
+.launchWizardHeader p { max-width:440px;color:#344d40;font-size:15px; }
+.launchSection { display:grid;min-width:0;gap:16px;margin-top:0;border-top:0;padding-top:0; }
+.clubCaptureSelector,.captureStage,.captureSummary,.launchContinue { min-width:0;border:1px solid rgba(29,67,43,.12);border-radius:23px;background:rgba(255,255,255,.96);padding:17px;box-shadow:0 10px 26px rgba(20,55,34,.07); }
+.captureStage { display:grid;gap:12px; }
+.captureStage[hidden] { display:none; }
+.launchStepHeading { display:grid!important;grid-template-columns:48px minmax(0,1fr);align-items:start;gap:12px!important; }
+.launchStepHeading>span { display:grid!important;width:46px;height:46px;place-items:center;border-radius:50%;background:#0f5938!important;color:#fff!important;font:500 24px/1 var(--by-editorial,Georgia,serif)!important;letter-spacing:0!important;box-shadow:0 8px 18px rgba(15,89,56,.17); }
+.launchStepHeading>div { display:grid;min-width:0;gap:3px; }
+.launchStepHeading h3 { margin:0;color:#102f23;font:500 clamp(25px,5vw,31px)/1 var(--by-editorial,Georgia,serif);letter-spacing:-.035em; }
+.launchStepHeading p { margin:0;color:#607168;font-size:12px;line-height:1.42; }
+.launchStepHeading>.changeClubButton { grid-column:2;justify-self:start;min-height:44px;margin-top:3px;border:0;border-radius:999px;background:#edf3e9;padding:7px 13px;color:#155f3a;font-size:11px;font-weight:850; }
+.clubSavedNotice { margin:0;border-radius:13px;background:#e9f3e6;padding:10px 12px;color:#155f3a!important;font-size:11px!important;font-weight:750; }
+.clubChoiceGrid { grid-template-columns:repeat(4,minmax(0,1fr));gap:8px; }
+.clubChoice,.clubChoiceSelected { grid-template-columns:1fr;min-width:0;min-height:142px;align-content:start;justify-items:center;gap:7px;border-radius:16px;padding:8px 6px;text-align:center; }
+.clubChoiceVisual { width:100%;height:70px;border-radius:12px;background:#edf1e8; }
+.clubChoiceVisual img { width:100%;height:100%;object-fit:cover;object-position:center;filter:none; }
+.clubChoice b,.clubChoiceSelected b { color:#173f2a;font:500 15px/1.05 var(--by-editorial,Georgia,serif);overflow-wrap:anywhere; }
+.clubChoice small,.clubChoiceSelected small { color:#6c776f;font-size:9px;line-height:1.25; }
+.clubChoiceSelected { border-color:#0f5938;background:linear-gradient(160deg,#176340,#0d4e31);box-shadow:0 10px 20px rgba(15,79,49,.2); }
+.clubChoiceSelected .clubChoiceVisual { background:rgba(255,255,255,.92); }
+.clubChoiceSelected b,.clubChoiceSelected small { color:#fff; }
+.clubChoice>strong,.clubChoiceSelected>strong { top:7px;right:7px;width:25px;height:25px; }
+.clubChoiceComplete:not(.clubChoiceSelected)>strong { background:#dcebd9;color:#0f5938; }
+.cameraCapture { gap:11px;border:0;border-radius:17px;background:#f7f9f4;padding:13px; }
+.captureStage .cameraCapture { border:0;background:#f7f9f4;box-shadow:none; }
+.captureClubStatus { display:flex;min-width:0;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid #dde5da;padding:0 1px 10px; }
+.captureClubStatus>div { display:grid;min-width:0;gap:1px; }
+.captureClubStatus small { color:#8c6b20;font-size:8px;font-weight:900;letter-spacing:.11em; }
+.captureClubStatus h3 { margin:0;color:#173f2a;font:500 19px/1.1 var(--by-editorial,Georgia,serif); }
+.captureClubStatus>span { flex:0 0 auto;border-radius:999px;background:#e4eee0;padding:6px 9px;color:#155f3a;font-size:9px;font-weight:850; }
+.photoPicker { display:grid;grid-template-columns:54px minmax(0,1fr);align-items:center;gap:10px;border:1px dashed #b8c9b5;border-radius:17px;background:rgba(255,255,255,.82);padding:14px; }
+.photoPickerIcon { display:grid;width:50px;height:50px;place-items:center;border-radius:50%;background:#e1eee0;color:#103e2a; }
+.photoPickerIcon svg { width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round; }
+.photoPicker>div:nth-child(2) { display:grid;min-width:0;gap:2px; }
+.photoPicker b { color:#173f2a;font-size:15px; }
+.photoPicker small { color:#68766d;font-size:10px; }
+.photoPickerActions { grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px; }
+.photoButton { min-width:0;min-height:46px;border-color:#cad8c8;border-radius:13px;background:#fff;padding:0 10px;color:#155f3a;font-size:11px;text-align:center; }
+.analysisStatus { margin:0;border-radius:13px;background:#f0f4ed;padding:10px 12px;color:#607168;font-size:11px;line-height:1.45; }
+.manualCaptureToggle { width:100%; }
+.captureSummary { display:grid;gap:12px;overflow:visible; }
+.captureSummary .launchCard { display:grid;gap:10px;border:0;border-radius:17px;background:linear-gradient(145deg,#f0f6eb,#fff);padding:12px;box-shadow:0 7px 18px rgba(19,54,34,.055); }
+.launchCardTitle { grid-template-columns:74px minmax(0,1fr); }
+.launchCardTitle .clubChoiceVisual { width:74px;height:62px; }
+.launchCardTitle h4 { color:#173f2a;font:600 19px/1.05 var(--by-editorial,Georgia,serif); }
+.launchMetricGrid { grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:7px;margin-top:0; }
+.launchMetricGrid>span { min-height:65px;align-content:center;background:#fff;padding:8px 5px; }
+.launchMetricGrid small { line-height:1.15; }
+.launchMetricGrid b { font-size:15px; }
+.detailsToggle { justify-self:end;min-height:44px;border-radius:999px;background:#e7f0e3;padding:0 15px; }
+.shotDetails { min-width:0; }
+.captureSave { display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:9px;border:0;border-radius:0;background:transparent;padding:0; }
+.captureSave>button { min-height:52px; }
+.captureSave>.inlineActions { grid-column:1/-1; }
+.launchContinue { display:grid;grid-template-columns:minmax(0,1fr) minmax(210px,.72fr);align-items:center;gap:14px;padding-bottom:max(17px,env(safe-area-inset-bottom)); }
+.launchContinue>div { display:grid;gap:3px; }
+.launchContinue b { color:#173f2a;font:600 20px/1.1 var(--by-editorial,Georgia,serif); }
+.launchContinue p { margin:0;color:#65736b;font-size:11px;line-height:1.4; }
+.launchContinue>button { min-height:54px;border-radius:15px; }
+.launchContinue>button span { margin-left:8px;font-size:19px; }
+
+@media(max-width:540px) {
+  .launchWizardHeader { min-height:228px;margin-right:-4px;margin-left:-4px;border-radius:0 0 24px 24px;padding:calc(18px + env(safe-area-inset-top)) 18px 24px;background-position:58% 58%; }
+  .launchWizardHeader::before { background:linear-gradient(90deg,rgba(250,249,243,.98) 0%,rgba(250,249,243,.82) 68%,rgba(250,249,243,.18) 100%),linear-gradient(0deg,rgba(250,249,243,.96),transparent 62%); }
+  .launchWizardHeader h2 { max-width:330px;font-size:44px; }
+  .launchWizardHeader p { max-width:310px;font-size:13px; }
+  .launchSection { gap:12px; }
+  .clubCaptureSelector,.captureStage,.captureSummary,.launchContinue { border-radius:19px;padding:13px; }
+  .launchStepHeading { grid-template-columns:42px minmax(0,1fr);gap:10px!important; }
+  .launchStepHeading>span { width:40px;height:40px;font-size:20px!important; }
+  .launchStepHeading h3 { font-size:25px; }
+  .clubChoiceGrid { grid-template-columns:repeat(4,minmax(0,1fr));gap:5px; }
+  .clubChoice,.clubChoiceSelected { min-height:128px;gap:5px;border-radius:13px;padding:6px 4px; }
+  .clubChoiceVisual { height:57px;border-radius:10px; }
+  .clubChoice b,.clubChoiceSelected b { font-size:12px;line-height:1.02; }
+  .clubChoice small,.clubChoiceSelected small { font-size:8.5px; }
+  .clubChoice>strong,.clubChoiceSelected>strong { top:5px;right:5px;width:21px;height:21px;font-size:11px; }
+  .cameraCapture { padding:10px; }
+  .photoPickerActions { grid-template-columns:1fr; }
+  .launchPhotoGrid { grid-template-columns:1fr 1fr; }
+  .launchMetricGrid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .launchMetricGrid>span:nth-last-child(1):nth-child(4),.launchMetricGrid>span:nth-last-child(2):nth-child(4) { grid-column:auto; }
+  .captureSave,.launchContinue { grid-template-columns:1fr; }
+  .captureSave { position:sticky;z-index:4;bottom:0;margin:0 -3px;border-radius:16px;background:rgba(247,249,244,.96);padding:9px 3px calc(9px + env(safe-area-inset-bottom));backdrop-filter:blur(12px); }
+  .launchContinue>button { width:100%; }
 }

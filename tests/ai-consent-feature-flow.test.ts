@@ -147,6 +147,7 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
     insights: { scoredRounds: 1, scoreScopeHoles: 18, scoreCohorts: { 18: { recentRounds: [], holeCount: 18, rounds: 1 } }, advancedRounds: 0 },
     round: { roundId: "qa-round", players: [], roundHoles: 18, startHole: 1, course: { name: "QA" } },
     onConfirm: () => undefined, onManualEdit: () => undefined, onCancel: () => undefined,
+    targetClub: "DRIVER", capturedCount: 0,
   };
   return {
     props,
@@ -416,11 +417,12 @@ test("Rules AI rejects injected evidence and requires its stored text-processing
   assert.deepEqual(verifiedScopes, [PROVIDER]);
 });
 
-test("launch-monitor processes two authorized photos and restores caller evidence IDs", async () => {
+test("launch-monitor processes one authorized photo and restores its caller evidence ID", async () => {
   const compiled = ts.transpileModule(readFileSync("app/api/backyard-ai/launch-monitor/route.ts", "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText;
   const providerCalls: string[] = [];
+  const verifiedScopes: string[] = [];
   const exports: { POST?: (request: Request) => Promise<Response> } = {};
   const metrics = {
     clubSpeedMph: { value: 101.2, confidence: .98 },
@@ -445,7 +447,10 @@ test("launch-monitor processes two authorized photos and restores caller evidenc
       if (id.endsWith("/http-security")) return security;
       if (id.endsWith("/scorecard-request")) return photoRequest;
       if (id.endsWith("/config")) return { backyardAiConfig: () => ({ enabled: true, configured: true, scorecardModel: "vision-test" }) };
-      if (id.endsWith("/processing-consent")) return { verifyStoredAiProcessingConsent: async () => ({ ok: true, authenticated: true, userId: "qa-user" }) };
+      if (id.endsWith("/processing-consent")) return { verifyStoredAiProcessingConsent: async (_request: Request, scope: string) => {
+        verifiedScopes.push(scope);
+        return { ok: true, authenticated: true, userId: "qa-user" };
+      } };
       if (id.endsWith("/rate-limit")) return { consumeBackyardAiLimit: () => true, consumePersistentRulesAiLimit: async () => true };
       if (id.endsWith("/openai-structured")) return {
         generateBackyardAiJson: async (input: { input: Array<{ content: Array<{ text?: string }> }> }) => {
@@ -465,14 +470,15 @@ test("launch-monitor processes two authorized photos and restores caller evidenc
     method: "POST",
     headers: { "content-type": "application/json", authorization: "Bearer qa-token", "x-forwarded-for": "203.0.113.8" },
     body: JSON.stringify({
-      photos: [{ id: "camera-a", dataUrl: jpeg }, { id: "camera-b", dataUrl: jpeg }],
+      photos: [{ id: "camera-a", dataUrl: jpeg }],
       consent: privacy.backyardAiProviderConsent(privacy.AI_LAUNCH_MONITOR_PROCESSING_CONSENT),
     }),
   }));
   assert.equal(response.status, 200);
   const payload = await response.json() as { extraction: launchSchema.LaunchMonitorVisionExtraction };
-  assert.deepEqual(providerCalls, ["photo-1", "photo-2"]);
-  assert.deepEqual(payload.extraction.shots.map((shot) => shot.sourcePhotoId), ["camera-a", "camera-b"]);
+  assert.deepEqual(verifiedScopes, [LAUNCH]);
+  assert.deepEqual(providerCalls, ["photo-1"]);
+  assert.deepEqual(payload.extraction.shots.map((shot) => shot.sourcePhotoId), ["camera-a"]);
   assert.equal(payload.extraction.source, "TrackMan");
   assert.equal(JSON.stringify(payload).includes("server-secret"), false);
 });

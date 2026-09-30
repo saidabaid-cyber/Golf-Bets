@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
   const storedConsent = await verifyStoredAiProcessingConsent(request, AI_LAUNCH_MONITOR_PROCESSING_CONSENT);
   if (!storedConsent.ok) return json({ error: storedConsent.error, code: storedConsent.code }, { status: storedConsent.status });
   const photos = parseScorecardPhotos(source.photos);
-  if (!photos || photos.length < 2 || photos.length > 4) return json({ error: "Agrega de dos a cuatro fotos JPEG, PNG o WebP válidas.", code: "invalid_photos" }, { status: 400 });
+  if (!photos || photos.length < 1 || photos.length > 4) return json({ error: "Agrega de una a cuatro fotos JPEG, PNG o WebP válidas.", code: "invalid_photos" }, { status: 400 });
   const limiterKey = createHmac("sha256", process.env.OPENAI_API_KEY!).update(`launch-monitor:${backyardAiClientAddress(request)}`).digest("hex");
   if (!consumeBackyardAiLimit(limiterKey, RATE_LIMIT, RATE_WINDOW_MS)) return json({ error: "Demasiados análisis. Intenta en un minuto.", code: "rate_limit" }, { status: 429 });
   const persistentLimiter = getSupabaseAdmin("cloud");

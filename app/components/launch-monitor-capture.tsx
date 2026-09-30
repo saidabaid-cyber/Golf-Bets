@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Image from "next/image";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   LAUNCH_MONITOR_CLUBS,
   MAX_LAUNCH_MONITOR_SHOTS_PER_CLUB,
@@ -14,7 +15,7 @@ import {
 } from "../../lib/golf-equipment";
 import styles from "./equipment.module.css";
 import { LaunchMonitorCamera, type LaunchMonitorAnalysisState } from "./launch-monitor-camera";
-import { ClubCategoryVisual } from "./equipment-visuals";
+import { EQUIPMENT_CATEGORY_ASSETS } from "./equipment-category-assets";
 
 type LaunchMonitorCaptureProps = {
   userId: string;
@@ -121,13 +122,18 @@ function summaryMetric(value: number, metric: LaunchMonitorMetric) {
   return `${value.toLocaleString("es-MX", { maximumFractionDigits: decimals })} ${field.unit}`;
 }
 
-function nextProtocolClub(shots: LaunchMonitorShot[], currentClub: LaunchMonitorClub) {
-  const currentIndex = LAUNCH_MONITOR_CLUBS.indexOf(currentClub);
-  const orderedClubs = [
-    ...LAUNCH_MONITOR_CLUBS.slice(currentIndex + 1),
-    ...LAUNCH_MONITOR_CLUBS.slice(0, currentIndex + 1),
-  ];
-  return orderedClubs.find((club) => shots.filter((shot) => shot.club === club && !shot.excluded).length < 3) ?? currentClub;
+function initialAnalysisStates(): Record<LaunchMonitorClub, LaunchMonitorAnalysisState> {
+  return {
+    DRIVER: "idle",
+    IRON_7: "idle",
+    PITCHING_WEDGE: "idle",
+    HALF_WEDGE: "idle",
+  };
+}
+
+function clubVisual(club: LaunchMonitorClub) {
+  const asset = EQUIPMENT_CATEGORY_ASSETS[CLUB_VISUALS[club]];
+  return <Image src={asset.src} width={asset.width} height={asset.height} sizes="(max-width: 540px) 42vw, 150px" alt="" aria-hidden="true" />;
 }
 
 function sessionCompletedAt(shots: LaunchMonitorShot[]) {
@@ -142,22 +148,34 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
     () => value?.userId === userId.trim() ? value : null,
     [userId, value],
   );
+  const latestSession = useRef<LaunchMonitorSession | null>(session);
+  useEffect(() => {
+    latestSession.current = session;
+  }, [session]);
   const progress = useMemo(() => session ? getLaunchMonitorProtocolProgress(session) : null, [session]);
   const summary = useMemo(() => session ? summarizeLaunchMonitorSession(session) : null, [session]);
   const [activeClub, setActiveClub] = useState<LaunchMonitorClub>("DRIVER");
   const [clubSelected, setClubSelected] = useState(false);
-  const [analysisState, setAnalysisState] = useState<LaunchMonitorAnalysisState>("idle");
+  const [visitedClubs, setVisitedClubs] = useState<LaunchMonitorClub[]>([]);
+  const [cameraVersions, setCameraVersions] = useState<Record<LaunchMonitorClub, number>>({ DRIVER: 0, IRON_7: 0, PITCHING_WEDGE: 0, HALF_WEDGE: 0 });
+  const [lastSavedClub, setLastSavedClub] = useState<LaunchMonitorClub | null>(null);
+  const [analysisStates, setAnalysisStates] = useState<Record<LaunchMonitorClub, LaunchMonitorAnalysisState>>(initialAnalysisStates);
   const [drafts, setDrafts] = useState<Record<LaunchMonitorClub, ShotDraft>>(initialDrafts);
   const [errors, setErrors] = useState<Partial<Record<LaunchMonitorClub, string>>>({});
   const [confirmClear, setConfirmClear] = useState(false);
   const [manualOpen, setManualOpen] = useState(false);
   const [shotDetailsOpen, setShotDetailsOpen] = useState(false);
   const [editingShotId, setEditingShotId] = useState<string | null>(null);
-  const [currentFlowStep, setCurrentFlowStep] = useState<1 | 2 | 3 | 4 | 5>(summary && summary.includedShots > 0 ? 4 : 1);
+
+  function commitSession(next: LaunchMonitorSession | null) {
+    latestSession.current = next;
+    onChange(next);
+  }
 
   function updateSession(update: (current: LaunchMonitorSession) => LaunchMonitorSession) {
-    if (!session) return;
-    onChange(update(session));
+    const current = latestSession.current;
+    if (!current) return;
+    commitSession(update(current));
   }
 
   function updateDraft(club: LaunchMonitorClub, field: LaunchMonitorMetric | "note", nextValue: string) {
@@ -172,7 +190,7 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
     const cleanUserId = userId.trim();
     if (!cleanUserId) return;
     const now = new Date().toISOString();
-    const currentSession = session || { id: createId("launch-session"), userId: cleanUserId, source: null, startedAt: now, completedAt: null, shots: [] };
+    const currentSession = latestSession.current || { id: createId("launch-session"), userId: cleanUserId, source: null, startedAt: now, completedAt: null, shots: [] };
     if (currentSession.shots.filter((shot) => shot.club === club).length >= MAX_LAUNCH_MONITOR_SHOTS_PER_CLUB) {
       setErrors((current) => ({ ...current, [club]: `Máximo ${MAX_LAUNCH_MONITOR_SHOTS_PER_CLUB} golpes por palo. Excluye golpes malos o inicia una captura nueva.` }));
       return;
@@ -208,15 +226,11 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
       ...metrics,
     };
     const nextShots = [...currentSession.shots, shot];
-    onChange({ ...currentSession, completedAt: sessionCompletedAt(nextShots), shots: nextShots });
+    commitSession({ ...currentSession, completedAt: sessionCompletedAt(nextShots), shots: nextShots });
     setDrafts((current) => ({ ...current, [club]: emptyDraft() }));
     setErrors((current) => ({ ...current, [club]: undefined }));
     setManualOpen(false);
-    setAnalysisState("applied");
-    setCurrentFlowStep(4);
-    if (nextShots.filter((candidate) => candidate.club === club && !candidate.excluded).length >= 3) {
-      setActiveClub(nextProtocolClub(nextShots, club));
-    }
+    setAnalysisStates((current) => ({ ...current, [club]: "applied" }));
   }
 
   function toggleShot(shotId: string) {
@@ -238,9 +252,12 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
   }
 
   const includedShots = session?.shots.filter((shot) => !shot.excluded).length ?? 0;
-  const missingShots = progress
-    ? LAUNCH_MONITOR_CLUBS.reduce((total, club) => total + progress.missing[club], 0)
-    : 12;
+  const activeClubSummary = summary?.byClub.find((clubSummary) => clubSummary.club === activeClub) ?? null;
+  const activeClubCount = progress?.counts[activeClub] ?? 0;
+  const activeClubShots = session?.shots.filter((shot) => shot.club === activeClub) ?? [];
+  const availableSummaryMetrics = (["ballSpeedMph", "carryYards", "totalYards", "launchAngleDegrees", "spinRpm"] as LaunchMonitorMetric[])
+    .filter((metric) => Boolean(activeClubSummary?.metrics[metric]));
+  const analysisState = analysisStates[activeClub];
   const analysisMessage = analysisState === "analyzing"
     ? "Estamos leyendo y validando las mediciones de tus fotos."
     : analysisState === "review"
@@ -251,63 +268,100 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
           ? "No pudimos completar el análisis. Revisa el mensaje anterior e intenta de nuevo."
           : "Al elegir Analizar fotos, leeremos las mediciones y aplicaremos automáticamente los datos claros.";
 
+  function selectClub(club: LaunchMonitorClub) {
+    setActiveClub(club);
+    setClubSelected(true);
+    setVisitedClubs((current) => current.includes(club) ? current : [...current, club]);
+    setAnalysisStates((current) => current[club] === "idle" && (progress?.counts[club] ?? 0) > 0
+      ? { ...current, [club]: "applied" }
+      : current);
+    setManualOpen(false);
+    setShotDetailsOpen(false);
+    setEditingShotId(null);
+    setConfirmClear(false);
+  }
+
+  function saveCurrentClub() {
+    if (activeClubCount < 1) return;
+    setLastSavedClub(activeClub);
+    setClubSelected(false);
+    setManualOpen(false);
+    setShotDetailsOpen(false);
+    setEditingShotId(null);
+    setConfirmClear(false);
+  }
+
+  function clearCurrentClub() {
+    const current = latestSession.current;
+    if (!current) return;
+    const nextShots = current.shots.filter((shot) => shot.club !== activeClub);
+    commitSession(nextShots.length ? { ...current, completedAt: sessionCompletedAt(nextShots), shots: nextShots } : null);
+    setCameraVersions((current) => ({ ...current, [activeClub]: current[activeClub] + 1 }));
+    setVisitedClubs((current) => current.filter((club) => club !== activeClub));
+    setConfirmClear(false);
+    setShotDetailsOpen(false);
+    setEditingShotId(null);
+    setAnalysisStates((states) => ({ ...states, [activeClub]: "idle" }));
+    setLastSavedClub(null);
+    setClubSelected(false);
+  }
+
   return (
     <section className={styles.launchSection}>
-      <p className={styles.subtle} id="launch-monitor-help">
-        TrackMan, FlightScope, Garmin, GCQuad, Rapsodo u otro. Los datos claros se agregan automáticamente; sólo te pediremos corregir una lectura dudosa.
-      </p>
-
-      <div className={styles.captureFlow} aria-label="Flujo de mediciones">
-        {["Palo", "Fotos", "Análisis", "Resumen", "Guardar"].map((label, index) => <span key={label} className={currentFlowStep === index + 1 ? styles.captureFlowActive : ""}><b>{index + 1}</b>{label}</span>)}
-      </div>
-
       <section className={styles.clubCaptureSelector} data-capture-order="1" aria-labelledby="club-capture-title">
-        <div><span>PASO 1</span><h3 id="club-capture-title">Selecciona tu palo</h3><p>Elige primero. Todas las lecturas de este bloque se asignarán a ese palo.</p></div>
+        <div className={styles.launchStepHeading}><span>1</span><div><h3 id="club-capture-title">Selecciona tu palo</h3><p>Elige el palo de los golpes que vas a subir.</p></div></div>
+        {lastSavedClub && <p className={styles.clubSavedNotice} role="status">✓ {CLUB_LABELS[lastSavedClub]} guardado. Puedes elegir otro palo o continuar con Ball Fit.</p>}
         <div className={styles.clubChoiceGrid} aria-label="Selecciona el palo de las mediciones">
           {LAUNCH_MONITOR_CLUBS.map((club) => {
             const count = progress?.counts[club] ?? 0;
             const excluded = session?.shots.filter((shot) => shot.club === club && shot.excluded).length ?? 0;
             const selected = clubSelected && activeClub === club;
-            return <button type="button" key={club} className={selected ? styles.clubChoiceSelected : styles.clubChoice} aria-pressed={selected} onClick={() => { setActiveClub(club); setClubSelected(true); setAnalysisState("idle"); setCurrentFlowStep(2); }}>
-              <span className={styles.clubChoiceVisual}><ClubCategoryVisual category={CLUB_VISUALS[club]} showBranding={false} /></span>
+            const complete = count > 0;
+            return <button type="button" key={club} className={`${selected ? styles.clubChoiceSelected : styles.clubChoice} ${complete ? styles.clubChoiceComplete : ""}`} aria-pressed={selected} onClick={() => selectClub(club)}>
+              <span className={styles.clubChoiceVisual}>{clubVisual(club)}</span>
               <span><b>{CLUB_LABELS[club]}</b><small>{Math.min(count, 3)}/3 golpes válidos{excluded ? ` · ${excluded} excluido${excluded === 1 ? "" : "s"}` : ""}</small></span>
-              <strong aria-hidden="true">{selected ? "✓" : "›"}</strong>
+              <strong aria-hidden="true">{selected || complete ? "✓" : "›"}</strong>
             </button>;
           })}
         </div>
       </section>
 
-      {clubSelected && <><div className={styles.captureStage} data-capture-order="2"><div className={styles.captureStageHeading}><span>PASO 2</span><h3>Fotos de {CLUB_LABELS[activeClub]}</h3></div><LaunchMonitorCamera
-        key={`launch-camera-${activeClub}`}
-        userId={userId}
-        accessToken={accessToken}
-        requiresRemoteConsent={requiresRemoteConsent}
-        onOpenPrivacy={onOpenPrivacy}
-        targetClub={activeClub}
-        capturedCount={progress?.counts[activeClub] ?? 0}
-        nextClubLabel={CLUB_LABELS[nextProtocolClub(session?.shots ?? [], activeClub)]}
-        onAnalysisStateChange={(state) => { setAnalysisState(state); setCurrentFlowStep(state === "idle" ? 2 : state === "applied" ? 4 : 3); }}
-        onConfirm={(source, shots) => {
-          const now = new Date().toISOString();
-          const current = session || { id: createId("launch-session"), userId: userId.trim(), source: null, startedAt: now, completedAt: null, shots: [] };
-          const nextShots = [...current.shots, ...shots].slice(0, MAX_LAUNCH_MONITOR_SHOTS_PER_CLUB * LAUNCH_MONITOR_CLUBS.length);
-          onChange({ ...current, source: source || current.source, completedAt: sessionCompletedAt(nextShots), shots: nextShots });
-          setActiveClub(nextProtocolClub(nextShots, activeClub));
-          setClubSelected(true);
-          setCurrentFlowStep(4);
-        }}
-      /></div>
+      {visitedClubs.map((club) => <section key={club} className={styles.captureStage} data-capture-order="2" hidden={!clubSelected || activeClub !== club} aria-labelledby={`launch-photos-${club}`}>
+        <div className={styles.launchStepHeading}>
+          <span>2</span>
+          <div><h3 id={`launch-photos-${club}`}>Agrega las fotos</h3><p>Sube una o varias fotos de tu monitor de lanzamiento. Analizaremos los datos automáticamente.</p></div>
+          <button type="button" className={styles.changeClubButton} onClick={() => setClubSelected(false)}>Cambiar palo</button>
+        </div>
+        <LaunchMonitorCamera
+          key={`launch-camera-${club}-${cameraVersions[club]}`}
+          userId={userId}
+          accessToken={accessToken}
+          requiresRemoteConsent={requiresRemoteConsent}
+          onOpenPrivacy={onOpenPrivacy}
+          targetClub={club}
+          capturedCount={progress?.counts[club] ?? 0}
+          onAnalysisStateChange={(state) => setAnalysisStates((current) => ({ ...current, [club]: state }))}
+          onConfirm={(source, shots) => {
+            const now = new Date().toISOString();
+            const current = latestSession.current || { id: createId("launch-session"), userId: userId.trim(), source: null, startedAt: now, completedAt: null, shots: [] };
+            const existingForClub = current.shots.filter((shot) => shot.club === club).length;
+            const remainingForClub = Math.max(0, MAX_LAUNCH_MONITOR_SHOTS_PER_CLUB - existingForClub);
+            const assignedShots = shots.slice(0, remainingForClub).map((shot) => ({ ...shot, club }));
+            const nextShots = [...current.shots, ...assignedShots];
+            commitSession({ ...current, source: source || current.source, completedAt: sessionCompletedAt(nextShots), shots: nextShots });
+            setActiveClub(club);
+            setClubSelected(true);
+            setAnalysisStates((states) => ({ ...states, [club]: "applied" }));
+          }}
+        />
 
-      <section className={styles.captureAnalysis} data-capture-order="3" aria-live="polite">
-        <div className={styles.captureStageHeading}><span>PASO 3</span><h3>Análisis automático</h3></div>
-        <p>{analysisMessage}</p>
-      </section>
+        <p className={styles.analysisStatus} aria-live="polite">{analysisMessage}</p>
 
-      <button type="button" className={styles.manualCaptureToggle} aria-expanded={manualOpen} onClick={() => setManualOpen((current) => !current)}>
-        <span><b>Capturar datos manualmente</b><small>Sólo si no quieres usar fotos</small></span><strong aria-hidden="true">{manualOpen ? "−" : "+"}</strong>
-      </button>
+        <button type="button" className={styles.manualCaptureToggle} aria-expanded={manualOpen} onClick={() => setManualOpen((current) => !current)}>
+          <span><b>Capturar datos manualmente</b><small>Sólo si no quieres usar fotos</small></span><strong aria-hidden="true">{manualOpen ? "−" : "+"}</strong>
+        </button>
 
-      {manualOpen && <section className={styles.manualCapturePanel} aria-labelledby={`capture-${activeClub}`}>
+        {manualOpen && club === activeClub && <section className={styles.manualCapturePanel} aria-labelledby={`capture-${activeClub}`}>
             <div className={styles.itemHeader}>
               <div>
                 <h3 id={`capture-${activeClub}`}>Datos disponibles · {CLUB_LABELS[activeClub]}</h3>
@@ -347,43 +401,32 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
                 <button type="button" className="primary" onClick={() => addShot(activeClub)}>Agregar al resumen</button>
               </div>
             </div>
-          </section>}</>}
+          </section>}
+      </section>)}
 
-          {summary && summary.includedShots > 0 && (
-            <section className={styles.captureSummary} data-capture-order="4" aria-labelledby="launch-summary-title">
-              <div className={styles.sectionHeader}>
-                <div>
-                  <span className={styles.captureSummaryStep}>PASO 4</span><h2 id="launch-summary-title">Mediciones aplicadas</h2>
-                  <p>{summary.includedShots} golpe{summary.includedShots === 1 ? "" : "s"} válido{summary.includedShots === 1 ? "" : "s"} detectado{summary.includedShots === 1 ? "" : "s"}. El detalle permanece cerrado.</p>
+          {clubSelected && activeClubSummary && activeClubCount > 0 && (
+            <section className={styles.captureSummary} data-capture-order="3" aria-labelledby="launch-summary-title">
+              <div className={styles.launchStepHeading}><span>3</span><div><h3 id="launch-summary-title">Revisa el resumen</h3><p>Hemos detectado {activeClubSummary.includedShots} golpe{activeClubSummary.includedShots === 1 ? "" : "s"} de {CLUB_LABELS[activeClub]}. Revisa los datos y guarda.</p></div></div>
+              <article className={styles.launchCard}>
+                <div className={styles.launchCardTitle}><span className={styles.clubChoiceVisual}>{clubVisual(activeClub)}</span><span><h4>{CLUB_LABELS[activeClub]}</h4><p>{activeClubSummary.includedShots} golpe{activeClubSummary.includedShots === 1 ? "" : "s"} válido{activeClubSummary.includedShots === 1 ? "" : "s"}</p></span></div>
+                <div className={styles.launchMetricGrid}>
+                  {availableSummaryMetrics.map((metric) => {
+                    const metricSummary = activeClubSummary.metrics[metric]!;
+                    return <span key={metric}><small>{METRIC_FIELDS[metric].shortLabel}</small><b>{summaryMetric(metricSummary.median, metric)}</b></span>;
+                  })}
                 </div>
-              </div>
-              <div className={styles.launchGrid}>
-                {summary.byClub.filter((clubSummary) => clubSummary.includedShots > 0).map((clubSummary) => (
-                  <article className={styles.launchCard} key={clubSummary.club}>
-                    <div className={styles.launchCardTitle}><span className={styles.clubChoiceVisual}><ClubCategoryVisual category={CLUB_VISUALS[clubSummary.club]} showBranding={false} /></span><span><h4>{CLUB_LABELS[clubSummary.club]}</h4><p>{clubSummary.includedShots} golpe{clubSummary.includedShots === 1 ? "" : "s"} válido{clubSummary.includedShots === 1 ? "" : "s"}</p></span></div>
-                    <div className={styles.launchMetricGrid}>
-                      {(["carryYards", "ballSpeedMph", "launchAngleDegrees", "spinRpm"] as LaunchMonitorMetric[]).map((metric) => {
-                        const metricSummary = clubSummary.metrics[metric];
-                        return <span key={metric}><small>{METRIC_FIELDS[metric].shortLabel}</small><b>{metricSummary ? summaryMetric(metricSummary.median, metric) : "—"}</b></span>;
-                      })}
-                    </div>
-                  </article>
-                ))}
-              </div>
+              </article>
               <button type="button" className={styles.detailsToggle} aria-expanded={shotDetailsOpen} onClick={() => setShotDetailsOpen((current) => !current)}>{shotDetailsOpen ? "Ocultar detalles" : "Ver detalles"}</button>
             </section>
           )}
 
           {shotDetailsOpen && session && <div className={styles.shotDetails}>
-            <div className={styles.statusRow}><div><b>{progress?.complete ? "Protocolo completo" : `${includedShots} de 12 golpes recomendados`}</b><p className={styles.subtle}>{progress?.complete ? "Ya tienes 3 golpes válidos por palo." : `Faltan ${missingShots}; puedes guardar una captura parcial.`}</p></div></div>
+            <div className={styles.statusRow}><div><b>{activeClubCount} golpe{activeClubCount === 1 ? "" : "s"} válido{activeClubCount === 1 ? "" : "s"} de {CLUB_LABELS[activeClub]}</b><p className={styles.subtle}>Puedes guardar con la información disponible; tres golpes son una recomendación, no un requisito.</p></div></div>
             <label className={styles.fullField}>Launch monitor o fuente (opcional)<input type="text" value={session.source ?? ""} maxLength={180} placeholder="Ej. TrackMan" onChange={(event) => updateSession((current) => ({ ...current, completedAt: null, source: event.target.value.trimStart() || null }))} /></label>
-            {LAUNCH_MONITOR_CLUBS.map((club) => {
-              const clubShots = session.shots.filter((shot) => shot.club === club);
-              if (clubShots.length === 0) return null;
-              return <section key={club} aria-labelledby={`shot-details-${club}`}>
-                <h3 id={`shot-details-${club}`}>{CLUB_LABELS[club]}</h3>
-                <div className={styles.shotList} aria-label={`Golpes de ${CLUB_LABELS[club]}`}>
-                {clubShots.map((shot, index) => {
+            <section aria-labelledby={`shot-details-${activeClub}`}>
+                <h3 id={`shot-details-${activeClub}`}>{CLUB_LABELS[activeClub]}</h3>
+                <div className={styles.shotList} aria-label={`Golpes de ${CLUB_LABELS[activeClub]}`}>
+                {activeClubShots.map((shot, index) => {
                   const editing = editingShotId === shot.id;
                   return (
                     <article className={styles.shotEntry} key={shot.id}>
@@ -392,7 +435,7 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
                           <b>Golpe {index + 1}</b>
                           <p className={styles.subtle}>{shot.excluded ? "Excluido del cálculo" : "Incluido automáticamente"}</p>
                         </div>
-                        {SHOT_SUMMARY_METRICS[club].map((metric) => (
+                        {SHOT_SUMMARY_METRICS[activeClub].map((metric) => (
                           <div key={metric}>
                             <small>{METRIC_FIELDS[metric].shortLabel}</small>
                             <b>{displayMetric(shot[metric], metric)}</b>
@@ -414,7 +457,7 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
                       </div>
                       {editing && (
                         <div className={styles.shotEditGrid} aria-label={`Editar golpe ${index + 1}`}>
-                          {CLUB_METRICS[club].map((metric) => {
+                          {CLUB_METRICS[activeClub].map((metric) => {
                             const field = METRIC_FIELDS[metric];
                             return (
                               <label key={metric}>
@@ -437,24 +480,26 @@ export function LaunchMonitorCapture({ userId, accessToken, requiresRemoteConsen
                   );
                 })}
                 </div>
-              </section>;
-            })}
+              </section>
           </div>}
 
-          <section className={styles.captureSave} data-capture-order="5" aria-labelledby="launch-save-title" onFocusCapture={() => { if (includedShots > 0) setCurrentFlowStep(5); }}>
-            <div className={styles.captureStageHeading}><span>PASO 5</span><h3 id="launch-save-title">Guardar y continuar</h3></div>
-            <div className={styles.wizardActions}>
-            <button type="button" className="primary" onClick={onDone} disabled={!onDone || includedShots === 0}>Guardar y continuar</button>
+          {clubSelected && activeClubCount > 0 && <section className={styles.captureSave} aria-label={`Guardar mediciones de ${CLUB_LABELS[activeClub]}`}>
+            <button type="button" className="primary" onClick={saveCurrentClub}>Guardar mediciones</button>
             {!confirmClear ? (
-              session && <button type="button" className={styles.dangerButton} onClick={() => setConfirmClear(true)}>Quitar captura</button>
+              <button type="button" className={styles.dangerButton} onClick={() => setConfirmClear(true)}>Quitar mediciones de {CLUB_LABELS[activeClub]}</button>
             ) : (
-              <div className={styles.inlineActions} role="group" aria-label="Confirmar eliminación de la captura">
+              <div className={styles.inlineActions} role="group" aria-label={`Confirmar eliminación de ${CLUB_LABELS[activeClub]}`}>
                 <button type="button" className="secondary" onClick={() => setConfirmClear(false)}>Conservar</button>
-                <button type="button" className={styles.dangerButton} onClick={() => { setConfirmClear(false); setAnalysisState("idle"); setCurrentFlowStep(1); setShotDetailsOpen(false); onChange(null); }}>Sí, quitar</button>
+                <button type="button" className={styles.dangerButton} onClick={clearCurrentClub}>Sí, quitar</button>
               </div>
             )}
-          </div>
-          </section>
+          </section>}
+
+          {!clubSelected && <section className={styles.launchContinue} aria-label="Terminar Launch Monitor">
+            <div><b>¿Listo con tus mediciones?</b><p>{includedShots > 0 ? `${includedShots} golpe${includedShots === 1 ? "" : "s"} válido${includedShots === 1 ? "" : "s"} guardado${includedShots === 1 ? "" : "s"}.` : "Este paso es opcional; puedes continuar sin agregar mediciones."}</p></div>
+            <button type="button" className="primary" onClick={onDone} disabled={!onDone}>Continuar con Ball Fit <span aria-hidden="true">→</span></button>
+          </section>}
+
           <p className={styles.disclaimer}>Estos datos complementan The Backyard Ball Fit. No constituyen un fitting oficial de ninguna marca ni sustituyen una sesión profesional.</p>
     </section>
   );
