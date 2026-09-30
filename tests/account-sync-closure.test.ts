@@ -121,6 +121,10 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   storage.setItem(accountUiPreferencesKey("user-b"), "ui-b");
   storage.setItem(devicePermissionsStorageKey("user-a"), "device-a");
   storage.setItem(devicePermissionsStorageKey("user-b"), "device-b");
+  storage.setItem("the-backyard:account-device-permission-server-clock:v1:user-a", "device-clock-a");
+  storage.setItem("the-backyard:account-device-permission-server-clock:v1:user-b", "device-clock-b");
+  storage.setItem("the-backyard:account-learning-server-clock:v1:user-a", "learning-clock-a");
+  storage.setItem("the-backyard:account-learning-server-clock:v1:user-b", "learning-clock-b");
   storage.setItem(marketingConsentStorageKey("user-a"), "marketing-a");
   storage.setItem(marketingConsentStorageKey("user-b"), "marketing-b");
   storage.setItem(firstRoundExperienceKey("user-a"), "seen");
@@ -156,11 +160,15 @@ test("eliminar cuenta local descarta solo A y conserva invitado y B", () => {
   assert.equal(storage.getItem(statisticsResetStorageKey("user-a")), null);
   assert.equal(storage.getItem(accountUiPreferencesKey("user-a")), null);
   assert.equal(storage.getItem(devicePermissionsStorageKey("user-a")), null);
+  assert.equal(storage.getItem("the-backyard:account-device-permission-server-clock:v1:user-a"), null);
+  assert.equal(storage.getItem("the-backyard:account-learning-server-clock:v1:user-a"), null);
   assert.equal(storage.getItem(marketingConsentStorageKey("user-a")), null);
   assert.equal(storage.getItem(firstRoundExperienceKey("user-a")), null);
   assert.equal(storage.getItem(`${LEGAL_SYNC_QUEUE_PREFIX}user-a`), null);
   assert.equal(storage.getItem(accountUiPreferencesKey("user-b")), "ui-b");
   assert.equal(storage.getItem(devicePermissionsStorageKey("user-b")), "device-b");
+  assert.equal(storage.getItem("the-backyard:account-device-permission-server-clock:v1:user-b"), "device-clock-b");
+  assert.equal(storage.getItem("the-backyard:account-learning-server-clock:v1:user-b"), "learning-clock-b");
   assert.equal(storage.getItem(marketingConsentStorageKey("user-b")), "marketing-b");
   assert.equal(storage.getItem(firstRoundExperienceKey("user-b")), "seen");
   assert.equal(storage.getItem(`${LEGAL_SYNC_QUEUE_PREFIX}user-b`), "pending-legal-b");

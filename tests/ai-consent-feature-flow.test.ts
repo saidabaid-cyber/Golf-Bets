@@ -103,6 +103,7 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
     "privacy": { AI_PROVIDER_PROCESSING_CONSENT: PROVIDER, AI_IMAGE_PROCESSING_CONSENT: IMAGE, AI_LAUNCH_MONITOR_PROCESSING_CONSENT: LAUNCH, BACKYARD_AI_PROVIDER_CONSENT_VERSION: "v1", backyardAiProviderConsent: () => ({ accepted: true }) },
     "client-api": { requestBackyardAi: async () => { providerCalls++; return { canonicalCommand: "Jugamos Said", confidence: 1, clarification: null, extraction: {}, summary: "QA", observations: [], answer: "QA" }; } },
     "learning-events": { readLearningConsent: () => ({ consent: { personalMemoryEnabled: false } }) },
+    "account-learning-consent-cache": { readAccountLearningConsent: () => ({ personalMemoryEnabled: false, globalLearningEnabled: false }) },
     "clarification": { parseUnknownPlayerClarification: () => null },
     "answer-command": { roundSetupAnswerCommand: (_q: unknown, input: string) => input },
     "canonical-command-guard": { validateCanonicalRoundCommand: (_input: string, command: string) => ({ ok: true, command }) },

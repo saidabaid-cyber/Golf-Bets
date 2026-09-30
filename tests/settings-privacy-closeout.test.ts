@@ -122,9 +122,12 @@ test("public social projection searchable, legacy private not widened", () => {
 });
 
 test("actual privacy API derives ownership and rejects extra account IDs/private/cross-site writes", async () => {
-  const writes: unknown[] = [], ownerFilters: unknown[] = [];
+  const rpcCalls: Array<{ name: string; body?: Record<string, unknown> }> = [], ownerFilters: unknown[] = [];
   const client = {
-    rpc: (_name: string, body: { requested_visibility: string }) => { writes.push(body); return { abortSignal: async () => ({ data: body.requested_visibility, error: null }) }; },
+    rpc: (name: string, body?: Record<string, unknown>) => {
+      rpcCalls.push({ name, ...(body ? { body } : {}) });
+      return { abortSignal: async () => ({ data: name === "set_my_profile_visibility" ? body?.requested_visibility : true, error: null }) };
+    },
     from: () => { const query = { select: () => query, eq: (_key: string, owner: string) => { ownerFilters.push(owner); return query; }, abortSignal: () => query, maybeSingle: async () => ({ data: { profile_visibility: "friends" }, error: null }) }; return query; },
   };
   const routes = load("app/api/account/privacy/route.ts", { "next/server": { NextResponse: Response }, "../../../../lib/server-auth": { authenticatedRequest: async () => ({ ok: true, userId: "verified-owner", client }) }, "../../../../lib/profile-visibility": audience, "../../../../lib/backyard-ai/server/http-security": security });
@@ -132,7 +135,9 @@ test("actual privacy API derives ownership and rejects extra account IDs/private
   assert.equal((await invoke("GET")).status, 200); assert.deepEqual(ownerFilters, ["verified-owner"]);
   for (const bad of [{ visibility: "private" }, { visibility: "public", userId: "victim" }]) assert.equal((await invoke("PATCH", bad)).status, 400);
   assert.equal((await invoke("PATCH", { visibility: "public" }, "https://evil.invalid")).status, 403);
-  assert.equal(writes.length, 0);
+  assert.equal(rpcCalls.length, 0);
   assert.equal((await invoke("PATCH", { visibility: "public" })).status, 200);
-  assert.deepEqual(JSON.parse(JSON.stringify(writes)), [{ requested_visibility: "public" }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(rpcCalls)), [
+    { name: "set_my_profile_visibility", body: { requested_visibility: "public" } },
+  ]);
 });

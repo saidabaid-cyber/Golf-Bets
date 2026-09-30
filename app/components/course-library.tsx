@@ -6,6 +6,7 @@ import { internalCourseDataProvider, searchInternalCourses, type CourseSearchDat
 import type { NearbyCourseMatch } from "../../lib/course-distance";
 import type { Course } from "../../lib/types";
 import { resolveAuthorizedNearbyLocation, type NearbyLocationResolution } from "../../lib/device-permissions";
+import { readAccountDevicePermissionPreferences } from "../../lib/account-device-permission-preferences";
 
 type CourseFilter = "all" | "favorites" | "recent" | "nearby" | "mine";
 type SearchState =
@@ -27,6 +28,7 @@ export type CourseLibraryProps = {
   recentCourseIds?: string[];
   selectedCourseId?: string | null;
   permissionOwnerId: string;
+  accessToken?: string | null;
   onToggleFavorite: (courseId: string) => void;
   onSelectCourse: (course: Course) => void;
   onCreateCourse: () => void;
@@ -45,7 +47,7 @@ function groupSelections(courses: Course[]) {
   }));
 }
 
-export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = [], selectedCourseId, permissionOwnerId, onToggleFavorite, onSelectCourse, onCreateCourse, onEditCourse }: CourseLibraryProps) {
+export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = [], selectedCourseId, permissionOwnerId, accessToken, onToggleFavorite, onSelectCourse, onCreateCourse, onEditCourse }: CourseLibraryProps) {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [filter, setFilter] = useState<CourseFilter>("all");
@@ -102,7 +104,10 @@ export function CourseLibrary({ courses, favoriteCourseIds, recentCourseIds = []
     setFilter("nearby");
     setNearbyState({ status: "requesting" });
     let location: NearbyLocationResolution;
-    try { location = await resolveAuthorizedNearbyLocation(localStorage, permissionOwnerId, navigator, navigator.geolocation, { signal: controller.signal }); }
+    try { location = await resolveAuthorizedNearbyLocation(localStorage, permissionOwnerId, navigator, navigator.geolocation, {
+      signal: controller.signal,
+      ...(accessToken ? { readCurrent: () => readAccountDevicePermissionPreferences(localStorage, permissionOwnerId) } : {}),
+    }); }
     catch { if (!controller.signal.aborted) setNearbyState({ status: "error", message: "No pudimos consultar la ubicación. Puedes buscar el campo manualmente." }); return; }
     if (controller.signal.aborted || location.status === "cancelled") return;
     if (location.status !== "located") {

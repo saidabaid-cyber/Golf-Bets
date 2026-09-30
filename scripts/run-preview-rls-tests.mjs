@@ -24,6 +24,7 @@ export const REQUIRED_RLS_TESTS = [
   "course_scorecard_profiles_rls.sql",
   "course_provider_lookup_cache_rls.sql",
   "legal_evidence_events_rls.sql",
+  "optional_authorizations_rls.sql",
   "feedback_requests_rls.sql",
   "polla_live_rls.sql",
 ];

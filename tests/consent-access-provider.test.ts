@@ -32,6 +32,7 @@ function providerHarness(options: { existingNotice?: boolean; newAccount?: boole
   const identity = { mode: "authenticated", userId: OWNER, accessToken: "verified-token", displayName: "Cuenta existente", email: "qa@example.invalid", providers: [options.provider || "google"] };
   const initial: Record<string, unknown> = {
     ready: true, identity, cloudConsentChecked: true, profileChecked: true,
+    optionalAuthorizationCheck: "ready", optionalAuthorizationRequired: false,
     accountEntry: options.mappingPending ? null : { userId: OWNER, profileExists: true, existingAccount: !options.newAccount },
     existingAccountNotice: Boolean(options.existingNotice), profileSetupRequired: Boolean(options.newAccount),
   };

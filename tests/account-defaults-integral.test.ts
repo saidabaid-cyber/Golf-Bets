@@ -51,7 +51,7 @@ test("internal notices require persisted true and a stored OFF remains canonical
   storage.setItem(STORAGE_KEYS.notifications, "false");
   const existing = collectLocalCloudData(storage as unknown as Storage);
   assert.equal(existing.preferences.notificationsEnabled, false);
-  assert.equal(existing.preferences.hasLocalState, true);
+  assert.equal(existing.preferences.hasLocalState, false, "el cache canónico de avisos no concede ownership al sync genérico");
 });
 
 test("device permission, app preference and provider delivery remain separate", () => {
@@ -117,7 +117,7 @@ test("new-account server row is already initialized and never enters legacy boot
     calls.push(String(init?.method));
     return Response.json({
       initialized: true,
-      preferences: { push: true, email: true, rounds: true, reminders: true, updatedAt: "2026-09-28T00:00:00.000Z" },
+      preferences: { push: false, email: false, rounds: false, reminders: false, updatedAt: "2026-09-30T00:00:00.000Z" },
       delivery,
     });
   }) as typeof fetch;
@@ -126,67 +126,64 @@ test("new-account server row is already initialized and never enters legacy boot
   }, undefined, transport);
   assert.deepEqual(calls, ["GET"]);
   assert.deepEqual(result.preferences, {
-    push: true, email: true, rounds: true, reminders: true, updatedAt: "2026-09-28T00:00:00.000Z",
+    push: false, email: false, rounds: false, reminders: false, updatedAt: "2026-09-30T00:00:00.000Z",
   });
 });
 
-test("Auth bootstrap alone applies new-account defaults; generic and legacy paths stay historical", () => {
-  const migration = readFileSync("supabase/migrations/20260928010000_new_account_privacy_notification_defaults.sql", "utf8");
-  const publicBootstrapFix = readFileSync("supabase/migrations/20260928033500_fix_new_account_public_bootstrap.sql", "utf8");
+test("new accounts stay private and OFF until the atomic optional authorization", () => {
+  const migration = readFileSync("supabase/migrations/20260930233254_explicit_optional_authorizations.sql", "utf8");
   const cloudProfile = readFileSync("lib/cloud-account.ts", "utf8");
   const accountProvider = readFileSync("app/components/account-provider.tsx", "utf8");
   const appPage = readFileSync("app/page.tsx", "utf8");
   const socialRuntime = readFileSync("lib/social-activity.server.ts", "utf8");
-  assert.match(migration, /alter table public\.profiles\s+alter column profile_visibility set default 'private'/);
-  assert.match(migration, /alter table public\.social_profiles\s+alter column privacy set default 'PRIVATE'/);
-  assert.doesNotMatch(migration, /alter column profile_visibility set default 'public'/);
-  assert.match(migration, /insert into public\.profiles\([\s\S]*profile_visibility[\s\S]*'PRIVATE',\s*'public'/);
-  assert.match(migration, /on conflict \(id\) do update set[\s\S]*profile_visibility = 'public'/);
-  assert.match(publicBootstrapFix, /create or replace function public\.handle_phase2_user_bootstrap\(\)[\s\S]*on conflict \(id\) do update set[\s\S]*profile_visibility = 'public'/);
-  assert.doesNotMatch(publicBootstrapFix, /update\s+public\.profiles/i);
-  assert.match(migration, /insert into public\.social_profiles[\s\S]*'PUBLIC'[\s\S]*on conflict \(user_id\) do nothing/);
+  assert.match(migration, /^begin;/m);
+  for (const column of ["personal_memory_enabled", "global_learning_enabled", "location_internal_enabled", "notification_internal_enabled"]) {
+    assert.match(migration, new RegExp(`add column if not exists ${column} boolean`));
+    assert.doesNotMatch(migration, new RegExp(`${column} boolean(?: not null)? default true`));
+  }
+  assert.match(migration, /create table private\.optional_authorization_onboarding_eligibility/);
+  assert.match(migration, /No historical account is backfilled|No historical UPDATE|does not infer or backfill consent/i);
+  assert.match(migration, /create or replace function public\.handle_phase2_user_bootstrap\(\)/);
+  assert.match(migration, /username_candidate,[\s\S]*'PRIVATE',[\s\S]*'private'/);
+  assert.match(migration, /insert into public\.social_profiles[\s\S]*'PRIVATE'/);
+  assert.match(migration, /new\.id, false, false, false, false, false, false, false, false, false/);
+  assert.match(migration, /insert into private\.optional_authorization_onboarding_eligibility/);
+  assert.match(migration, /create or replace function public\.resolve_optional_authorization_bundle_v1/);
+  assert.match(migration, /optional_authorization_bundle_not_eligible/);
+  assert.match(migration, /requested_action = 'authorize_all'/);
+  assert.match(migration, /profile_visibility = case when enabled then 'public' else 'private' end/);
+  assert.match(migration, /set privacy = case when enabled then 'PUBLIC' else 'PRIVATE' end/);
+  for (const projection of ["share_rounds", "share_achievements", "share_equipment", "share_courses", "notifications_enabled", "push_notifications_enabled", "email_notifications_enabled", "round_notifications_enabled", "reminders_enabled"]) {
+    assert.match(migration, new RegExp(projection));
+  }
+  assert.match(migration, /'excluded', jsonb_build_array\('MARKETING', 'FINANCIAL_PATRIMONIAL'\)/);
   assert.match(cloudProfile, /profile_visibility:\s*"private"/);
-  assert.match(accountProvider, /current\.profileVisibility === profileVisibility/);
-  assert.match(accountProvider, /select\("default_handicap,high_contrast,notifications_enabled,updated_at"\)/);
-  assert.match(accountProvider, /typeof preferencesResult\.data\?\.notifications_enabled === "boolean"/);
+  assert.doesNotMatch(accountProvider, /typeof preferencesResult\.data\?\.notifications_enabled === "boolean"/,
+    "la proyección editable legacy no puede decidir el consentimiento de avisos");
+  assert.match(accountProvider, /optionalAuthorizationResult\.status === "fulfilled"[\s\S]*hydrateOptionalDevicePermissionPreferences[\s\S]*notificationPreference === "enabled"/);
   assert.doesNotMatch(accountProvider, /localStorage\.getItem\(STORAGE_KEYS\.notifications\) === null/);
   assert.match(accountProvider, /backyard:account-notifications-hydrated/);
   assert.match(appPage, /backyard:account-notifications-hydrated/);
-  assert.match(appPage, /setNotificationsEnabled\(detail\.enabled\)/);
-  assert.match(migration, /notifications_enabled set default false/);
-  assert.match(migration, /insert into public\.user_preferences\([\s\S]*push_notifications_enabled[\s\S]*values \(new\.id, true, true, true, true, true\)/);
-  for (const column of ["push_notifications_enabled", "email_notifications_enabled", "round_notifications_enabled", "reminders_enabled"]) {
-    assert.match(migration, new RegExp(`add column if not exists ${column} boolean[;,]`));
-    assert.match(migration, new RegExp(`alter column ${column} drop default`));
-    assert.doesNotMatch(migration, new RegExp(`alter column ${column} set default true`));
-    assert.doesNotMatch(migration, new RegExp(`add column if not exists ${column} boolean not null default true`));
-  }
-  assert.match(migration, /insert into public\.notification_preferences_v2\(user_id, event_type, in_app, push\)\s+select new\.id, event_type, true, true/);
-  assert.match(migration, /alter column push set default false/);
-  assert.match(migration, /insert into public\.social_activity_preferences_v3\([\s\S]*notify_friend_request[\s\S]*values \(new\.id, true, true, true, true, true, true\)/);
-  assert.match(migration, /alter column notify_friend_achievement set default false/);
-  assert.match(migration, /alter column notify_equipment set default false/);
-  assert.match(migration, /add column if not exists notify_friend_request boolean;/);
-  assert.match(migration, /alter column notify_friend_request drop default/);
-  assert.doesNotMatch(migration, /notify_friend_request boolean not null default true/);
-  assert.match(migration, /if new\.state = 'PENDING' and coalesce\(/);
+  assert.match(appPage, /event is only an invalidation signal/);
+  assert.match(appPage, /setNotificationsEnabled\(readAccountDevicePermissionPreferences\(localStorage, identity\.userId\)\.notificationPreference === "enabled"\)/);
+  assert.doesNotMatch(appPage, /setNotificationsEnabled\(detail\.enabled\)/);
   assert.match(socialRuntime, /notifyFriendAchievement: false, notifyEquipment: false, notifyFriendRequest: true/);
   assert.match(socialRuntime, /notifyFriendAchievement: row\.notify_friend_achievement === true/);
   assert.match(socialRuntime, /notifyEquipment: row\.notify_equipment === true/);
-  assert.doesNotMatch(migration, /update\s+public\.(profiles|user_preferences|social_activity_preferences_v3)/i);
 });
 
-test("onboarding asks all AI/device decisions while Settings only reviews them", () => {
+test("onboarding authorizes app intent while OS permission and delivery remain separate", () => {
   const consent = readFileSync("app/components/account-consent-checkpoint.tsx", "utf8");
   const onboarding = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
   const settings = readFileSync("app/components/device-permission-settings.tsx", "utf8");
-  assert.match(consent, /AUTORIZACIONES DE BACKYARD AI/);
-  for (const purpose of ["texto o dictado", "scorecards", "launch monitor"]) assert.match(consent, new RegExp(purpose, "i"));
+  assert.match(consent, /FUNCIONES OPCIONALES DE THE BACKYARD/);
+  for (const purpose of ["texto o dictado", "fotos e imágenes", "launch monitor", "Uso interno de ubicación y notificaciones"]) assert.match(consent, new RegExp(purpose, "i"));
+  assert.match(consent, /el permiso del dispositivo y la entrega se muestran y solicitan por separado/);
   assert.match(onboarding, /<InitialDevicePermissions/);
   assert.match(settings, /requestInitialLocation/);
   assert.match(settings, /requestInitialNotifications/);
   assert.match(settings, /Preferencia, permiso del sistema y entrega son estados distintos/);
-  assert.match(settings, /enableNotificationsForApp/);
+  assert.match(settings, /persistPreference\("notifications", "enabled"\)/);
   assert.doesNotMatch(settings, /notifications:\s*"granted"/);
 });
 

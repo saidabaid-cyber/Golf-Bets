@@ -151,7 +151,13 @@ try {
   assert.equal(await scalar("select count(*)::integer from public.group_memberships_v2 where group_id=$1 and user_id=$2",[groupId,D]),1);
   check("new private FKs cascade deleted identities without deleting surviving shared group/membership");
   await q("insert into auth.users(id,email,email_confirmed_at) values($1,'new-a@example.invalid',now()),($2,'new-b@example.invalid',now())",[A,B]);
-  await q("update public.social_profiles set privacy='PUBLIC' where user_id in ($1,$2)",[A,B]);
+  await q("update public.profiles set display_name='New A' where id=$1",[A]);
+  await q("update public.profiles set display_name='New B' where id=$1",[B]);
+  // New-account bootstrap is intentionally private/off until an explicit
+  // choice. Exercise public identity and notification delivery through the
+  // atomic onboarding bundle instead of relying on former implicit defaults.
+  await asUser(A);await scalar("select public.resolve_optional_authorization_bundle_v1($1,$2,$3)",["authorize_all","optional-features-2026-09-30-v1","aaaaaaaa-0000-4000-8000-000000000001"]);
+  await asUser(B);await scalar("select public.resolve_optional_authorization_bundle_v1($1,$2,$3)",["authorize_all","optional-features-2026-09-30-v1","bbbbbbbb-0000-4000-8000-000000000002"]);
   await asUser(A);
   await q("insert into public.profile_completion_choices(user_id,handicap_choice,manual_hcp,not_applicable) values($1,'MANUAL',12,array['equipment','ball','fitting'])",[A]);
   await denied(()=>q("insert into public.profile_completion_choices(user_id,handicap_choice) values($1,'UNKNOWN')",[B]));

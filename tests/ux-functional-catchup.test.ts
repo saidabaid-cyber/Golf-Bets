@@ -5,13 +5,14 @@ import { feedbackPersistenceInput, type FeedbackInput } from "../lib/feedback";
 
 const source = (file: string) => readFileSync(file, "utf8");
 
-test("initial consent separates legal decisions from the optional AI group", () => {
+test("initial consent separates required documents from the explicit optional bundle", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
-  assert.match(consent, /AI_PROCESSING_CONSENT_SCOPES\.map/);
-  assert.match(consent, /AUTORIZAR LAS 3 FUNCIONES DE IA/);
+  assert.match(consent, /resolveOptionalAuthorizationBundle/);
+  assert.match(consent, /AUTORIZAR TODO Y CONTINUAR/);
   assert.match(consent, /CONSENTIMIENTOS REQUERIDOS/);
+  assert.match(consent, /Marketing y datos financieros\/patrimoniales no forman parte/);
   assert.doesNotMatch(consent, /type="checkbox"/);
-  assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|resultados y gastos/);
+  assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS/);
 });
 
 test("nearby courses use real browser location and a strict verified 50 km radius", () => {

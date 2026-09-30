@@ -27,6 +27,11 @@ test("Legal y privacidad usa una pantalla secundaria y mantiene finalidades sepa
   assert.match(account, /GESTIONAR CONSENTIMIENTOS/);
   assert.doesNotMatch(account, /Revocar Términos/);
   for (const label of ["Términos y Condiciones", "Aviso Integral", "Declaración de mayoría de edad", "Datos financieros\/patrimoniales", "AiProcessingConsentSettings", "Memoria y aprendizaje", "Marketing opcional"]) assert.match(manager, new RegExp(label, "i"));
+  assert.ok(manager.indexOf("Documentos y edad") < manager.indexOf("<AiProcessingConsentSettings"));
+  assert.ok(manager.indexOf("<AiProcessingConsentSettings") < manager.indexOf("Memoria y aprendizaje"));
+  assert.ok(manager.indexOf("<h2>Memoria y aprendizaje") < manager.indexOf("<h2>Datos financieros/patrimoniales"));
+  assert.ok(manager.indexOf("<h2>Datos financieros/patrimoniales") < manager.indexOf("<h2>Marketing opcional"));
+  assert.doesNotMatch(manager, /Copia de datos|Descargar copia limitada/);
   assert.match(manager, /globalLearningEnabled/);
   assert.match(manager, /personalMemoryEnabled/);
 });

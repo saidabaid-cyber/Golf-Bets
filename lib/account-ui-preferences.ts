@@ -12,8 +12,8 @@ export type AccountUiPreferences = {
 export const DEFAULT_ACCOUNT_UI_PREFERENCES: AccountUiPreferences = {
   version: 1,
   distanceUnit: "yards",
-  // Local absence is not a new-account marker. Canonical new-account ON
-  // values are persisted by the Auth bootstrap and returned by the API.
+  // Local absence is not consent. Canonical account values are persisted by
+  // the server and become ON only after the explicit authorization action.
   push: false,
   email: false,
   rounds: false,

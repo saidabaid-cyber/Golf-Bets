@@ -149,7 +149,7 @@ test("onboarding, Profile, Edit Profile and Settings share the live multiuser GH
   assert.equal((profilePanel.match(/<HandicapSourceChoices\b/g) || []).length, 1);
   assert.match(profilePanel, /id="profile-index-source"><HandicapSourceChoices[\s\S]*?ghinControl=\{ghinControl\}/);
   assert.match(profilePanel, /<ProfileImagePicker value=\{avatarUrl\} onChange=\{setAvatarUrl\}/);
-  assert.match(profilePanel, /Preferencias de golf[\s\S]*?openProfileEditor\("golf"\)/);
+  assert.doesNotMatch(profilePanel, /Preferencias de golf/);
   assert.match(profilePanel, /<EquipmentProfilePanel[\s\S]*?defaultHandicapSource=\{selectedIndex\.source\}/);
   assert.match(selector, /ghinControl\?\.enabled[\s\S]*?<GhinReadOnlyPanel control=\{ghinControl\}/);
   assert.match(legacyAccountPanel, /const ghinControl = useGhinReadOnlyProfile\(identity\.accessToken\)/);

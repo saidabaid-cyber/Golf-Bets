@@ -26,7 +26,9 @@ type AccountPanelProps = {
   highContrast: boolean;
   onHighContrastChange: (value: boolean) => void;
   notificationsEnabled: boolean;
-  onNotificationsEnabledChange: (value: boolean) => void;
+  onNotificationsEnabledChange: (value: boolean) => void | Promise<boolean>;
+  internalNotificationsSaving?: boolean;
+  internalNotificationsMessage?: string;
   golfInsights?: GolfInsights;
   onOpenStats?: () => void;
   onOpenAccount?: () => void;
@@ -131,7 +133,7 @@ function gameProfileChanged(profile: BackyardProfile, draft: ProfileDetailsDraft
   ]);
 }
 
-export function AccountPanel({ view, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, onOpenStats, onOpenAccount }: AccountPanelProps) {
+export function AccountPanel({ view, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, internalNotificationsSaving = false, internalNotificationsMessage = "", golfInsights, onOpenStats, onOpenAccount }: AccountPanelProps) {
   const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, legalEvidenceEvents, marketingConsentResolved, bettingConsentGranted, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const ghinControl = useGhinReadOnlyProfile(identity.accessToken);
   const [editing, setEditing] = useState(false);
@@ -290,7 +292,6 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
   }
 
   if (view === "account" && managingConsents) return <LegalConsentManager
-    profile={identity}
     userId={identity.userId}
     accessToken={identity.accessToken}
     authenticated={identity.mode === "authenticated"}
@@ -420,7 +421,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
 
     {identity.mode === "authenticated" && <section className="card"><h2>Métodos de acceso</h2><div className="accessMethodList">{["google", "email"].map((provider) => <span key={provider}>{provider === "google" ? "Google" : "Correo"}<b>{identity.providers.includes(provider) || (provider === "email" && Boolean(identity.email)) ? "✓" : "—"}</b></span>)}</div><p className="hint">Tu cuenta conserva el mismo perfil tanto con Google como con código por correo.</p></section>}
 
-    <section className="card"><h2>Preferencias</h2><label className="preferenceRow"><span>Alto contraste</span><input type="checkbox" checked={highContrast} onChange={(event) => onHighContrastChange(event.target.checked)} /></label><label className="preferenceRow"><span>Idioma</span><select value="es" disabled><option value="es">Español</option></select></label><label className="preferenceRow"><span><b>Avisos dentro de la app</b><small className="preferenceDescription">Notificaciones de actividad nueva en Social. No activa notificaciones push ni permisos del teléfono.</small></span><input type="checkbox" checked={notificationsEnabled} onChange={(event) => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos dentro de la app" /></label></section>
+    <section className="card"><h2>Preferencias</h2><label className="preferenceRow"><span>Alto contraste</span><input type="checkbox" checked={highContrast} onChange={(event) => onHighContrastChange(event.target.checked)} /></label><label className="preferenceRow"><span>Idioma</span><select value="es" disabled><option value="es">Español</option></select></label><label className="preferenceRow"><span><b>Avisos dentro de la app</b><small className="preferenceDescription">Notificaciones de actividad nueva en Social. Esta preferencia se confirma en tu cuenta; no cambia el permiso del dispositivo ni registra un proveedor push.</small></span><input type="checkbox" checked={notificationsEnabled} disabled={internalNotificationsSaving || identity.mode !== "authenticated"} onChange={(event) => { void onNotificationsEnabledChange(event.target.checked); }} aria-label="Activar avisos dentro de la app" /></label>{internalNotificationsMessage && <p role="status">{internalNotificationsMessage}</p>}</section>
 
     <section className="card accountContactCard"><h2>Contacto</h2><div className="accountContacts"><a href={`mailto:${legalConfig.supportEmail}`}><span>Soporte</span><b>{legalConfig.supportEmail}</b></a><a href={`mailto:${legalConfig.privacyEmail}`}><span>Privacidad y ARCO</span><b>{legalConfig.privacyEmail}</b></a></div></section>
 

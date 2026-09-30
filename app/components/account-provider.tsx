@@ -94,6 +94,13 @@ import {
   type LegalEvidenceOrigin,
   type LegalEnvironment,
 } from "../../lib/legal-evidence-client";
+import {
+  OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT,
+  requestOptionalAuthorizationState,
+} from "../../lib/account-optional-authorizations";
+import { ACCOUNT_LEARNING_CONSENT_HYDRATED_EVENT, cacheAccountLearningConsent, failClosedAccountLearningConsent } from "../../lib/account-learning-consent-cache";
+import { failClosedAccountDevicePermissionPreferences, hydrateOptionalDevicePermissionPreferences } from "../../lib/account-device-permission-preferences";
+import { InitialOnboardingConsents } from "./account-consent-checkpoint";
 
 export type BackyardIdentity = BackyardProfile & {
   mode: Exclude<AccountMode, "undecided">;
@@ -511,6 +518,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [profileSetupRequired, setProfileSetupRequired] = useState(false);
   const [equipmentOnboardingRequired, setEquipmentOnboardingRequired] = useState(false);
   const [betaOnboardingRequired, setBetaOnboardingRequired] = useState(false);
+  const [optionalAuthorizationCheck, setOptionalAuthorizationCheck] = useState<"pending" | "ready" | "error">("pending");
+  const [optionalAuthorizationRequired, setOptionalAuthorizationRequired] = useState(false);
   const [profileChecked, setProfileChecked] = useState(false);
   const [accountEntry, setAccountEntry] = useState<AccountEntry | null>(null);
   const [accountEntryError, setAccountEntryError] = useState("");
@@ -529,6 +538,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [cloudIssuesByDomain, setCloudIssuesByDomain] = useState<Partial<Record<CloudIssueDomain, CloudIssue>>>({});
   const [legalRetryRevision, setLegalRetryRevision] = useState(0);
   const [accountReloadRevision, setAccountReloadRevision] = useState(0);
+  const accountHydrationRevision = useRef(0);
   const cloudProfileFallbackRef = useRef<{ userId: string; profile: CloudProfileFields } | null>(null);
   const profileWriteCoordinators = useRef(new Map<string, ProfileWriteCoordinator>());
   const profileWriterFor = useCallback((userId: string) => {
@@ -662,6 +672,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setIdentity({ ...profile, mode: "authenticated", providers: session.user.app_metadata?.providers || [session.user.app_metadata?.provider].filter((value): value is string => Boolean(value)), accessToken: session.access_token });
     localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "authenticated");
     setCloudConsentChecked(false);
+    setOptionalAuthorizationCheck("pending");
+    setOptionalAuthorizationRequired(false);
     setProfileChecked(false);
     const equipmentRead = loadEquipmentProfile(localStorage, session.user.id);
     setEquipmentOnboardingRequired(Boolean(equipmentRead.ok && equipmentRead.profile && localStorage.getItem(equipmentOnboardingReadyKey(session.user.id)) !== "true"));
@@ -787,6 +799,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           // Retry durable queues even when the refreshed session keeps the
           // same user and access token value.
           setLegalRetryRevision((value) => value + 1);
+          accountHydrationRevision.current += 1;
           setAccountReloadRevision((value) => value + 1);
           window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
         }
@@ -848,11 +861,40 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!authenticatedUserId) return;
     const revisionKey = cloudProfileRevisionKey(authenticatedUserId);
-    const reloadProfileFromAnotherTab = (event: StorageEvent) => {
-      if (event.key === revisionKey && event.newValue) setAccountReloadRevision((value) => value + 1);
+    let refreshQueued = false;
+    const requestAccountRefresh = () => {
+      if (!navigator.onLine || activeUserId.current !== authenticatedUserId || refreshQueued) return;
+      // Invalidate an in-flight response synchronously. React may commit the
+      // state-driven effect cleanup after a consent mutation has already
+      // updated its local cache, so AbortController alone is not a race guard.
+      accountHydrationRevision.current += 1;
+      refreshQueued = true;
+      queueMicrotask(() => {
+        refreshQueued = false;
+        if (navigator.onLine && activeUserId.current === authenticatedUserId) {
+          setAccountReloadRevision((value) => value + 1);
+        }
+      });
     };
+    const reloadProfileFromAnotherTab = (event: StorageEvent) => {
+      if (event.key === revisionKey && event.newValue) {
+        accountHydrationRevision.current += 1;
+        setAccountReloadRevision((value) => value + 1);
+      }
+    };
+    const refreshWhenVisible = () => { if (document.visibilityState === "visible") requestAccountRefresh(); };
     window.addEventListener("storage", reloadProfileFromAnotherTab);
-    return () => window.removeEventListener("storage", reloadProfileFromAnotherTab);
+    window.addEventListener("focus", requestAccountRefresh);
+    window.addEventListener("online", requestAccountRefresh);
+    window.addEventListener(OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT, requestAccountRefresh);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      window.removeEventListener("storage", reloadProfileFromAnotherTab);
+      window.removeEventListener("focus", requestAccountRefresh);
+      window.removeEventListener("online", requestAccountRefresh);
+      window.removeEventListener(OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT, requestAccountRefresh);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
   }, [authenticatedUserId]);
 
   useEffect(() => {
@@ -863,7 +905,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const fallback = cloudProfileFallbackRef.current;
     if (!fallback || fallback.userId !== authenticatedUserId) return;
     const profileWriteCoordinator = profileWriterFor(authenticatedUserId);
+    const hydrationRevision = ++accountHydrationRevision.current;
+    const controller = new AbortController();
     let mounted = true;
+    setOptionalAuthorizationCheck((current) => current === "ready" ? current : "pending");
     const pendingProfile = readPendingProfileWrite(localStorage, authenticatedUserId);
     const pendingProfileAttempt = pendingProfile
       ? profileWriteCoordinator.run(async () => {
@@ -891,24 +936,51 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     const locationRead = pendingProfileAttempt.then(() => readProfileLocationMetadata(supabase, authenticatedUserId)
       .then((value) => ({ status: "fulfilled" as const, value }))
       .catch((reason: unknown) => ({ status: "rejected" as const, reason })));
+    const optionalAuthorizationRead = pendingProfileAttempt.then(() => requestOptionalAuthorizationState(authenticatedAccessToken, controller.signal)
+      .then((value) => ({ status: "fulfilled" as const, value }))
+      .catch((reason: unknown) => ({ status: "rejected" as const, reason })));
     Promise.all([
       supabase.from("legal_acceptances").select("user_id,type,version,accepted_at,locale").eq("user_id", authenticatedUserId),
       profileRead,
       preferencesRead,
       pendingProfileAttempt,
       locationRead,
-    ]).then(([legalResult, profileResult, preferencesResult, pendingResult, locationResult]) => {
-      if (!mounted || activeUserId.current !== authenticatedUserId) return;
-      // A newly-created DB row still carries the legacy false default. New
-      // accounts start ON; only an established account can supply a prior
-      // explicit cloud choice before the app's normal preference sync runs.
+      optionalAuthorizationRead,
+    ]).then(([legalResult, profileResult, preferencesResult, pendingResult, locationResult, optionalAuthorizationResult]) => {
+      if (!mounted || controller.signal.aborted || hydrationRevision !== accountHydrationRevision.current
+        || activeUserId.current !== authenticatedUserId) return;
+      // Existing accounts may have a durable contrast choice from before the
+      // explicit optional-authorization ledger. Absence remains undecided.
       if (accountEntry.existingAccount && !preferencesResult.error && localStorage.getItem(STORAGE_KEYS.contrast) === null && typeof preferencesResult.data?.high_contrast === 'boolean') localStorage.setItem(STORAGE_KEYS.contrast, String(preferencesResult.data.high_contrast));
-      // The persisted owner row is canonical for an authenticated account.
-      // Applying it every time prevents guest/another-account workspace data
-      // from repainting the toggle while preserving every explicit server choice.
-      if (!preferencesResult.error && typeof preferencesResult.data?.notifications_enabled === "boolean") {
-        const notificationsEnabled = preferencesResult.data.notifications_enabled;
-        localStorage.setItem(STORAGE_KEYS.notifications, String(notificationsEnabled));
+      if (optionalAuthorizationResult.status === "fulfilled") {
+        const saved = optionalAuthorizationResult.value;
+        // The server ledger is canonical across devices. These projections are
+        // runtime caches only; they never mint another consent decision.
+        cacheAccountLearningConsent(localStorage, authenticatedUserId, saved);
+        const devicePreferences = hydrateOptionalDevicePermissionPreferences(localStorage, authenticatedUserId, saved);
+        setOptionalAuthorizationRequired(saved.eligible && !saved.resolved);
+        setOptionalAuthorizationCheck("ready");
+        window.dispatchEvent(new CustomEvent(ACCOUNT_LEARNING_CONSENT_HYDRATED_EVENT, {
+          detail: { userId: authenticatedUserId },
+        }));
+        try { localStorage.setItem(STORAGE_KEYS.notifications, String(devicePreferences.notificationPreference === "enabled")); }
+        catch { /* Runtime uses the volatile canonical decision when storage is unavailable. */ }
+        window.dispatchEvent(new CustomEvent("backyard:account-notifications-hydrated", {
+          detail: { userId: authenticatedUserId, enabled: devicePreferences.notificationPreference === "enabled" },
+        }));
+      } else {
+        // Until the canonical ledger can be read, only values carrying a
+        // prior server-decision clock may remain active. Old local ON values
+        // are cache, not evidence of consent.
+        failClosedAccountLearningConsent(localStorage, authenticatedUserId);
+        const devicePreferences = failClosedAccountDevicePermissionPreferences(localStorage, authenticatedUserId);
+        setOptionalAuthorizationCheck((current) => current === "ready" ? current : "error");
+        window.dispatchEvent(new CustomEvent(ACCOUNT_LEARNING_CONSENT_HYDRATED_EVENT, {
+          detail: { userId: authenticatedUserId },
+        }));
+        const notificationsEnabled = devicePreferences.notificationPreference === "enabled";
+        try { localStorage.setItem(STORAGE_KEYS.notifications, String(notificationsEnabled)); }
+        catch { /* Runtime uses the volatile fail-closed decision when storage is unavailable. */ }
         window.dispatchEvent(new CustomEvent("backyard:account-notifications-hydrated", {
           detail: { userId: authenticatedUserId, enabled: notificationsEnabled },
         }));
@@ -982,11 +1054,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       else if (locationResult.status === "rejected") setCloudIssue("profile", cloudIssueFromError("profile", locationResult.reason, navigator.onLine));
       else if (profileResult.status === "fulfilled" && !keepLocalProfile) setCloudIssue("profile", null);
     }).catch((error) => {
-      if (mounted && activeUserId.current === authenticatedUserId) setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine));
+      if (mounted && hydrationRevision === accountHydrationRevision.current
+        && activeUserId.current === authenticatedUserId) setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine));
     }).finally(() => {
-      if (mounted && activeUserId.current === authenticatedUserId) setProfileChecked(true);
+      if (mounted && hydrationRevision === accountHydrationRevision.current
+        && activeUserId.current === authenticatedUserId) setProfileChecked(true);
     });
-    return () => { mounted = false; };
+    return () => { mounted = false; controller.abort(); };
   }, [authenticatedUserId, authenticatedAccessToken, accountEntry, accountReloadRevision, issueWithMessage, profileWriterFor, setCloudIssue]);
 
   const legalEvidenceEvents = identity && legalEvidenceState?.environment === legalEnvironment
@@ -1515,6 +1589,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setIdentity(null);
       setEquipmentOnboardingRequired(false);
       setBetaOnboardingRequired(false);
+      setOptionalAuthorizationCheck("pending");
+      setOptionalAuthorizationRequired(false);
       setAccessRequested(false);
       setCloudLinked(false);
       setCloudStatus("local");
@@ -1931,6 +2007,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
     setEquipmentOnboardingRequired(false);
     setBetaOnboardingRequired(false);
+    setOptionalAuthorizationCheck("pending");
+    setOptionalAuthorizationRequired(false);
     setCloudConsentChecked(true);
     setAccessRequested(false);
     setCloudIssuesByDomain({}); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
@@ -1946,6 +2024,19 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   }
   if (identity.mode === "authenticated" && !profileChecked) return <main className="accessScreen"><div className="accessLoading">Preparando tu perfil…</div></main>;
   if (identity.mode === "authenticated" && profileSetupRequired) return <>{accountCloudError && <div role="alert" className="notice bad">{accountCloudError}</div>}<ProfileSetupScreen identity={identity} onSave={saveInitialProfile} onBack={logout} /></>;
+  if (identity.mode === "authenticated" && !betaOnboardingRequired && optionalAuthorizationCheck !== "ready") return <main className="accessScreen"><section className="accessCard" aria-labelledby="optional-authorization-check-title">
+    <BrandLockup compact />
+    <h1 id="optional-authorization-check-title">Verificando tus autorizaciones opcionales…</h1>
+    {optionalAuthorizationCheck === "error" && <><p role="alert">No pudimos consultar el registro canónico. Reintenta antes de continuar.</p><button type="button" className="primary big" onClick={() => { setOptionalAuthorizationCheck("pending"); setAccountReloadRevision((value) => value + 1); }}>Reintentar</button><button type="button" className="textButton" onClick={logout}>Cerrar sesión</button></>}
+  </section></main>;
+  if (identity.mode === "authenticated" && !betaOnboardingRequired && optionalAuthorizationRequired) return <main className="accessScreen"><InitialOnboardingConsents
+    userId={identity.userId}
+    accessToken={identity.accessToken}
+    legalRequired={!currentConsent}
+    canContinue
+    onAcceptRequired={() => acceptRequiredConsents(true)}
+    onContinue={() => { setOptionalAuthorizationRequired(false); setAccountReloadRevision((value) => value + 1); }}
+  /></main>;
   if (identity.mode === "authenticated" && betaOnboardingRequired) return <AccountContext.Provider value={context!}>
     <BetaOnboardingFlow profile={identity} accessToken={identity.accessToken} onUpdateProfile={async (profile) => (await updateProfile(profile)) === "local" ? "local" : "cloud"} legalConsentRequired={!currentConsent} onAcceptRequiredConsents={() => acceptRequiredConsents(true)} onComplete={finishBetaOnboarding} />
     {bettingConsentDialog}

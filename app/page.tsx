@@ -160,6 +160,9 @@ import { buildDeterministicRoundRecap } from "../lib/backyard-ai/recap/round-rec
 import { recordRoundCompletionMetric, recordRoundSetupMetrics, recordScorecardMetrics, recordScorecardOutcomeMetrics, updateBackyardAiMetrics } from "../lib/backyard-ai/observability/metrics";
 import type { ScorecardCorrectionEvidence } from "../lib/backyard-ai/observability/scorecard-telemetry";
 import { BACKYARD_AI_MEMORY_POLICY_VERSION, appendLearningRecord, createPersonalLearningEvent, createScorecardCorrection, readLearningConsent, scorecardCorrectionLearningEvent } from "../lib/backyard-ai/memory/learning-events";
+import { readAccountLearningConsent } from "../lib/account-learning-consent-cache";
+import { readAccountDevicePermissionPreferences, saveCanonicalAccountNotificationPreference } from "../lib/account-device-permission-preferences";
+import { OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT } from "../lib/account-optional-authorizations";
 import { buildRoundSetupCorrectionRecords } from "../lib/backyard-ai/memory/setup-learning";
 import { persistUserPreference } from "../lib/backyard-ai/memory/personal-memory";
 import { persistGroupPreference } from "../lib/backyard-ai/memory/group-memory";
@@ -576,6 +579,9 @@ function GolfBetsApp() {
   const [pendingResultScroll, setPendingResultScroll] = useState<string | null>(null);
   const [highContrast, setHighContrast] = useState(true);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [internalNotificationsSaving, setInternalNotificationsSaving] = useState(false);
+  const [internalNotificationsMessage, setInternalNotificationsMessage] = useState("");
+  const notificationPreferenceMutation = useRef<{ revision: number; controller: AbortController | null }>({ revision: 0, controller: null });
   const [roundClosed, setRoundClosed] = useState(false);
   const [roundReviewPending, setRoundReviewPending] = useState(false);
   const [showRoundFinishedNotice, setShowRoundFinishedNotice] = useState(false);
@@ -695,14 +701,71 @@ function GolfBetsApp() {
   }, [tab, openResultSections, pendingResultScroll]);
   const liveIdentity = useRef(identity);
   useLayoutEffect(() => { liveIdentity.current = identity; }, [identity]);
+  useEffect(() => {
+    notificationPreferenceMutation.current.controller?.abort();
+    notificationPreferenceMutation.current = { revision: notificationPreferenceMutation.current.revision + 1, controller: null };
+    setInternalNotificationsSaving(false);
+    setInternalNotificationsMessage("");
+    setNotificationsEnabled(identity.mode === "authenticated"
+      ? readAccountDevicePermissionPreferences(localStorage, identity.userId).notificationPreference === "enabled"
+      : false);
+    return () => {
+      notificationPreferenceMutation.current.controller?.abort();
+      notificationPreferenceMutation.current.revision += 1;
+    };
+  }, [identity.mode, identity.userId]);
   const hadLocalPreferences = useRef(false);
   const changeHighContrast = useCallback((value: boolean) => {
     hadLocalPreferences.current = true;
     setHighContrast(value);
   }, []);
-  const changeNotifications = useCallback((value: boolean) => {
-    hadLocalPreferences.current = true;
-    setNotificationsEnabled(value);
+  const changeNotifications = useCallback(async (value: boolean) => {
+    const account = liveIdentity.current;
+    if (account.mode !== "authenticated" || !account.accessToken) {
+      setInternalNotificationsMessage("Inicia sesión para guardar esta preferencia en tu cuenta.");
+      return false;
+    }
+    notificationPreferenceMutation.current.controller?.abort();
+    const controller = new AbortController();
+    const revision = notificationPreferenceMutation.current.revision + 1;
+    notificationPreferenceMutation.current = { revision, controller };
+    setInternalNotificationsSaving(true);
+    setInternalNotificationsMessage("Guardando preferencia interna…");
+    try {
+      const confirmed = await saveCanonicalAccountNotificationPreference(
+        localStorage,
+        account.userId,
+        account.accessToken,
+        value,
+        controller.signal,
+      );
+      if (controller.signal.aborted || revision !== notificationPreferenceMutation.current.revision
+        || liveIdentity.current.userId !== account.userId) return false;
+      const enabled = confirmed.notificationPreference === "enabled";
+      setNotificationsEnabled(enabled);
+      try { localStorage.setItem(STORAGE_KEYS.notifications, String(enabled)); } catch { /* Canonical server evidence remains authoritative. */ }
+      window.dispatchEvent(new CustomEvent("backyard:account-notifications-hydrated", {
+        detail: { userId: account.userId, enabled },
+      }));
+      window.dispatchEvent(new Event(OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT));
+      setInternalNotificationsMessage("Preferencia interna guardada en tu cuenta.");
+      return true;
+    } catch {
+      if (controller.signal.aborted || revision !== notificationPreferenceMutation.current.revision
+        || liveIdentity.current.userId !== account.userId) return false;
+      const previous = readAccountDevicePermissionPreferences(localStorage, account.userId);
+      setNotificationsEnabled(previous.notificationPreference === "enabled");
+      setInternalNotificationsMessage("No pudimos confirmar el cambio. Conservamos tu preferencia anterior.");
+      // A network failure can be ambiguous after the server commits. Ask the
+      // account provider to reconcile with the canonical ledger.
+      window.dispatchEvent(new Event(OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT));
+      return false;
+    } finally {
+      if (revision === notificationPreferenceMutation.current.revision) {
+        notificationPreferenceMutation.current.controller = null;
+        setInternalNotificationsSaving(false);
+      }
+    }
   }, []);
 
   const applyStatisticsReset = useCallback((reset: StatisticsResetRecord) => {
@@ -940,12 +1003,14 @@ function GolfBetsApp() {
   useEffect(() => {
     const applyAccountNotificationPreference = (event: Event) => {
       const detail = (event as CustomEvent<{ userId?: unknown; enabled?: unknown }>).detail;
-      if (detail?.userId !== identity.userId || typeof detail.enabled !== "boolean") return;
-      setNotificationsEnabled(detail.enabled);
+      if (detail?.userId !== identity.userId || identity.mode !== "authenticated") return;
+      // The event is only an invalidation signal. Re-read the server-confirmed
+      // runtime cache instead of trusting event payload or legacy localStorage.
+      setNotificationsEnabled(readAccountDevicePermissionPreferences(localStorage, identity.userId).notificationPreference === "enabled");
     };
     window.addEventListener("backyard:account-notifications-hydrated", applyAccountNotificationPreference);
     return () => window.removeEventListener("backyard:account-notifications-hydrated", applyAccountNotificationPreference);
-  }, [identity.userId]);
+  }, [identity.mode, identity.userId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -980,7 +1045,9 @@ function GolfBetsApp() {
         if (Array.isArray(savedFrequentPlayers)) setFrequentPlayers(savedFrequentPlayers);
         setFrequentGroups(savedFrequentGroups);
         setHighContrast(localStorage.getItem(STORAGE_KEYS.contrast) !== "false");
-        setNotificationsEnabled(localStorage.getItem(STORAGE_KEYS.notifications) === "true");
+        setNotificationsEnabled(identity.mode === "authenticated"
+          ? readAccountDevicePermissionPreferences(localStorage, identity.userId).notificationPreference === "enabled"
+          : false);
         setDraftAvailable(hasRoundProgress(draft));
         applyDraft(draft);
       } catch { /* keep safe defaults for structurally invalid legacy data */ }
@@ -991,7 +1058,7 @@ function GolfBetsApp() {
     };
     void hydrate();
     return () => { cancelled = true; };
-  }, [identity.userId, identity.defaultHandicap, setTab, applyDraft]);
+  }, [identity.userId, identity.mode, identity.defaultHandicap, setTab, applyDraft]);
 
   // Local navigation is separate from synchronized golf data: no sync loops,
   // no extra round, and no cursor inherited from a different account/round.
@@ -1089,7 +1156,6 @@ function GolfBetsApp() {
     if (changed(local.frequentPlayers, reconciled.frequentPlayers)) setFrequentPlayers(reconciled.frequentPlayers);
     if (changed(local.frequentGroups, reconciled.frequentGroups)) setFrequentGroups(reconciled.frequentGroups);
     if (local.preferences.highContrast !== reconciled.preferences.highContrast) setHighContrast(reconciled.preferences.highContrast);
-    if (local.preferences.notificationsEnabled !== reconciled.preferences.notificationsEnabled) setNotificationsEnabled(reconciled.preferences.notificationsEnabled);
     if (!Object.is(local.preferences.defaultHandicap, reconciled.preferences.defaultHandicap)) applyCloudPreferences(reconciled.preferences);
     localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
     localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(reconciled.history));
@@ -1097,7 +1163,6 @@ function GolfBetsApp() {
     localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(reconciled.frequentPlayers));
     localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(reconciled.frequentGroups));
     localStorage.setItem(STORAGE_KEYS.contrast, String(reconciled.preferences.highContrast));
-    localStorage.setItem(STORAGE_KEYS.notifications, String(reconciled.preferences.notificationsEnabled));
     const localDraftWithNavigation = restoreLocalRoundUi(reconciled.activeDraft, { currentIndex: currentIndexRef.current });
     localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(localDraftWithNavigation));
     localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(reconciled.tombstones));
@@ -1302,7 +1367,6 @@ function GolfBetsApp() {
     setFrequentPlayers(resolved.frequentPlayers);
     setFrequentGroups(resolved.frequentGroups);
     setHighContrast(resolved.preferences.highContrast);
-    setNotificationsEnabled(resolved.preferences.notificationsEnabled);
     applyCloudPreferences(resolved.preferences);
     applyDraft(resolved.activeDraft, { preserveLocalUi: true });
     setPendingCloudConflict(null);
@@ -2364,7 +2428,9 @@ function GolfBetsApp() {
   }
 
   function persistConfirmedAiParticipationPreferences(plan: AiRoundSetupTelemetry["plan"], draft: RoundSetupDraft) {
-    const consent = readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
+    const consent = identity.mode === "authenticated"
+      ? readAccountLearningConsent(localStorage, identity.userId)
+      : readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
     if (!plan.canConfirm || !hasPersistedBettingConsent() || !consent.personalMemoryEnabled || !/\bnunca\b/.test(normalizeMexicanSpanish(plan.interpretation.input))) return;
     const now = new Date().toISOString();
     for (const action of plan.interpretation.actions) {
@@ -2411,7 +2477,9 @@ function GolfBetsApp() {
     const start = async () => {
       await applyAiDraftToRound(draft, true);
       persistConfirmedAiParticipationPreferences(plan, draft);
-      const consent = readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
+      const consent = identity.mode === "authenticated"
+        ? readAccountLearningConsent(localStorage, identity.userId)
+        : readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
       if (!consent.personalMemoryEnabled) return;
       const event = createPersonalLearningEvent({
         id: makeId(), ownerId: identity.userId, eventType: "SETUP_ACCEPTED", verified: true,
@@ -2437,7 +2505,9 @@ function GolfBetsApp() {
       confidence: event.confidence,
     }));
     if (!event.isCorrection) return;
-    const consent = readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
+    const consent = identity.mode === "authenticated"
+      ? readAccountLearningConsent(localStorage, identity.userId)
+      : readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
     if (!consent.personalMemoryEnabled) return;
     if (roundSetupChangeContainsBettingData({
       previousDraft: event.previousDraft,
@@ -2536,7 +2606,9 @@ function GolfBetsApp() {
       averageConfidence,
     }));
 
-    const consent = readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
+    const consent = identity.mode === "authenticated"
+      ? readAccountLearningConsent(localStorage, identity.userId)
+      : readLearningConsent(localStorage, identity.userId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
     if (consent.personalMemoryEnabled) {
       const interactionId = `${roundId}-scorecard-${makeId()}`;
       const createdAt = new Date().toISOString();
@@ -3800,7 +3872,7 @@ function GolfBetsApp() {
     {tab === "social" && <SocialFeed key={`${identity.userId}:${socialInitialView}`} initialView={socialInitialView} targetId={socialTarget} onCloseTarget={() => { setSocialTarget(null); try { sessionStorage.removeItem(PENDING_SOCIAL_KEY); } catch {} const url = new URL(location.href); url.searchParams.delete("friend"); window.history.replaceState(window.history.state, "", url); }} onPrivacy={() => setTab("account")} activity={personalActivity} identityUserId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} knownProfiles={EMPTY_SOCIAL_DIRECTORY} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
     {tab === "balances" && <BalanceLedgerPanel history={history} currentUserId={identity.mode === "authenticated" ? identity.userId : undefined} />}
     {tab === "stats" && (statisticsReady ? <StatsDashboard insights={betaGolfInsights} rounds={statisticsHistory} consentOwnerId={identity.userId || undefined} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode === "authenticated"} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} /> : <section className="card" role="status"><h1>Estadísticas</h1><p>{statisticsAuthority.state === "unavailable" ? statisticsAuthority.error : "Verificando tus estadísticas…"}</p><p>Tu histórico permanece intacto. No mostramos métricas anteriores hasta verificar la fecha de reinicio.</p><button type="button" className="secondary" onClick={() => setStatisticsRetry((value) => value + 1)}>Reintentar</button><button type="button" className="textButton" onClick={() => setTab("history")}>Ver Histórico</button></section>)}
-    {tab === "courseLibrary" && <CourseLibrary key={`course-library-${identity.userId}`} permissionOwnerId={identity.userId} courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}
+    {tab === "courseLibrary" && <CourseLibrary key={`course-library-${identity.userId}`} permissionOwnerId={identity.userId} accessToken={identity.accessToken} courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}
 
     {feedback && <div className="notice" role="status">{roundSaveNotice(feedback, cloudStatus)}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
@@ -3814,8 +3886,8 @@ function GolfBetsApp() {
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved?.totalScoreCapture ? <TotalScoreHistory key={saved.id} round={saved} onSave={saveTotalHistory} onBack={() => setTab("history")} /> : saved ? <HistoricalRoundDetail round={saved} priorRounds={history} accountUserId={identity.userId} accessToken={identity.accessToken || undefined} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} />}
 
-    {tab === "profile" && <ProfileAccountPanel key={`profile:${identity.userId}`} view="profile" indexControl={indexControl} ghinControl={ghinControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} completionTarget={profileCompletionTarget} onCompletionTargetHandled={() => setProfileCompletionTarget(null)} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => openAccountSettings()} onOpenAccountSection={openAccountSettings} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
-    {tab === "account" && <ProfileAccountPanel key={`${identity.userId}:account:${accountSection}`} view="account" initialAccountSection={accountSection} openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} ghinControl={ghinControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} onPageBack={handlePageBack} />}
+    {tab === "profile" && <ProfileAccountPanel key={`profile:${identity.userId}`} view="profile" indexControl={indexControl} ghinControl={ghinControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} completionTarget={profileCompletionTarget} onCompletionTargetHandled={() => setProfileCompletionTarget(null)} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} internalNotificationsSaving={internalNotificationsSaving} internalNotificationsMessage={internalNotificationsMessage} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => openAccountSettings()} onOpenAccountSection={openAccountSettings} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
+    {tab === "account" && <ProfileAccountPanel key={`${identity.userId}:account:${accountSection}`} view="account" initialAccountSection={accountSection} openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} ghinControl={ghinControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} internalNotificationsSaving={internalNotificationsSaving} internalNotificationsMessage={internalNotificationsMessage} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} onPageBack={handlePageBack} />}
 
     {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound} scoreOnly={roundPresentation.playMode === "score_only"} initialStep={roundSetupInitialStep}
       onSave={() => flushLocalState.current?.()}

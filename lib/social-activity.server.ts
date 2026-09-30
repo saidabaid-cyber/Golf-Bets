@@ -62,8 +62,8 @@ function cachedAuthor(ctx: SocialContext, userId: string) {
 const EMPTY_PREFS: SocialActivityPreferences = {
   shareRounds: false, shareAchievements: false, shareEquipment: false, shareCourses: false,
   notifyLike: true, notifyComment: true, notifyAttest: true,
-  // Preserve historical legacy behavior. New accounts have an explicit row
-  // with every notification preference ON from the Auth bootstrap.
+  // Preserve historical legacy behavior for absent rows. New accounts have
+  // an explicit OFF row until the optional-authorization action is recorded.
   notifyFriendAchievement: false, notifyEquipment: false, notifyFriendRequest: true, updatedAt: null,
 };
 const SHA256 = /^[0-9a-f]{64}$/;
@@ -126,16 +126,6 @@ function prefsFromRow(row: Record<string, unknown> | null): SocialActivityPrefer
     // a missing row keeps that exact legacy behavior; false is an owner opt-out.
     notifyFriendRequest: row.notify_friend_request !== false,
     updatedAt: typeof row.updated_at === "string" ? row.updated_at : null,
-  };
-}
-function prefsToRow(userId: string, pref: SocialActivityPreferences) {
-  return {
-    user_id: userId, share_rounds: pref.shareRounds, share_achievements: pref.shareAchievements,
-    share_equipment: pref.shareEquipment, share_courses: pref.shareCourses,
-    notify_like: pref.notifyLike, notify_comment: pref.notifyComment, notify_attest: pref.notifyAttest,
-    notify_friend_achievement: pref.notifyFriendAchievement, notify_equipment: pref.notifyEquipment,
-    notify_friend_request: pref.notifyFriendRequest,
-    updated_at: new Date().toISOString(),
   };
 }
 function completedSnapshot(row: RoundRow): RoundSnapshot | null {
@@ -299,18 +289,32 @@ export async function updatePreferences(ctx: SocialContext, preferences: unknown
   if (!candidate || keys.some(key => typeof candidate[key] !== "boolean") || (Object.hasOwn(candidate, "enabledForFriends") && typeof candidate.enabledForFriends !== "boolean"))
     throw new SocialServiceError("INVALID_REQUEST", 400, "Preferencias inválidas.");
   const verified = candidate as SocialActivityPreferences;
-  const { data, error } = await ctx.client.from("social_activity_preferences_v3")
-    .upsert(prefsToRow(ctx.userId, verified), { onConflict: "user_id" }).select("*").single();
+  // One owner-bound RPC consumes the unresolved optional-onboarding offer and
+  // saves both the Social preferences and optional audience master. A failed
+  // projection rolls the full transaction back.
+  const requestedPreferences = {
+    shareRounds: verified.shareRounds,
+    shareAchievements: verified.shareAchievements,
+    shareEquipment: verified.shareEquipment,
+    shareCourses: verified.shareCourses,
+    notifyLike: verified.notifyLike,
+    notifyComment: verified.notifyComment,
+    notifyAttest: verified.notifyAttest,
+    notifyFriendAchievement: verified.notifyFriendAchievement,
+    notifyEquipment: verified.notifyEquipment,
+    notifyFriendRequest: verified.notifyFriendRequest,
+    ...(typeof candidate.enabledForFriends === "boolean"
+      ? { enabledForFriends: candidate.enabledForFriends }
+      : {}),
+  };
+  const { data, error } = await ctx.client.rpc("set_my_social_activity_preferences_v1", {
+    requested_preferences: requestedPreferences,
+  });
   if (error) dbError(error);
-  // Never infer publication consent from a public directory card. Only an
-  // explicit master choice changes the existing DB-enforced audience gate.
-  if (typeof candidate.enabledForFriends === "boolean") {
-    const audience = candidate.enabledForFriends ? "FRIENDS" : "PRIVATE";
-    const result = await ctx.client.from("profiles").update({ social_privacy: audience }).eq("id", ctx.userId).select("social_privacy").single();
-    if (result.error) dbError(result.error);
-    if (result.data.social_privacy !== audience) throw new SocialServiceError("MUTATION_FAILED", 503, "No se confirmó la audiencia.");
-  }
-  return { data: { ...prefsFromRow(data), enabledForFriends: await socialPrivacy(ctx.client, ctx.userId) } };
+  if (!data || typeof data !== "object" || Array.isArray(data))
+    throw new SocialServiceError("MUTATION_FAILED", 503, "No se confirmó la preferencia Social.");
+  const saved = data as Record<string, unknown>;
+  return { data: { ...prefsFromRow(saved), enabledForFriends: saved.enabled_for_friends === true } };
 }
 
 async function sourceRound(ctx: SocialContext, row: ActivityRow): Promise<RoundRow | null> {

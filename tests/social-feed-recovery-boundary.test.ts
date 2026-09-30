@@ -30,3 +30,16 @@ test("recovery discovers only viewer-visible sources through user RLS and elevat
   assert.match(recoveryBlock, /reconcileSocialRoundActivities\(ctx\.admin, authorId\)/);
   assert.match(recoveryBlock, /reconcileSocialEquipmentActivity\(ctx\.admin, authorId\)/);
 });
+
+test("an explicit social preference write atomically consumes the offer with its projections", () => {
+  const updateBlock = source.slice(
+    source.indexOf("export async function updatePreferences"),
+    source.indexOf("async function sourceRound"),
+  );
+
+  assert.match(updateBlock, /ctx\.client\.rpc\("set_my_social_activity_preferences_v1"/);
+  assert.match(updateBlock, /requested_preferences: requestedPreferences/);
+  assert.doesNotMatch(updateBlock, /consume_optional_authorization_onboarding_offer_v1/);
+  assert.doesNotMatch(updateBlock, /\.from\("social_activity_preferences_v3"\)[\s\S]*?\.upsert\(/);
+  assert.doesNotMatch(updateBlock, /\.from\("profiles"\)[\s\S]*?\.update\(/);
+});

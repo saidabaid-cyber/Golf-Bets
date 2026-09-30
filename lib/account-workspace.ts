@@ -17,6 +17,8 @@ import { clearDevicePermissionPreferences } from "./device-permissions";
 import { marketingConsentStorageKey } from "./marketing-consent";
 import { firstRoundExperienceKey } from "./round-first-experience";
 import { clearPendingLegalSync } from "./legal-sync-queue";
+import { clearAccountLearningConsentServerClock } from "./account-learning-consent-cache";
+import { clearAccountDevicePermissionServerClock } from "./account-device-permission-preferences";
 
 export const WORKSPACE_OWNER_KEY = "backyard-local-workspace-owner-v1";
 export const CLOUD_CONFLICTS_KEY = "backyard-cloud-conflicts-v1";
@@ -223,10 +225,12 @@ export function discardAccountWorkspace(storage: WorkspaceStorage, userId: strin
   storage.removeItem(betaOnboardingDraftStorageKey(userId));
   storage.removeItem(accountUiPreferencesKey(userId));
   clearDevicePermissionPreferences(storage, userId);
+  clearAccountDevicePermissionServerClock(storage, userId);
   storage.removeItem(marketingConsentStorageKey(userId));
   storage.removeItem(firstRoundExperienceKey(userId));
   clearPendingLegalSync(storage, userId);
   const aiMemory = deletePersonalAiData(storage, userId);
+  clearAccountLearningConsentServerClock(storage, userId);
   const aiProcessingConsents = deleteAiProcessingConsents(storage, userId);
   const failedSteps: AccountWorkspaceDiscardResult["failedSteps"] = [];
   if (!aiMemory.complete) failedSteps.push("ai_memory");

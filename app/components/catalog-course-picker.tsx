@@ -2,6 +2,7 @@
 import { useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import { courseSelectionLabel,homeCourseSelection,nearestReviewedClubs,reviewedClubsLocationSummary,searchReviewedCourses,singleReviewedCourseLayout,type ReviewedCatalogCourse } from '../../lib/review-course-catalog';
 import { readDevicePermissionPreferences,resolveAuthorizedNearbyLocation,type NearbyLocationResolution } from '../../lib/device-permissions';
+import { readAccountDevicePermissionPreferences } from '../../lib/account-device-permission-preferences';
 import { beginRoundCourseSelection } from '../../lib/round-course-selection';
 import type { Course } from '../../lib/types';
 import { AnchoredSearch,AnchoredSearchOption } from './anchored-search';
@@ -91,12 +92,12 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     locationController.current=controller;
     setNearbyLimit(3);
     setLocation({status:'loading'});
-    void resolveAuthorizedNearbyLocation(localStorage,permissionOwnerId,navigator,navigator.geolocation,{signal:controller.signal})
+    void resolveAuthorizedNearbyLocation(localStorage,permissionOwnerId,navigator,navigator.geolocation,{signal:controller.signal,readCurrent:()=>token?readAccountDevicePermissionPreferences(localStorage,permissionOwnerId):readDevicePermissionPreferences(localStorage,permissionOwnerId)})
       .then(result=>{if(!controller.signal.aborted)setLocation(result);})
       .catch(()=>{if(!controller.signal.aborted)setLocation({status:'unavailable'});});
-  },[permissionOwnerId]);
+  },[permissionOwnerId,token]);
   useEffect(()=>{
-    if(!token||(purpose==='home-club'&&!choosingHomeCourse)||!readDevicePermissionPreferences(localStorage,permissionOwnerId).locationEnabled)return;
+    if(!token||(purpose==='home-club'&&!choosingHomeCourse)||!readAccountDevicePermissionPreferences(localStorage,permissionOwnerId).locationEnabled)return;
     locate();
   },[choosingHomeCourse,locate,permissionOwnerId,purpose,token]);
   const locationError=({disabled:'Ubicación desactivada en The Backyard. Puedes revisarla en Configuración → Privacidad y permisos o buscar manualmente.',prompt:'La ubicación todavía no está resuelta en este dispositivo. Revísala desde Privacidad y permisos; la búsqueda manual sigue disponible.',denied:'La ubicación está bloqueada en este dispositivo. Puedes revisar el permiso o buscar manualmente.',timeout:'La ubicación agotó el tiempo. Puedes reintentar o buscar manualmente.',unavailable:'No pudimos obtener la ubicación. La búsqueda manual sigue disponible.', 'query-unsupported':'Este navegador no permite consultar el permiso. Revísalo desde Privacidad y permisos o busca manualmente.','geolocation-unavailable':'Este dispositivo no ofrece ubicación. Puedes buscar manualmente.'} as Record<string,string>)[location.status];

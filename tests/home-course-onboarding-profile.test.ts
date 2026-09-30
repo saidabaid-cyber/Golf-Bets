@@ -214,6 +214,9 @@ async function selectCourseThroughPicker(
     if (id === "react") return hooks.react;
     if (id.endsWith("/review-course-catalog")) return reviewedCatalog;
     if (id.endsWith("/device-permissions")) return devicePermissions;
+    if (id.endsWith("/account-device-permission-preferences")) {
+      return { readAccountDevicePermissionPreferences: () => ({ locationEnabled: false }) };
+    }
     if (id.endsWith("/round-course-selection")) return roundCourseSelection;
     if (id === "./anchored-search") return { AnchoredSearch: "anchored-search", AnchoredSearchOption: "anchored-search-option" };
     if (id.endsWith(".css")) return { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) };

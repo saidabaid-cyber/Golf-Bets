@@ -453,7 +453,8 @@ export function writeCloudBundleToStorage(storage: Pick<Storage, "getItem" | "se
   storage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(bundle.frequentPlayers));
   storage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(bundle.frequentGroups));
   storage.setItem(STORAGE_KEYS.contrast, String(bundle.preferences.highContrast));
-  storage.setItem(STORAGE_KEYS.notifications, String(bundle.preferences.notificationsEnabled));
+  // Notification intent is restored by the canonical optional-authorization
+  // cache/API. A generic workspace snapshot must never repaint it.
   let localDraft: unknown = null;
   try { localDraft = JSON.parse(storage.getItem(STORAGE_KEYS.draft) || "null") as unknown; } catch { /* invalid legacy cache is replaced */ }
   storage.setItem(STORAGE_KEYS.draft, JSON.stringify(restoreLocalRoundUi(bundle.activeDraft, localDraft)));

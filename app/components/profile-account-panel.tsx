@@ -51,7 +51,9 @@ type ProfileAccountPanelProps = {
   highContrast: boolean;
   onHighContrastChange: (value: boolean) => void;
   notificationsEnabled: boolean;
-  onNotificationsEnabledChange: (value: boolean) => void;
+  onNotificationsEnabledChange: (value: boolean) => void | Promise<boolean>;
+  internalNotificationsSaving?: boolean;
+  internalNotificationsMessage?: string;
   golfInsights?: GolfInsights;
   statisticsResetAt?: string | null;
   onStatisticsReset?: (reset: StatisticsResetRecord) => void;
@@ -86,7 +88,7 @@ function decimal(value: number | undefined) {
   return value === undefined ? "—" : value.toFixed(1);
 }
 
-export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacySettings = false, onAiPrivacyOpened, history = [], indexControl, ghinControl, focusSection = "profile", completionTarget, onCompletionTargetHandled, highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, initialAccountSection = "account", onOpenAccountSection, onOpenPrivacy, onOpenEquipment, onBackToProfile, onPageBack }: ProfileAccountPanelProps) {
+export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacySettings = false, onAiPrivacyOpened, history = [], indexControl, ghinControl, focusSection = "profile", completionTarget, onCompletionTargetHandled, highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, internalNotificationsSaving = false, internalNotificationsMessage = "", golfInsights, statisticsResetAt, onStatisticsReset, onOpenStats, onOpenAccount, initialAccountSection = "account", onOpenAccountSection, onOpenPrivacy, onOpenEquipment, onBackToProfile, onPageBack }: ProfileAccountPanelProps) {
   const { identity, adminAccess = { hasAccess: false, roles: [], scopes: [] }, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, legalEvidenceEvents, marketingConsentResolved, bettingConsentGranted, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus, requestCloudLink, cloudIssues, retryCloudSync } = useBackyardAccount();
   const [editing, setEditing] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSettingsSection>(initialAccountSection);
@@ -436,7 +438,7 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
     <AiProcessingConsentSettings userId={identity.userId} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode === "authenticated"} />
     <BottomBackAction label="← Cuenta y privacidad" onBack={closeAiConsentSettings} />
   </>;
-  if (managingConsents) return <LegalConsentManager profile={identity} userId={identity.userId} accessToken={identity.accessToken} authenticated={identity.mode === "authenticated"} acceptances={acceptances} legalEvidenceEvents={legalEvidenceEvents} marketingConsentResolved={marketingConsentResolved} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} recordLegalChoice={recordLegalChoice} onBack={closeLegalConsentSettings} />;
+  if (managingConsents) return <LegalConsentManager userId={identity.userId} accessToken={identity.accessToken} authenticated={identity.mode === "authenticated"} acceptances={acceptances} legalEvidenceEvents={legalEvidenceEvents} marketingConsentResolved={marketingConsentResolved} bettingConsentGranted={bettingConsentGranted} requestBettingConsent={requestBettingConsent} recordLegalChoice={recordLegalChoice} onBack={closeLegalConsentSettings} />;
 
   if (view === "profile" && identity.mode === "authenticated" && focusSection === "equipment") return <><header className="profileMobileHeader profileEditHeader">{!equipmentFlowNested && <button type="button" className="textButton" onClick={onBackToProfile}>← Mi Perfil</button>}<div><span>MI PERFIL</span><h1>Mi Bolsa</h1></div></header><div id="equipment-bag"><EquipmentProfilePanel userId={identity.userId} accessToken={identity.accessToken} defaultHandicap={selectedIndex.value} defaultHandicapSource={selectedIndex.source} defaultHandedness={identity.handedness} ballFitDefaults={ballFitDefaultsFromProfile(identity)} onBackToProfile={onBackToProfile} onOpenPrivacy={onOpenPrivacy} onFlowDepthChange={setEquipmentFlowNested} initialSection={completionTarget === "equipment" || completionTarget === "ball" || completionTarget === "fitting" ? completionTarget : completionEquipment} /></div>{!equipmentFlowNested && <BottomBackAction label="← Mi Perfil" onBack={onBackToProfile} />}</>;
 
@@ -486,14 +488,14 @@ export function ProfileAccountPanel({ view, rootNavigationKey = 0, openAiPrivacy
         <h3>Apariencia</h3><label className="accountSettingRow"><span><b>Alto contraste</b><small>Está activo por defecto; si lo cambias, respetaremos tu elección.</small></span><input type="checkbox" checked={highContrast} onChange={event => onHighContrastChange(event.target.checked)} /></label>
         <label className="accountSettingRow"><span><b>Unidades</b><small>La conversión cambia sólo la presentación; nunca modifica rondas históricas. Ejemplo: {displayDistanceFromStoredYards(100, uiPreferences.distanceUnit)}.</small></span><select aria-label="Unidades de distancia" value={uiPreferences.distanceUnit} onChange={event => changeUiPreferences({ distanceUnit: event.target.value === "meters" ? "meters" : "yards" })}><option value="yards">Yardas</option><option value="meters">Metros</option></select></label>
         <label className="accountSettingRow"><span><b>Idioma</b><small>La interfaz completa está disponible en español.</small></span><select aria-label="Idioma" value="es-MX" onChange={() => undefined}><option value="es-MX">Español</option><option value="en" disabled>Inglés — Próximamente</option></select></label>
-        <div className="accountSettingRow"><span><b>Preferencias de golf</b><small>Mano dominante: {identity.handedness === "left" ? "Izquierda" : identity.handedness === "right" ? "Derecha" : identity.handedness === "ambidextrous" ? "Ambas" : "Sin indicar"}</small></span><button type="button" className="textButton" onClick={() => openProfileEditor("golf")}>Editar</button></div>
         {preferenceMessage && <p role="status">{preferenceMessage}</p>}
       </section>
       </div>}
       {accountSection === "notifications" && <div data-settings-section="notifications">
       <section className="card accountCompactCard"><h2>Notificaciones</h2>
         <p>Estas preferencias son independientes del permiso del dispositivo y del proveedor que realiza el envío.</p>
-        <label className="accountSettingRow"><span><b>Social</b><small>Avisos de actividad nueva dentro de The Backyard.</small></span><input type="checkbox" checked={notificationsEnabled} onChange={event => onNotificationsEnabledChange(event.target.checked)} aria-label="Activar avisos sociales dentro de la app" /></label>
+        <label className="accountSettingRow"><span><b>Social</b><small>Avisos de actividad nueva dentro de The Backyard. Esta preferencia se confirma en tu cuenta; no cambia el permiso del dispositivo ni registra un proveedor push.</small></span><input type="checkbox" checked={notificationsEnabled} disabled={internalNotificationsSaving || identity.mode !== "authenticated"} onChange={event => { void onNotificationsEnabledChange(event.target.checked); }} aria-label="Activar avisos sociales dentro de la app" /></label>
+        {internalNotificationsMessage && <p role="status">{internalNotificationsMessage}</p>}
         {!notificationPreferencesReady && <p role="status">Consultando preferencias de cuenta…</p>}
         {notificationPreferencesReady && <>
         <label className="accountSettingRow"><span><b>Push</b><small>Preferencia de cuenta. El permiso del dispositivo se revisa por separado en Privacidad y permisos. Entrega: {notificationDelivery.push.configured ? "proveedor configurado" : "no configurada"}.</small></span><input type="checkbox" checked={uiPreferences.push} disabled={notificationPreferenceSaving} onChange={event => changeUiPreferences({ push: event.target.checked })} aria-label="Preferir notificaciones push" /></label>

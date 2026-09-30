@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
 import { resolveAuthorizedNearbyLocation, type NearbyLocationResolution } from "../../lib/device-permissions";
+import { readAccountDevicePermissionPreferences } from "../../lib/account-device-permission-preferences";
 
 type CourseResult = {
   id: string;
@@ -146,7 +147,10 @@ export function RoundCoursePicker({
     setNextCursor(null);
     setNearbyStatus("locating");
     let location: NearbyLocationResolution;
-    try { location = await resolveAuthorizedNearbyLocation(localStorage, permissionOwnerId, navigator, navigator.geolocation, { signal: controller.signal }); }
+    try { location = await resolveAuthorizedNearbyLocation(localStorage, permissionOwnerId, navigator, navigator.geolocation, {
+      signal: controller.signal,
+      ...(accessToken ? { readCurrent: () => readAccountDevicePermissionPreferences(localStorage, permissionOwnerId) } : {}),
+    }); }
     catch { if (!controller.signal.aborted && requestId === nearbyRequestRef.current) { setResultMode("name"); setNearbyStatus("error"); } return; }
     if (requestId !== nearbyRequestRef.current || controller.signal.aborted || location.status === "cancelled") return;
     if (location.status !== "located") {

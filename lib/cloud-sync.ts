@@ -60,8 +60,10 @@ export type CloudDataConflict = {
 type ReadableStorage = Pick<Storage, "getItem">;
 
 export function hasLocalCloudPreferenceState(storage: ReadableStorage) {
-  return storage.getItem(STORAGE_KEYS.contrast) !== null
-    || storage.getItem(STORAGE_KEYS.notifications) !== null;
+  // Notification intent is owned by the optional-authorization API/ledger.
+  // Its local cache must not make this generic sync believe it owns the
+  // unrelated visual/profile preference row.
+  return storage.getItem(STORAGE_KEYS.contrast) !== null;
 }
 
 function arrayOrEmpty<T>(value: unknown): T[] {
@@ -165,7 +167,30 @@ function fingerprint(value: unknown) {
 }
 
 export function cloudDataFingerprint(bundle: CloudDataBundle) {
-  return fingerprint(bundle);
+  return fingerprint({
+    ...bundle,
+    // Kept in CloudPreferences as a local runtime/cache value for backwards
+    // compatibility, but deliberately excluded from generic cloud ownership.
+    preferences: cloudOwnedPreferences(bundle.preferences),
+  });
+}
+
+function cloudOwnedPreferences(preferences: CloudPreferences) {
+  return {
+    highContrast: preferences.highContrast,
+    language: preferences.language,
+    defaultHandicap: preferences.defaultHandicap,
+    hasLocalState: preferences.hasLocalState,
+    updatedAt: preferences.updatedAt,
+  };
+}
+
+function cloudOwnedPreferenceValue(preferences: CloudPreferences) {
+  return {
+    highContrast: preferences.highContrast,
+    language: preferences.language,
+    defaultHandicap: preferences.defaultHandicap,
+  };
 }
 
 /** Fingerprint only data that can change the canonical account snapshot.
@@ -175,7 +200,6 @@ export function cloudSyncPayloadFingerprint(bundle: CloudDataBundle) {
   const preferences = {
     highContrast: bundle.preferences.highContrast,
     language: bundle.preferences.language,
-    notificationsEnabled: bundle.preferences.notificationsEnabled,
     defaultHandicap: bundle.preferences.defaultHandicap,
     updatedAt: bundle.preferences.updatedAt,
   };
@@ -218,7 +242,7 @@ function trackLocalCloudEditValues(storage: Pick<Storage, "getItem" | "setItem">
   const meta = readStoredJson<{ draftAt?: string; preferencesAt?: string; draftValue?: string; preferenceValue?: string }>(storage, CLOUD_LOCAL_META_KEY, {});
   const cloudDraft = stripLocalRoundUi(draft);
   const draftValue = JSON.stringify(stableValue(hasRoundProgress(cloudDraft) ? cloudDraft : null));
-  const preferenceValue = JSON.stringify([preferences.highContrast, preferences.language, preferences.notificationsEnabled, preferences.defaultHandicap]);
+  const preferenceValue = JSON.stringify([preferences.highContrast, preferences.language, preferences.defaultHandicap]);
   const oldDraft = JSON.stringify(stableValue(stripLocalRoundUi(previousDraft)));
   if (meta.draftValue !== draftValue && (meta.draftValue !== undefined || (draftValue !== "null" && oldDraft !== draftValue))) meta.draftAt = now;
   if (meta.preferenceValue !== preferenceValue && meta.preferenceValue !== undefined) meta.preferencesAt = now;
@@ -237,7 +261,7 @@ export function persistCloudMetadata(storage: Pick<Storage, "setItem">, bundle: 
     draftValue: JSON.stringify(stableValue(cloudDraft)),
     cloudDraftAt: confirmedAt,
     cloudDraftFingerprint: JSON.stringify(stableValue(confirmedBase)),
-    preferenceValue: JSON.stringify([bundle.preferences.highContrast, bundle.preferences.language, bundle.preferences.notificationsEnabled, bundle.preferences.defaultHandicap]),
+    preferenceValue: JSON.stringify([bundle.preferences.highContrast, bundle.preferences.language, bundle.preferences.defaultHandicap]),
   }));
 }
 
@@ -486,7 +510,14 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
     frequentGroups: mergeCloudCollection(local.frequentGroups, cloud.frequentGroups, (group) => group.id, (group) => group.updatedAt).filter((group) => !deleted.has(`frequent_group:${group.id}`)),
     rivals: mergeCloudCollection(local.rivals, cloud.rivals, (rival) => rival.id, (rival) => rival.updatedAt).filter((rival) => !deleted.has(`rival:${rival.id}`)),
     courses: mergeCloudCollection(local.courses, cloud.courses, (course) => course.id, (course) => course.updatedAt).filter((course) => !deleted.has(`course:${course.id}`)),
-    preferences: { ...(localPreferences ? local.preferences : cloud.preferences), hasLocalState: true },
+    preferences: {
+      ...(localPreferences ? local.preferences : cloud.preferences),
+      // Generic cloud sync never owns notification intent. Preserve the cache
+      // hydrated by the canonical optional-authorization API even when an old
+      // cloud snapshot has a newer preference timestamp.
+      notificationsEnabled: local.preferences.notificationsEnabled,
+      hasLocalState: true,
+    },
     activeDraft: draftMerge.value,
     activeDraftUpdatedAt: draftNeedsWrite ? timestampAfter(local.activeDraftUpdatedAt, cloud.activeDraftUpdatedAt) : cloud.activeDraftUpdatedAt,
     // The canonical cloud draft is the three-way base for the write that
@@ -558,7 +589,7 @@ export function findAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cloud
     }
   }
   conflicts.push(...mergeActiveDraftGranular(local, cloud).conflicts);
-  if (timestamp(local.preferences.updatedAt) > 0 && timestamp(local.preferences.updatedAt) === timestamp(cloud.preferences.updatedAt) && local.preferences.hasLocalState && cloud.preferences.hasLocalState && !sameValue(local.preferences, cloud.preferences)) {
+  if (timestamp(local.preferences.updatedAt) > 0 && timestamp(local.preferences.updatedAt) === timestamp(cloud.preferences.updatedAt) && local.preferences.hasLocalState && cloud.preferences.hasLocalState && !sameValue(cloudOwnedPreferenceValue(local.preferences), cloudOwnedPreferenceValue(cloud.preferences))) {
     conflicts.push({ collection: "preferences", localId: "preferences", localValue: local.preferences, cloudValue: cloud.preferences, updatedAt: local.preferences.updatedAt, localDeviceId: local.deviceId, cloudDeviceId: cloud.deviceId });
   }
   return conflicts;
@@ -608,7 +639,12 @@ export function resolveAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cl
       else resolved.activeDraft = selected;
       resolved.activeDraftUpdatedAt = now;
     } else if (conflict.collection === "preferences") {
-      resolved.preferences = { ...(selected as CloudPreferences), updatedAt: now, hasLocalState: true };
+      resolved.preferences = {
+        ...(selected as CloudPreferences),
+        notificationsEnabled: resolved.preferences.notificationsEnabled,
+        updatedAt: now,
+        hasLocalState: true,
+      };
     } else {
       const collection = resolved[conflict.collection] as Array<{ id: string; updatedAt?: string }>;
       const historicalStartedAt = conflict.collection === "history"

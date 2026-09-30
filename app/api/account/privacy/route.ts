@@ -35,7 +35,8 @@ export async function PATCH(request: NextRequest) {
     if (!body.ok || !body.value || typeof body.value !== "object" || Array.isArray(body.value)) return json({ error: "Elige Público o Amigos." }, 400);
     const input = body.value as Record<string, unknown>;
     if (Object.keys(input).length !== 1 || !isProfileAudienceChoice(input.visibility)) return json({ error: "Elige Público o Amigos." }, 400);
-    // RPC derives ownership from auth.uid(); no client-supplied account ID.
+    // This RPC derives ownership from auth.uid() and atomically consumes any
+    // unresolved optional-onboarding offer with the visibility projection.
     const { data, error } = await bounded(account.client.rpc("set_my_profile_visibility", { requested_visibility: input.visibility }).abortSignal(AbortSignal.timeout(8_000)));
     if (error || data !== input.visibility) return json({ error: "No pudimos guardar tu privacidad. Reintenta." }, 503);
     return json({ visibility: data });

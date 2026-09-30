@@ -10,7 +10,8 @@ import {
 } from "../../../lib/backyard-ai/processing-consent";
 import { AI_PROVIDER_PROCESSING_CONSENT, backyardAiProviderConsent } from "../../../lib/backyard-ai/privacy";
 import { readGroupPreferences } from "../../../lib/backyard-ai/memory/group-memory";
-import { BACKYARD_AI_MEMORY_POLICY_VERSION, readLearningConsent, writeLearningConsent } from "../../../lib/backyard-ai/memory/learning-events";
+import { BACKYARD_AI_MEMORY_POLICY_VERSION, readLearningConsent } from "../../../lib/backyard-ai/memory/learning-events";
+import { readAccountLearningConsent } from "../../../lib/account-learning-consent-cache";
 import { readUserPreferences } from "../../../lib/backyard-ai/memory/personal-memory";
 import { parseUnknownPlayerClarification } from "../../../lib/backyard-ai/runtime/clarification";
 import { validateCanonicalRoundCommand } from "../../../lib/backyard-ai/runtime/canonical-command-guard";
@@ -90,10 +91,6 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
   const [pendingProviderInput, setPendingProviderInput] = useState("");
   const [localInterpreterOnly, setLocalInterpreterOnly] = useState(false);
   const [consentStorageWarning, setConsentStorageWarning] = useState("");
-  const [personalMemoryEnabled, setPersonalMemoryEnabled] = useState(() => {
-    const ownerId = memoryContext.profile?.userId;
-    return Boolean(ownerId && typeof window !== "undefined" && readLearningConsent(browserAiProcessingConsentStorage(), ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent.personalMemoryEnabled);
-  });
   const [sessionPlayers, setSessionPlayers] = useState<FrequentPlayer[]>([]);
   const [dismissedPersonalSuggestions, setDismissedPersonalSuggestions] = useState<string[]>([]);
   const [handicapAnswers, setHandicapAnswers] = useState<Record<string, string>>({});
@@ -303,7 +300,11 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
     }] : sessionPlayers;
     const ownerId = memoryContext.profile?.userId;
     const clientStorage = browserAiProcessingConsentStorage();
-    const consent = ownerId ? readLearningConsent(clientStorage, ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent : null;
+    const consent = ownerId
+      ? accessToken
+        ? readAccountLearningConsent(clientStorage, ownerId)
+        : readLearningConsent(clientStorage, ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent
+      : null;
     const personalMemoryEnabled = Boolean(ownerId && consent?.personalMemoryEnabled);
     const userPreferences = personalMemoryEnabled
       ? readUserPreferences(clientStorage, ownerId!).document.items
@@ -354,24 +355,6 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
     onCancel();
   }
 
-  function changePersonalMemory(enabled: boolean) {
-    const ownerId = memoryContext.profile?.userId;
-    if (!ownerId) { setNotice("No hay una identidad local donde guardar esta preferencia."); return; }
-    const clientStorage = browserAiProcessingConsentStorage();
-    const current = readLearningConsent(clientStorage, ownerId, BACKYARD_AI_MEMORY_POLICY_VERSION).consent;
-    const now = new Date().toISOString();
-    const previousGrantedAt = current.grantedAt;
-    const base = { ...current };
-    delete base.grantedAt;
-    delete base.revokedAt;
-    const next = enabled
-      ? { ...base, personalMemoryEnabled: true, updatedAt: now, grantedAt: previousGrantedAt ?? now }
-      : { ...base, personalMemoryEnabled: false, updatedAt: now, revokedAt: now };
-    const result = writeLearningConsent(clientStorage, next);
-    if (!result.ok) { setNotice("No pude guardar la preferencia de memoria en este dispositivo."); return; }
-    setPersonalMemoryEnabled(enabled);
-  }
-
   function addFrequentPersonal(template: SavedPersonalRival) {
     const rival = draft.players.find((player) => player.name.trim().toLocaleLowerCase("es-MX") === template.name.trim().toLocaleLowerCase("es-MX"));
     if (!rival) return draft;
@@ -415,7 +398,6 @@ export function AiRoundSetup({ initialDraft, memoryContext, accessToken, require
         <button type="button" className="primary big" disabled={busy || (usesHandicapForm ? !handicapAnswerReady : input.trim().length < 2)} onClick={() => void submit(usesHandicapForm ? handicapAnswer : undefined)}>{busy ? "Entendiendo…" : editing ? "Aplicar cambio" : question ? "Confirmar respuesta" : "Preparar mi ronda"}</button>
         {!usesHandicapForm && <button type="button" className={styles.voiceButton} data-listening={listening} disabled={busy || (!dictationSupported && Boolean(dictationStatus))} onClick={() => void toggleDictation()}>{listening ? "■ Detener" : "🎙 Hablar"}</button>}
       </div>
-      <label className={styles.consent}><input type="checkbox" checked={personalMemoryEnabled} disabled={busy} onChange={(event) => changePersonalMemory(event.target.checked)} /><span>Recordar en mi espacio privado las preferencias que confirme para facilitar rondas futuras. Esto no habilita training global.</span></label>
       {dictationStatus && <p className={styles.contextNote} role="status">{dictationStatus}</p>}
       {notice && <p className={styles.contextNote} role="status">{notice}</p>}
       {accountConsentRequired && <AiProcessingConsentRequired scope={AI_PROVIDER_PROCESSING_CONSENT} onOpenPrivacy={onOpenPrivacy} />}

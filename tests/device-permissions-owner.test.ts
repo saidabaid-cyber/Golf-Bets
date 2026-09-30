@@ -66,11 +66,28 @@ test("onboarding conecta el prompt nativo sólo al tap explícito y evita texto 
   assert.match(source, /mostrarte y ordenar campos cercanos/);
   assert.match(source, /invitaciones a rondas y grupos/);
   assert.match(source, /value\.location === "granted" && value\.locationEnabled/);
-  assert.match(source, /persistPreference\("location", enableLocationForApp\(localStorage, userId\)\)/);
+  assert.match(source, /persistPreference\("location", "enabled"\)/);
   assert.match(source, /"Usar ubicación"/);
   assert.equal((source.match(/finishInitialDevicePermissions\(localStorage, userId\)/g) || []).length, 2);
   assert.equal((source.match(/onContinue\(\)/g) || []).length, 2);
-  assert.match(source, /declineInitialNotifications\(localStorage, userId\)/);
+  assert.match(source, /Skipping the OS prompt is not a revocation/);
+  const skip = source.slice(source.indexOf("async function skipNotifications"), source.indexOf("return <div", source.indexOf("async function skipNotifications")));
+  assert.doesNotMatch(skip, /disableNotificationsForApp/);
+});
+
+test("Settings separates internal location intent from the device permission", () => {
+  const source = readFileSync("app/components/device-permission-settings.tsx", "utf8");
+  assert.match(source, /Uso en The Backyard:/);
+  assert.match(source, /value\.locationPreference === "enabled"/);
+  assert.match(source, /locationSystemStatus\(value\.location\)/);
+  assert.match(source, /Preferencia, permiso del sistema y entrega son estados distintos/);
+  assert.match(source, /Activar uso interno de ubicación/);
+  assert.match(source, /Desactivar uso interno de ubicación/);
+  assert.match(source, /Solicitar permiso del dispositivo/);
+  assert.match(source, /value\.locationPreference === "enabled" && value\.location !== "granted"/);
+  assert.match(source, /changePreference\("location", "disabled"\)/);
+  assert.match(source, /disabled=\{busy\}/);
+  assert.match(source, /requestInitialLocation/);
 });
 
 test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece salida instructiva", () => {
@@ -82,7 +99,8 @@ test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece sali
   assert.match(source, /Ajustes &gt; Apps &gt; Safari &gt; Ubicación/);
   assert.doesNotMatch(source, /Administrar ubicación|Administrar notificaciones/);
   assert.match(coursePicker, /ubicación autorizada/);
-  assert.match(coursePicker, /readDevicePermissionPreferences\(localStorage,permissionOwnerId\)\.locationEnabled/);
+  assert.match(coursePicker, /readAccountDevicePermissionPreferences\(localStorage,permissionOwnerId\)\.locationEnabled/);
+  assert.match(coursePicker, /readDevicePermissionPreferences\(localStorage,permissionOwnerId\)/);
   assert.match(coursePicker, /resolveAuthorizedNearbyLocation\(localStorage,permissionOwnerId/);
   assert.doesNotMatch(coursePicker, /requestCourseLocation\(/);
   assert.match(coursePicker, /Precisión informada por el dispositivo/);

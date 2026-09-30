@@ -231,7 +231,7 @@ export async function readCloudBundle(client: SupabaseClient, userId: string, ex
     readOwnedRows(client, "frequent_groups_cloud", userId, "snapshot"),
     readOwnedRows(client, "personal_rivals_cloud", userId, "snapshot"),
     readOwnedRows(client, "courses_cloud", userId, "snapshot"),
-    client.from("user_preferences").select("high_contrast,locale,notifications_enabled,default_handicap,updated_at").eq("user_id", userId).maybeSingle(),
+    client.from("user_preferences").select("high_contrast,locale,default_handicap,updated_at").eq("user_id", userId).maybeSingle(),
     client.from("user_cloud_state").select(stateColumns).eq("user_id", userId).maybeSingle(),
     readOwnedRows(client, "cloud_deletions", userId, "entity_type,local_id,deleted_at"),
   ]);
@@ -249,9 +249,9 @@ export async function readCloudBundle(client: SupabaseClient, userId: string, ex
       // No cloud row means no preference yet: product default is high contrast.
       highContrast: preferences.data?.high_contrast !== false,
       language: preferences.data?.locale || "es-MX",
-      // Only a persisted true proves opt-in. New accounts receive that value
-      // from the Auth bootstrap; a missing legacy row stays safely OFF.
-      notificationsEnabled: preferences.data?.notifications_enabled === true,
+      // Local compatibility field only. Notification intent is hydrated from
+      // the optional-authorization API/ledger and is never read by this sync.
+      notificationsEnabled: false,
       defaultHandicap: preferences.data?.default_handicap === null || preferences.data?.default_handicap === undefined ? null : Number(preferences.data.default_handicap),
       hasLocalState: Boolean(preferences.data),
       updatedAt: preferences.data?.updated_at,
@@ -341,7 +341,6 @@ export async function writeCloudBundle(
       user_id: userId,
       high_contrast: preferences?.highContrast !== false,
       locale: typeof preferences?.language === "string" ? preferences.language.slice(0, 12) : "es-MX",
-      notifications_enabled: Boolean(preferences?.notificationsEnabled),
       default_handicap: preferences?.defaultHandicap ?? null,
       updated_at: preferences?.updatedAt || new Date(0).toISOString(),
     }, deviceId, extendedSchema));

@@ -2,19 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  persistReconciledDevicePermissionPreferences,
-  reconcileAccountDevicePermissionPreferences,
+  cacheAccountDevicePermissionPreferences,
+  failClosedAccountDevicePermissionPreferences,
+  readAccountDevicePermissionPreferences,
   requestAccountDevicePermissionPreferences,
   saveAccountDevicePermissionPreference,
+  type AccountPermissionValue,
   type AccountPermissionPreferenceKind,
 } from "../../lib/account-device-permission-preferences";
 import {
   devicePermissionContext,
-  declineInitialNotifications,
-  disableLocationForApp,
-  disableNotificationsForApp,
-  enableLocationForApp,
-  enableNotificationsForApp,
   emptyDevicePermissionPreferences,
   finishInitialDevicePermissions,
   readDevicePermissionPreferences,
@@ -24,6 +21,7 @@ import {
   type DevicePermissionPreferences,
   type NotificationPermissionApi,
 } from "../../lib/device-permissions";
+import { OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT } from "../../lib/account-optional-authorizations";
 
 function locationStatusLabel(status: DevicePermissionPreferences["location"]) {
   if (status === "granted") return "Permitido en este dispositivo";
@@ -35,7 +33,8 @@ function locationStatusLabel(status: DevicePermissionPreferences["location"]) {
 }
 
 function notificationStatusLabel(value: DevicePermissionPreferences, available: boolean | null) {
-  if (value.notifications === "granted") return "✓ Notificaciones activadas";
+  if (value.notifications === "granted" && value.notificationPreference === "enabled") return "✓ Notificaciones activadas";
+  if (value.notifications === "granted") return "Permitido en este dispositivo · uso interno pendiente";
   if (value.notifications === "denied") return "Notificaciones no activadas";
   if (value.notificationPreference === "enabled" && available === false) return "Solicitud guardada";
   return available === null ? "Preparando…" : "Opcionales";
@@ -69,7 +68,11 @@ function currentNotificationApi(): NotificationPermissionApi | undefined {
 }
 
 function usePersistentDevicePermissions(userId: string, accessToken: string | null) {
-  const [value, setValue] = useState(() => typeof window === "undefined" ? emptyDevicePermissionPreferences(userId) : readDevicePermissionPreferences(localStorage, userId));
+  const [value, setValue] = useState(() => typeof window === "undefined"
+    ? emptyDevicePermissionPreferences(userId)
+    : accessToken
+      ? readAccountDevicePermissionPreferences(localStorage, userId)
+      : readDevicePermissionPreferences(localStorage, userId));
   const [notificationAvailable, setNotificationAvailable] = useState<boolean | null>(null);
   const [syncMessage, setSyncMessage] = useState("");
   const refreshController = useRef<AbortController | null>(null);
@@ -88,7 +91,7 @@ function usePersistentDevicePermissions(userId: string, accessToken: string | nu
     const account = accessToken
       ? requestAccountDevicePermissionPreferences(accessToken, controller.signal)
       : Promise.resolve(null);
-    void Promise.all([device, account]).then(async ([, remote]) => {
+    void Promise.all([device, account]).then(([, remote]) => {
       if (controller.signal.aborted || revision !== refreshRevision.current) return;
       if (!remote) {
         setValue(readDevicePermissionPreferences(localStorage, userId));
@@ -96,29 +99,18 @@ function usePersistentDevicePermissions(userId: string, accessToken: string | nu
       }
       // Re-read after both async sources settle. A newer explicit tap may have
       // updated local storage while an older OS/cloud read was in flight.
-      const latest = readDevicePermissionPreferences(localStorage, userId);
-      const reconciled = reconcileAccountDevicePermissionPreferences(latest, remote);
-      const saved = persistReconciledDevicePermissionPreferences(localStorage, reconciled);
+      const saved = cacheAccountDevicePermissionPreferences(localStorage, userId, remote);
       setValue(saved);
-      if (!reconciled.pending.length || !accessToken) {
-        setSyncMessage("");
-        return;
-      }
-      const results = await Promise.allSettled(reconciled.pending.map((pending) => saveAccountDevicePermissionPreference(
-        accessToken,
-        pending.preference,
-        pending.record,
-        controller.signal,
-      )));
-      if (controller.signal.aborted || revision !== refreshRevision.current) return;
-      setSyncMessage(results.some((result) => result.status === "rejected")
-        ? "La preferencia sigue guardada en este dispositivo y se sincronizará al recuperar conexión."
-        : "");
+      setSyncMessage("");
     }).catch(() => {
       if (controller.signal.aborted || revision !== refreshRevision.current) return;
-      // A failed cloud/OS read is unknown, never an instruction to disable.
-      setValue(readDevicePermissionPreferences(localStorage, userId));
-      setSyncMessage("Mostramos la última preferencia guardada; no se cambió ninguna autorización.");
+      // Authenticated legacy caches are not consent evidence. On an outage,
+      // retain only values backed by a previous canonical response clock.
+      const saved = accessToken
+        ? failClosedAccountDevicePermissionPreferences(localStorage, userId)
+        : readDevicePermissionPreferences(localStorage, userId);
+      setValue(saved);
+      setSyncMessage("No pudimos confirmar la preferencia en la nube. Sólo mantenemos activa una decisión previamente confirmada.");
     });
   }, [accessToken, userId]);
 
@@ -143,30 +135,31 @@ function usePersistentDevicePermissions(userId: string, accessToken: string | nu
     refreshRevision.current += 1;
   }, []);
 
-  const persistPreference = useCallback(async (preference: AccountPermissionPreferenceKind, next: DevicePermissionPreferences) => {
+  const persistPreference = useCallback(async (preference: AccountPermissionPreferenceKind, requestedValue: AccountPermissionValue) => {
     // An explicit user choice invalidates every older hydration response.
     refreshController.current?.abort();
     const revision = ++refreshRevision.current;
-    setValue(next);
-    if (!accessToken) return;
-    const record = preference === "location"
-      ? next.locationPreference !== "undecided" && next.locationPreferenceUpdatedAt
-        ? { version: 1 as const, value: next.locationPreference, changedAt: next.locationPreferenceUpdatedAt }
-        : null
-      : next.notificationPreference !== "undecided" && next.notificationPreferenceUpdatedAt
-        ? { version: 1 as const, value: next.notificationPreference, changedAt: next.notificationPreferenceUpdatedAt }
-        : null;
-    if (!record) return;
+    setSyncMessage("");
+    if (!accessToken) {
+      setSyncMessage("No pudimos confirmar esta autorización. Inicia sesión y vuelve a intentar.");
+      return null;
+    }
+    const record = { version: 1 as const, value: requestedValue, changedAt: new Date().toISOString() };
     try {
       const remote = await saveAccountDevicePermissionPreference(accessToken, preference, record);
-      if (revision !== refreshRevision.current) return;
-      const latest = readDevicePermissionPreferences(localStorage, userId);
-      const reconciled = reconcileAccountDevicePermissionPreferences(latest, remote);
-      setValue(persistReconciledDevicePermissionPreferences(localStorage, reconciled));
+      if (revision !== refreshRevision.current) return null;
+      const saved = cacheAccountDevicePermissionPreferences(localStorage, userId, remote);
+      setValue(saved);
       setSyncMessage("");
+      window.dispatchEvent(new Event(OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT));
+      return saved;
     } catch {
-      if (revision !== refreshRevision.current) return;
-      setSyncMessage("La preferencia queda guardada en este dispositivo y se reintentará al recuperar conexión.");
+      if (revision !== refreshRevision.current) return null;
+      // Legal/product intent is server-canonical. Keep the exact prior local
+      // state when the server did not confirm the explicit action.
+      setValue(readAccountDevicePermissionPreferences(localStorage, userId));
+      setSyncMessage("No pudimos guardar la autorización. Conservamos el estado anterior; vuelve a intentar.");
+      return null;
     }
   }, [accessToken, userId]);
 
@@ -181,17 +174,20 @@ export function InitialDevicePermissions({ userId, accessToken, onContinue }: { 
 
   async function location() {
     beginExplicitAction();
-    if (value.location === "granted") {
-      await persistPreference("location", enableLocationForApp(localStorage, userId));
-      return;
-    }
     locationController.current?.abort();
     const controller = new AbortController();
     locationController.current = controller;
     setBusy("location");
     try {
+      const current = accessToken
+        ? readAccountDevicePermissionPreferences(localStorage, userId)
+        : readDevicePermissionPreferences(localStorage, userId);
+      const authorized = current.locationPreference === "enabled"
+        ? current
+        : await persistPreference("location", "enabled");
+      if (!authorized || controller.signal.aborted) return;
       const next = await requestInitialLocation(localStorage, userId, navigator.geolocation, { signal: controller.signal });
-      if (!controller.signal.aborted) await persistPreference("location", next);
+      if (!controller.signal.aborted) setValue(next);
     }
     finally { if (!controller.signal.aborted) setBusy(null); }
   }
@@ -201,8 +197,15 @@ export function InitialDevicePermissions({ userId, accessToken, onContinue }: { 
     setNotificationMessage("");
     setBusy("notifications");
     try {
+      const current = accessToken
+        ? readAccountDevicePermissionPreferences(localStorage, userId)
+        : readDevicePermissionPreferences(localStorage, userId);
+      const authorized = current.notificationPreference === "enabled"
+        ? current
+        : await persistPreference("notifications", "enabled");
+      if (!authorized) return;
       const next = await requestInitialNotifications(localStorage, userId, api);
-      await persistPreference("notifications", next);
+      setValue(next);
       if (!api) setNotificationMessage("Perfecto. Las activaremos cuando uses la app de The Backyard.");
     }
     finally { setBusy(null); }
@@ -210,7 +213,8 @@ export function InitialDevicePermissions({ userId, accessToken, onContinue }: { 
   async function skipNotifications() {
     setBusy("notifications");
     try {
-      await persistPreference("notifications", declineInitialNotifications(localStorage, userId));
+      // Skipping the OS prompt is not a revocation of the separately recorded
+      // in-app preference. The preceding consent checkpoint owns that choice.
       setValue(finishInitialDevicePermissions(localStorage, userId));
       onContinue();
     } finally {
@@ -219,7 +223,7 @@ export function InitialDevicePermissions({ userId, accessToken, onContinue }: { 
   }
   return <div className="devicePermissionChoices">
     <article><div><b>Ubicación</b><span aria-live="polite">{locationStatusLabel(value.location)}</span><small>Usaremos tu ubicación para mostrarte y ordenar campos cercanos, facilitar la selección del campo donde juegas y habilitar funciones basadas en ubicación durante tus rondas cuando correspondan. Es opcional y tú decides cuándo compartirla.</small></div>{value.location === "granted" && value.locationEnabled ? <strong aria-label="Ubicación permitida">✓</strong> : <button type="button" className="secondary" disabled={busy !== null} onClick={() => void location()}>{busy === "location" ? "Solicitando…" : value.location === "granted" ? "Usar ubicación" : value.location === "denied" ? "Volver a comprobar" : "Permitir ubicación"}</button>}</article>
-    <article><div><b>Notificaciones</b><span aria-live="polite">{notificationStatusLabel(value, notificationAvailable)}</span><small>Recibe mensajes de otros jugadores, invitaciones a rondas y grupos, avisos de tus partidas, recordatorios y actualizaciones importantes de The Backyard.</small>{notificationMessage && <small role="status">{notificationMessage}</small>}</div>{value.notifications === "granted" ? <strong aria-label="Notificaciones activadas">✓</strong> : value.notifications === "denied" ? <strong>Notificaciones no activadas</strong> : value.notificationPreference === "enabled" && notificationAvailable === false ? <strong>✓ Solicitud guardada</strong> : <button type="button" className="secondary" disabled={busy !== null} onClick={() => void notifications()}>{busy === "notifications" ? "Activando…" : "ACTIVAR NOTIFICACIONES"}</button>}</article>
+    <article><div><b>Notificaciones</b><span aria-live="polite">{notificationStatusLabel(value, notificationAvailable)}</span><small>Recibe mensajes de otros jugadores, invitaciones a rondas y grupos, avisos de tus partidas, recordatorios y actualizaciones importantes de The Backyard.</small>{notificationMessage && <small role="status">{notificationMessage}</small>}</div>{value.notificationPreference !== "enabled" ? <button type="button" className="secondary" disabled={busy !== null} onClick={() => void notifications()}>{busy === "notifications" ? "Activando…" : "ACTIVAR NOTIFICACIONES"}</button> : value.notifications === "granted" ? <strong aria-label="Notificaciones activadas">✓</strong> : value.notifications === "denied" ? <strong>Notificaciones no activadas</strong> : notificationAvailable === false ? <strong>✓ Solicitud guardada</strong> : <button type="button" className="secondary" disabled={busy !== null} onClick={() => void notifications()}>{busy === "notifications" ? "Activando…" : "ACTIVAR NOTIFICACIONES"}</button>}</article>
     {syncMessage ? <p className="hint" role="status">{syncMessage}</p> : null}
     <button type="button" className="primary big" disabled={busy !== null} onClick={() => { setValue(finishInitialDevicePermissions(localStorage, userId)); onContinue(); }}>Continuar</button>
     <button type="button" className="textButton" disabled={busy !== null} onClick={() => void skipNotifications()}>AHORA NO</button>
@@ -227,23 +231,32 @@ export function InitialDevicePermissions({ userId, accessToken, onContinue }: { 
 }
 
 export function DevicePermissionSettings({ userId, accessToken }: { userId: string; accessToken: string | null }) {
-  const { value, notificationAvailable, syncMessage, beginExplicitAction, persistPreference } = usePersistentDevicePermissions(userId, accessToken);
+  const { value, setValue, notificationAvailable, syncMessage, beginExplicitAction, persistPreference } = usePersistentDevicePermissions(userId, accessToken);
   const [busy, setBusy] = useState(false);
   const locationController = useRef<AbortController | null>(null);
   useEffect(() => () => locationController.current?.abort(), []);
-  async function enableLocation() {
+  async function changePreference(preference: AccountPermissionPreferenceKind, requestedValue: AccountPermissionValue) {
+    beginExplicitAction();
+    setBusy(true);
+    try { await persistPreference(preference, requestedValue); }
+    finally { setBusy(false); }
+  }
+  async function requestLocationPermission() {
     beginExplicitAction();
     locationController.current?.abort();
     const controller = new AbortController();
     locationController.current = controller;
     setBusy(true);
     try {
-      const refreshed = await refreshDevicePermissionStateWithoutPrompt(localStorage, userId);
-      if (controller.signal.aborted) return;
-      const next = refreshed.location === "granted"
-        ? enableLocationForApp(localStorage, userId)
-        : await requestInitialLocation(localStorage, userId, navigator.geolocation, { signal: controller.signal });
-      if (!controller.signal.aborted) await persistPreference("location", next);
+      const current = accessToken
+        ? readAccountDevicePermissionPreferences(localStorage, userId)
+        : readDevicePermissionPreferences(localStorage, userId);
+      if (current.locationPreference !== "enabled") {
+        setValue(current);
+        return;
+      }
+      const next = await requestInitialLocation(localStorage, userId, navigator.geolocation, { signal: controller.signal });
+      if (!controller.signal.aborted) setValue(next);
     }
     finally { if (!controller.signal.aborted) setBusy(false); }
   }
@@ -251,19 +264,30 @@ export function DevicePermissionSettings({ userId, accessToken }: { userId: stri
     beginExplicitAction();
     const api = currentNotificationApi();
     setBusy(true);
-    try { await persistPreference("notifications", await requestInitialNotifications(localStorage, userId, api)); }
+    try {
+      const current = accessToken
+        ? readAccountDevicePermissionPreferences(localStorage, userId)
+        : readDevicePermissionPreferences(localStorage, userId);
+      if (current.notificationPreference !== "enabled") {
+        setValue(current);
+        return;
+      }
+      const next = await requestInitialNotifications(localStorage, userId, api);
+      setValue(next);
+    }
     finally { setBusy(false); }
   }
   return <section className="card accountCompactCard"><h2>Permisos del dispositivo</h2>
-    <div className="accountCompactRows"><div><span>Ubicación</span><b>{locationSystemStatus(value.location)}</b><small>Uso en The Backyard: {value.locationEnabled ? "activo" : "desactivado"}</small></div><div><span>Notificaciones</span><b>{notificationSystemStatus(value.notifications)}</b><small>Preferencia interna: {value.notificationPreference === "enabled" ? "activa" : value.notificationPreference === "disabled" ? "desactivada" : "pendiente"} · Registro de entrega: {value.pushSubscription === "registered" ? "registrado" : "no registrado"}</small></div></div>
+    <div className="accountCompactRows"><div><span>Ubicación</span><b>{locationSystemStatus(value.location)}</b><small>Uso en The Backyard: {value.locationPreference === "enabled" ? "activo" : value.locationPreference === "disabled" ? "desactivado" : "pendiente"}</small></div><div><span>Notificaciones</span><b>{notificationSystemStatus(value.notifications)}</b><small>Preferencia interna: {value.notificationPreference === "enabled" ? "activa" : value.notificationPreference === "disabled" ? "desactivada" : "pendiente"} · Registro de entrega: {value.pushSubscription === "registered" ? "registrado" : "no registrado"}</small></div></div>
     <p className="hint">Preferencia, permiso del sistema y entrega son estados distintos. Aquí puedes revisar o desactivar el uso interno. Si el sistema bloqueó un permiso, cámbialo desde los permisos de la app o del dispositivo.</p>
     {syncMessage ? <p className="hint" role="status">{syncMessage}</p> : null}
-    <div className="accountInlineActions">{value.locationEnabled
-      ? <button type="button" className="secondary" onClick={() => void persistPreference("location", disableLocationForApp(localStorage, userId))}>Desactivar ubicación</button>
-      : <button type="button" className="secondary" disabled={busy} onClick={() => void enableLocation()}>{busy ? "Comprobando…" : value.location === "denied" ? "Volver a comprobar ubicación" : "Volver a permitir ubicación"}</button>}
+    <div className="accountInlineActions">{value.locationPreference === "enabled"
+      ? <button type="button" className="secondary" disabled={busy} onClick={() => void changePreference("location", "disabled")}>Desactivar uso interno de ubicación</button>
+      : <button type="button" className="secondary" disabled={busy} onClick={() => void changePreference("location", "enabled")}>Activar uso interno de ubicación</button>}
+      {value.locationPreference === "enabled" && value.location !== "granted" && <button type="button" className="secondary" disabled={busy} onClick={() => void requestLocationPermission()}>{busy ? "Comprobando…" : value.location === "denied" ? "Volver a comprobar permiso" : "Solicitar permiso del dispositivo"}</button>}
       {value.notificationPreference === "enabled"
-        ? <button type="button" className="secondary" onClick={() => void persistPreference("notifications", disableNotificationsForApp(localStorage, userId))}>Desactivar uso interno de notificaciones</button>
-        : <button type="button" className="secondary" onClick={() => void persistPreference("notifications", enableNotificationsForApp(localStorage, userId))}>Activar preferencia interna</button>}
+        ? <button type="button" className="secondary" disabled={busy} onClick={() => void changePreference("notifications", "disabled")}>Desactivar uso interno de notificaciones</button>
+        : <button type="button" className="secondary" disabled={busy} onClick={() => void changePreference("notifications", "enabled")}>Activar preferencia interna</button>}
       {value.notificationPreference === "enabled" && value.notifications !== "granted" && value.notifications !== "denied" && notificationAvailable !== false && <button type="button" className="secondary" disabled={busy} onClick={() => void requestNotificationPermission()}>{busy ? "Solicitando…" : "Solicitar permiso del sistema"}</button>}</div>
   </section>;
 }

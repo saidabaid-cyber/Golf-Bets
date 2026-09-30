@@ -62,7 +62,8 @@ test("callback intercambia código y siempre ofrece regreso seguro", () => {
 test("consentimiento agrupa requeridos sin perder Árbitro ni mayoría de edad", () => {
   const consent = readFileSync("app/components/account-consent-checkpoint.tsx", "utf8");
   assert.doesNotMatch(consent, /type="checkbox"/);
-  assert.match(consent, /ACEPTAR TODO Y CONTINUAR/);
+  assert.match(consent, /ACEPTAR REQUERIDOS/);
+  assert.match(consent, /AUTORIZAR TODO Y CONTINUAR/);
   assert.match(consent, /mayoría de edad/);
   assert.match(consent, /Árbitro de Reglas/);
   assert.match(consent, /Comité o árbitro oficial tiene la decisión final/);

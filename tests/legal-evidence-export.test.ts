@@ -69,10 +69,14 @@ test("limited export re-projects fields and never passes tokens, secrets, owner 
     environment: "preview",
     generatedAt: "2026-09-24T12:00:00.000Z",
     profile: { available: true, data: { ...dangerous, display_name: "Owner", username: "owner" } },
+    socialProfile: { available: true, data: { ...dangerous, privacy: "PUBLIC" } },
     preferences: { available: true, data: { ...dangerous, locale: "es-MX", high_contrast: true } },
+    socialActivityPreferences: { available: true, data: { ...dangerous, share_rounds: true } },
     legalAcceptances: { available: true, data: [{ ...dangerous, type: "terms", version: "v2" }] },
     legalEvidence: { available: true, data: [{ ...dangerous, purpose_key: "terms", action: "accepted" }] },
     aiProcessingConsents: { available: false, data: [{ ...dangerous, scope: "AI_PROVIDER_PROCESSING_CONSENT" }] },
+    optionalAuthorizationEvents: { available: true, data: [{ ...dangerous, scope: "PERSONAL_MEMORY", decision_status: "accepted" }] },
+    optionalAuthorizationReceipts: { available: true, data: [{ ...dangerous, bundle_version: "v1", action: "authorize_all" }] },
   });
   const serialized = JSON.stringify(payload);
   for (const forbidden of [/"access_token"/, /"refresh_token"/, /"service_role"/, /"internal_note"/, /:"token"/, /:"refresh"/, /:"secret"/, /"victim"/]) assert.doesNotMatch(serialized, forbidden);
@@ -86,8 +90,9 @@ test("limited export caps every ledger and marks truncation explicitly", () => {
   const rows = Array.from({ length: ACCOUNT_DATA_EXPORT_LIMIT + 1 }, (_, index) => ({ type: "terms", version: `v${index}` }));
   const empty = { available: true, data: [] };
   const payload = buildLimitedAccountExport({
-    userId: "owner", environment: "test", profile: empty, preferences: empty,
-    legalAcceptances: { available: true, data: rows }, legalEvidence: empty, aiProcessingConsents: empty,
+    userId: "owner", environment: "test", profile: empty, socialProfile: empty, preferences: empty,
+    socialActivityPreferences: empty, legalAcceptances: { available: true, data: rows }, legalEvidence: empty,
+    aiProcessingConsents: empty, optionalAuthorizationEvents: empty, optionalAuthorizationReceipts: empty,
   });
   assert.equal(payload.data.legalAcceptances.records.length, ACCOUNT_DATA_EXPORT_LIMIT);
   assert.equal(payload.data.legalAcceptances.truncated, true);
@@ -136,8 +141,9 @@ test("combined export rejects a cloud payload for a different account", () => {
   }, "test");
   const empty = { available: true, data: [] };
   const foreignCloud = buildLimitedAccountExport({
-    userId: "owner-b", environment: "test", profile: empty, preferences: empty,
-    legalAcceptances: empty, legalEvidence: empty, aiProcessingConsents: empty,
+    userId: "owner-b", environment: "test", profile: empty, socialProfile: empty, preferences: empty,
+    socialActivityPreferences: empty, legalAcceptances: empty, legalEvidence: empty, aiProcessingConsents: empty,
+    optionalAuthorizationEvents: empty, optionalAuthorizationReceipts: empty,
   });
   assert.throws(() => buildCombinedAccountExport({ local, cloud: foreignCloud }), /account_export_owner_mismatch/);
 });
@@ -192,11 +198,9 @@ test("local export cuts off deeply nested untrusted objects instead of leaking t
 test("routes require verified owner auth, strict bodies and explicit owner filters", () => {
   const evidence = readFileSync("app/api/legal/evidence/route.ts", "utf8");
   const accountExport = readFileSync("app/api/account/export/route.ts", "utf8");
-  for (const route of [evidence, accountExport]) {
-    assert.match(route, /authenticatedRequest\(request\)/);
-    assert.match(route, /account\.userId/);
-    assert.doesNotMatch(route, /getSession\(/);
-  }
+  assert.match(evidence, /authenticatedRequest\(request\)/);
+  assert.match(evidence, /account\.userId/);
+  assert.doesNotMatch(evidence, /getSession\(/);
   assert.match(evidence, /isCrossSiteRequest\(request\)/);
   assert.match(evidence, /readJsonBodyWithLimit\(request, MAX_BODY_BYTES\)/);
   assert.match(evidence, /hasOnlyKeys\(root, \["events"\]\)/);
@@ -206,10 +210,9 @@ test("routes require verified owner auth, strict bodies and explicit owner filte
   assert.match(evidence, /admin\.rpc\("record_legal_evidence_batch"/);
   assert.doesNotMatch(evidence, /admin\.from\("legal_evidence_events"\)\.insert/);
   assert.doesNotMatch(evidence, /input\.userId|root\.userId/);
-  assert.match(accountExport, /buildLimitedAccountExport/);
-  assert.match(accountExport, /\.eq\("id", account\.userId\)/);
-  assert.match(accountExport, /\.eq\("user_id", account\.userId\)/);
-  assert.doesNotMatch(accountExport, /\.select\("\*"\)|service_role|SUPABASE_SECRET/);
+  assert.match(accountExport, /authenticatedRequest\(request\)/);
+  assert.match(accountExport, /SELF_SERVICE_EXPORT_DISABLED/);
+  assert.doesNotMatch(accountExport, /buildLimitedAccountExport|\.from\(|\.select\(|getSession\(|service_role|SUPABASE_SECRET/);
 });
 
 test("evidence POST delegates one owner-bound batch to the transactional RPC and distinguishes replay, semantic deduplication and conflicts", async () => {
@@ -325,43 +328,17 @@ test("evidence POST delegates one owner-bound batch to the transactional RPC and
   assert.equal(rpcCalls, 5);
 });
 
-test("limited export route authenticates first and filters every source to the verified owner", async () => {
-  const filters: Array<{ table: string; field: string; value: unknown }> = [];
-  const rows: Record<string, unknown> = {
-    profiles: { display_name: "Owner", access_token: "must-not-pass" },
-    user_preferences: { locale: "es-MX" },
-    legal_acceptances: [{ type: "terms", version: "v2" }],
-    legal_evidence_events: [{ environment: "test", purpose_key: "terms", action: "accepted" }],
-    ai_processing_consents: [{ scope: "AI_PROVIDER_PROCESSING_CONSENT", decision_status: "declined" }],
-  };
-  const client = { from: (table: string) => {
-    const query = {
-      select: () => query,
-      eq: (field: string, value: unknown) => { filters.push({ table, field, value }); return query; },
-      order: () => query,
-      maybeSingle: async () => ({ data: rows[table], error: null }),
-      limit: async () => ({ data: rows[table], error: null }),
-    };
-    return query;
-  } };
+test("retired self-service export route authenticates and returns 403 without account table reads", async () => {
+  let tableReads = 0;
+  const client = { from: () => { tableReads++; throw new Error("must not read account data"); } };
   const route = loadRoute("app/api/account/export/route.ts", {
     "../../../../lib/server-auth": { authenticatedRequest: async () => ({ ok: true, userId: "verified-owner", client }) },
   });
   const response = await route.GET(new Request("https://dev.thebackyard.com.mx/api/account/export", { headers: { authorization: "Bearer private-token" } }));
-  assert.equal(response.status, 200);
-  assert.match(response.headers.get("content-disposition") || "", /the-backyard-datos-limitados/);
+  assert.equal(response.status, 403);
   const payload = await response.json();
-  assert.equal(payload.account.userId, "verified-owner");
-  assert.equal(payload.scope.completeCloudExport, false);
-  assert.doesNotMatch(JSON.stringify(payload), /must-not-pass|private-token/);
-  assert.deepEqual(filters.map(({ table, field, value }) => [table, field, value]), [
-    ["profiles", "id", "verified-owner"],
-    ["user_preferences", "user_id", "verified-owner"],
-    ["legal_acceptances", "user_id", "verified-owner"],
-    ["legal_evidence_events", "user_id", "verified-owner"],
-    ["legal_evidence_events", "environment", "test"],
-    ["ai_processing_consents", "user_id", "verified-owner"],
-  ]);
+  assert.equal(payload.code, "SELF_SERVICE_EXPORT_DISABLED");
+  assert.equal(tableReads, 0);
 });
 
 test("archived or deleting accounts are rejected before legal/export data access", async () => {
@@ -399,12 +376,10 @@ test("canonical SQL remains append-only for clients and records the remote-equiv
   assert.doesNotMatch(ingest, /security definer/i);
 });
 
-test("legal UI describes the export as limited instead of promising a complete cloud copy", () => {
+test("legal UI does not expose self-service account exports", () => {
   const manager = readFileSync("app/components/legal-consent-manager.tsx", "utf8");
-  assert.match(manager, /Descargar copia limitada/);
-  assert.match(manager, /No incluye tokens, secretos, workspaces de otras cuentas/);
-  assert.doesNotMatch(manager, /disabled=\{exporting \|\| \(authenticated && !accessToken\)\}/);
-  assert.match(manager, /ni afirma ser una exportación completa/i);
-  assert.match(manager, /document\.body\.appendChild\(anchor\)/);
-  assert.match(manager, /URL\.revokeObjectURL\(url\), 1_000/);
+  assert.doesNotMatch(manager, /Copia de datos/);
+  assert.doesNotMatch(manager, /Descargar copia (?:limitada|local)/);
+  assert.doesNotMatch(manager, /buildDownloadableAccountExport/);
+  assert.doesNotMatch(manager, /document\.body\.appendChild\(anchor\)/);
 });

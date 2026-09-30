@@ -127,14 +127,15 @@ test("modo avión restaura el workspace autenticado sin guardar tokens", () => {
   assert.equal(readOfflineAuthenticatedProfile({ getItem: key => values.get(key) ?? null }, "guest"), null);
 });
 
-test("restaurar un bundle cloud conserva la preferencia de avisos internos", () => {
+test("restaurar un bundle cloud no repinta el cache canónico de avisos", () => {
   const values = new Map<string, string>();
   const storage = {
     getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); },
   };
+  storage.setItem(STORAGE_KEYS.notifications, "true");
   writeCloudBundleToStorage(storage as unknown as Storage, bundle({
-    preferences: { highContrast: false, language: "es-MX", notificationsEnabled: true, defaultHandicap: 8, hasLocalState: true },
+    preferences: { highContrast: false, language: "es-MX", notificationsEnabled: false, defaultHandicap: 8, hasLocalState: true },
   }));
   assert.equal(storage.getItem(STORAGE_KEYS.contrast), "false");
   assert.equal(storage.getItem(STORAGE_KEYS.notifications), "true");

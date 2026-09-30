@@ -3,14 +3,17 @@ import test from "node:test";
 
 import {
   CLOUD_TOMBSTONES_KEY,
+  CLOUD_LOCAL_META_KEY,
   CloudSyncHttpError,
   cloudDataFingerprint,
+  cloudSyncPayloadFingerprint,
   collectLocalCloudData,
   hasLocalCloudPreferenceState,
   mergeLocalAndCloud,
   findAmbiguousCloudConflicts,
   resolveAmbiguousCloudConflicts,
   recordCloudDeletion,
+  trackLocalCloudEdits,
   uploadCloudData,
   withCloudAuthRetry,
   type CloudDataBundle,
@@ -62,7 +65,7 @@ test("un dispositivo sin preferencia inicia alto contraste activado", () => {
   assert.equal(explicit.preferences.hasLocalState, true);
 });
 
-test("la preferencia de avisos internos se detecta y se incluye en el snapshot local", () => {
+test("el cache canónico de avisos no concede ownership al sync genérico", () => {
   const storage = new MemoryStorage();
   assert.equal(hasLocalCloudPreferenceState(storage as unknown as Storage), false);
   assert.equal(collectLocalCloudData(storage as unknown as Storage).preferences.notificationsEnabled, false,
@@ -70,14 +73,17 @@ test("la preferencia de avisos internos se detecta y se incluye en el snapshot l
 
   storage.setItem(STORAGE_KEYS.notifications, "true");
   const enabled = collectLocalCloudData(storage as unknown as Storage);
-  assert.equal(hasLocalCloudPreferenceState(storage as unknown as Storage), true);
+  assert.equal(hasLocalCloudPreferenceState(storage as unknown as Storage), false);
   assert.equal(enabled.preferences.notificationsEnabled, true);
-  assert.equal(enabled.preferences.hasLocalState, true);
+  assert.equal(enabled.preferences.hasLocalState, false);
 
   storage.setItem(STORAGE_KEYS.notifications, "false");
   const disabled = collectLocalCloudData(storage as unknown as Storage);
   assert.equal(disabled.preferences.notificationsEnabled, false);
-  assert.equal(disabled.preferences.hasLocalState, true, "false explícito sigue siendo una preferencia local");
+  assert.equal(disabled.preferences.hasLocalState, false, "false explícito pertenece al ledger, no a preferencias cloud genéricas");
+
+  storage.setItem(STORAGE_KEYS.contrast, "false");
+  assert.equal(hasLocalCloudPreferenceState(storage as unknown as Storage), true, "alto contraste sigue siendo propiedad del sync genérico");
 });
 
 test("merge local/cloud es idempotente, evita duplicados y conserva la versión más reciente", () => {
@@ -90,16 +96,45 @@ test("merge local/cloud es idempotente, evita duplicados y conserva la versión 
   assert.equal(cloudDataFingerprint(merged), cloudDataFingerprint(structuredClone(merged)));
 });
 
-test("un dispositivo nuevo recibe preferencias cloud y uno ya configurado conserva su elección local", () => {
+test("un dispositivo nuevo recibe preferencias cloud genéricas sin importar el valor legacy de avisos", () => {
   const cloud = bundle({ preferences: { highContrast: true, language: "es-MX", notificationsEnabled: true, defaultHandicap: 8, hasLocalState: true } });
   const newDevice = bundle({ preferences: { highContrast: false, language: "es-MX", notificationsEnabled: false, defaultHandicap: null, hasLocalState: false } });
   const restored = mergeLocalAndCloud(newDevice, cloud).preferences;
   assert.equal(restored.highContrast, true);
-  assert.equal(restored.notificationsEnabled, true);
+  assert.equal(restored.notificationsEnabled, false, "el API/ledger canónico hidrata avisos por separado");
   const configured = bundle({ preferences: { ...newDevice.preferences, highContrast: false, hasLocalState: true } });
   const preserved = mergeLocalAndCloud(configured, cloud).preferences;
   assert.equal(preserved.highContrast, false);
   assert.equal(preserved.notificationsEnabled, false);
+});
+
+test("una respuesta stale o mixed-version nunca repinta avisos ni provoca upload/conflicto", () => {
+  const local = bundle({
+    preferences: { highContrast: false, language: "es-MX", notificationsEnabled: true, defaultHandicap: 7, hasLocalState: true, updatedAt: "2026-09-30T10:00:00.000Z" },
+  });
+  const mixedVersionCloud = bundle({
+    preferences: { highContrast: true, language: "es-MX", notificationsEnabled: false, defaultHandicap: 8, hasLocalState: true, updatedAt: "2026-09-30T11:00:00.000Z" },
+  });
+  const merged = mergeLocalAndCloud(local, mixedVersionCloud);
+  assert.equal(merged.preferences.highContrast, true, "las preferencias que sí son cloud conservan LWW");
+  assert.equal(merged.preferences.notificationsEnabled, true, "la intención canónica local no se toma del snapshot legacy");
+
+  const notificationOnly = bundle({
+    ...local,
+    preferences: { ...local.preferences, notificationsEnabled: false },
+  });
+  assert.equal(cloudDataFingerprint(local), cloudDataFingerprint(notificationOnly));
+  assert.equal(cloudSyncPayloadFingerprint(local), cloudSyncPayloadFingerprint(notificationOnly));
+  assert.equal(findAmbiguousCloudConflicts(local, notificationOnly).length, 0);
+});
+
+test("cambiar sólo avisos no avanza el reloj de preferencias cloud genéricas", () => {
+  const storage = new MemoryStorage();
+  const before = bundle().preferences;
+  trackLocalCloudEdits(storage, null, before, "2026-09-30T10:00:00.000Z");
+  trackLocalCloudEdits(storage, null, { ...before, notificationsEnabled: true }, "2026-09-30T11:00:00.000Z");
+  const meta = JSON.parse(storage.getItem(CLOUD_LOCAL_META_KEY) || "{}") as { preferencesAt?: string };
+  assert.equal(meta.preferencesAt, undefined);
 });
 
 test("borrados cloud persisten y un dispositivo desactualizado no revive registros", () => {

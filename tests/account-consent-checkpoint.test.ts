@@ -4,7 +4,7 @@ import test from "node:test";
 
 const source = (path: string) => readFileSync(path, "utf8");
 
-test("initial consent is embedded in onboarding instead of gating app entry", () => {
+test("initial consent is embedded in onboarding and canonical unresolved eligibility cannot escape on reload", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
   const onboarding = source("app/components/beta-onboarding-flow.tsx");
   const provider = source("app/components/account-provider.tsx");
@@ -14,32 +14,46 @@ test("initial consent is embedded in onboarding instead of gating app entry", ()
   assert.match(onboarding, /canContinue=\{Boolean\(entryMode\)\}/);
   assert.doesNotMatch(onboarding, /initialBettingDecision|onResolveBetting/);
   assert.match(onboarding, /actions=\{null\}/);
-  assert.doesNotMatch(provider, /AccountConsentCheckpoint/);
-  assert.doesNotMatch(provider, /requiresAccountConsent/);
+  assert.match(provider, /saved\.eligible && !saved\.resolved/);
+  assert.match(provider, /!betaOnboardingRequired && optionalAuthorizationRequired/);
+  assert.match(provider, /<InitialOnboardingConsents/);
+  assert.match(provider, /optionalAuthorizationCheck !== "ready"/);
+  assert.match(provider, /No pudimos consultar el registro canónico/);
   assert.match(provider, /return app;/);
 });
 
-test("required legal and optional AI choices are grouped without asking about bets", () => {
+test("required legal and the atomic optional bundle are explicit and separate", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
-  for (const copy of ["Términos y Condiciones", "Aviso de Privacidad", "mayoría de edad", "CONSENTIMIENTOS REQUERIDOS", "AUTORIZACIONES DE BACKYARD AI"]) assert.match(consent, new RegExp(copy));
-  assert.match(consent, /AUTORIZAR LAS 3 FUNCIONES DE IA/);
-  assert.match(consent, /ACEPTAR TODO Y CONTINUAR/);
+  for (const copy of ["Términos y Condiciones", "Aviso de Privacidad", "mayoría de edad", "CONSENTIMIENTOS REQUERIDOS", "FUNCIONES OPCIONALES DE THE BACKYARD"]) assert.match(consent, new RegExp(copy));
+  for (const included of ["texto o dictado", "fotos e imágenes", "launch monitor", "Memoria personal", "learning global", "Perfil público", "actividad compartida", "Uso interno de ubicación y notificaciones"]) assert.match(consent, new RegExp(included, "i"));
+  assert.match(consent, /AUTORIZAR TODO Y CONTINUAR/);
+  assert.match(consent, /ACEPTAR REQUERIDOS/);
   assert.match(consent, /NO ACEPTO/);
-  assert.match(consent, /AHORA NO/);
-  assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS|apuestas, resultados y gastos/);
+  assert.match(consent, /CONTINUAR SIN AUTORIZAR/);
+  assert.match(consent, /Marketing y datos financieros\/patrimoniales no forman parte/);
+  assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS/);
   assert.doesNotMatch(consent, /type="checkbox"/);
-  assert.match(consent, /saveRemoteAiConsentDecisions/);
-  assert.match(consent, /AI_PROCESSING_CONSENT_SCOPES\.map/);
+  assert.match(consent, /resolveOptionalAuthorizationBundle/);
+  assert.match(consent, /isCompleteBundleResolution/);
+  assert.match(consent, /Autorización inicial registrada; conservamos tus cambios posteriores/);
   assert.match(consent, /await onAcceptRequired\(\)/);
   assert.doesNotMatch(consent, /onResolveBetting|initialBettingDecision/);
 });
 
-test("AI outage is fail-closed and Ahora no records all three declined scopes", () => {
+test("optional bundle is idempotent, verified before success and fails closed", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
-  assert.match(consent, /AI_PROCESSING_CONSENT_SCOPES\.map\(\(scope\) => \(\{ scope, accepted \}\)\)/);
-  assert.match(consent, /se pedirá autorización contextual al usar IA/);
-  assert.match(consent, /disabled=\{!resolved \|\| !canContinue/);
-  assert.doesNotMatch(consent, /localStorage/);
+  assert.match(consent, /authorizationRequestKey/);
+  assert.match(consent, /declineRequestKey/);
+  assert.match(consent, /crypto\.randomUUID\(\)/);
+  assert.match(consent, /const action = accepted \? "authorize_all" as const : "decline_all" as const/);
+  assert.match(consent, /if \(!isCompleteBundleResolution\(saved, action\)\) throw/);
+  assert.match(consent, /No pudimos confirmar si el conjunto se guardó/);
+  assert.match(consent, /usaremos la misma solicitud y no duplicaremos decisiones/);
+  assert.match(consent, /const latest = await requestOptionalAuthorizationState/);
+  assert.match(consent, /if \(!latest\.eligible\)/);
+  assert.match(consent, /Otra decisión explícita ya fue registrada/);
+  assert.match(consent, /required !== "accepted" \|\| !canContinue/);
+  assert.doesNotMatch(consent, /saveRemoteAiConsentDecisions|AI_PROCESSING_CONSENT_SCOPES/);
 });
 
 test("guest onboarding also omits betting permission", () => {

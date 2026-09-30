@@ -6,6 +6,8 @@ import {
   devicePermissionsStorageKey,
   disableLocationForApp,
   emptyDevicePermissionPreferences,
+  enableLocationForApp,
+  enableNotificationsForApp,
   finishInitialDevicePermissions,
   NEARBY_LOCATION_CACHE_TTL_MS,
   readDevicePermissionPreferences,
@@ -29,6 +31,7 @@ function memoryStorage() {
 
 test("initial location permission is user-scoped, keeps device precision, and is reusable without another prompt", async () => {
   const storage = memoryStorage();
+  enableLocationForApp(storage, "user-a");
   let prompts = 0;
   let requestedOptions: PositionOptions | undefined;
   const geolocation = {
@@ -57,6 +60,7 @@ test("permission onboarding can finish with optional permissions denied", () => 
 
 test("revoking location in app clears coordinates and nearby never reuses them", async () => {
   const storage = memoryStorage();
+  enableLocationForApp(storage, "user-a");
   await requestInitialLocation(storage, "user-a", { getCurrentPosition(success: PositionCallback) { success({ coords: { latitude: 20, longitude: -99 } } as GeolocationPosition); } } as Geolocation);
   const disabled = disableLocationForApp(storage, "user-a");
   assert.equal(disabled.locationEnabled, false);
@@ -81,6 +85,7 @@ test("leaving initial permissions ignores a late native location response", asyn
 
 test("notification permission default requests once and persists the real granted result", async () => {
   const storage = memoryStorage();
+  enableNotificationsForApp(storage, "user-a");
   let prompts = 0;
   const saved = await requestInitialNotifications(storage, "user-a", {
     permission: "default",
@@ -96,6 +101,7 @@ test("notification permission default requests once and persists the real grante
 test("notification permission granted or denied is never requested repeatedly", async () => {
   for (const permission of ["granted", "denied"] as const) {
     const storage = memoryStorage();
+    enableNotificationsForApp(storage, "user-a");
     let prompts = 0;
     const saved = await requestInitialNotifications(storage, "user-a", {
       permission,
@@ -108,8 +114,9 @@ test("notification permission granted or denied is never requested repeatedly", 
   }
 });
 
-test("notification API unavailable stores positive intent without faking permission or push registration", async () => {
+test("notification API unavailable preserves explicit positive intent without faking permission or push registration", async () => {
   const storage = memoryStorage();
+  enableNotificationsForApp(storage, "user-a");
   const saved = await requestInitialNotifications(storage, "user-a", undefined);
   assert.equal(saved.notifications, "unavailable");
   assert.equal(saved.notificationPreference, "enabled");
@@ -120,6 +127,7 @@ test("notification API unavailable stores positive intent without faking permiss
 
 test("pending notification intent requests once on the first later compatible surface", async () => {
   const storage = memoryStorage();
+  enableNotificationsForApp(storage, "user-a");
   await requestInitialNotifications(storage, "user-a", undefined);
   let prompts = 0;
   const api = {
@@ -189,6 +197,7 @@ test("account cleanup invalidates a pending location write and preserves another
 
 test("nearby coordinates expire instead of following the user indefinitely", async () => {
   const storage = memoryStorage();
+  enableLocationForApp(storage, "user-a");
   const saved = await requestInitialLocation(storage, "user-a", { getCurrentPosition(success: PositionCallback) { success({ coords: { latitude: 20, longitude: -99 } } as GeolocationPosition); } } as Geolocation);
   const capturedAt = Date.parse(saved.coarseLocation!.capturedAt);
   assert.ok(storedNearbyCoordinates(storage, "user-a", capturedAt + NEARBY_LOCATION_CACHE_TTL_MS));

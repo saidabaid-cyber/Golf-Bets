@@ -12,9 +12,20 @@ const PROFILE_FIELDS = [
   "display_name", "given_name", "family_name", "username", "avatar_url",
   "default_handicap", "home_club", "preferred_tee", "handedness", "bio",
   "profile_visibility", "city", "state", "country", "onboarding_completed_at",
-  "created_at", "updated_at",
+  "social_privacy", "created_at", "updated_at",
 ] as const;
-const PREFERENCE_FIELDS = ["high_contrast", "locale", "default_handicap", "notifications_enabled", "created_at", "updated_at"] as const;
+const PREFERENCE_FIELDS = [
+  "high_contrast", "locale", "default_handicap", "notifications_enabled",
+  "push_notifications_enabled", "email_notifications_enabled", "round_notifications_enabled",
+  "reminders_enabled", "personal_memory_enabled", "global_learning_enabled",
+  "location_internal_enabled", "notification_internal_enabled", "created_at", "updated_at",
+] as const;
+const SOCIAL_PROFILE_FIELDS = ["privacy", "display_name", "username", "avatar_url", "handicap", "club_name", "updated_at"] as const;
+const SOCIAL_ACTIVITY_PREFERENCE_FIELDS = [
+  "share_rounds", "share_achievements", "share_equipment", "share_courses",
+  "notify_like", "notify_comment", "notify_attest", "notify_friend_achievement",
+  "notify_equipment", "notify_friend_request", "updated_at",
+] as const;
 const LEGAL_ACCEPTANCE_FIELDS = ["type", "version", "accepted_at", "locale", "created_at"] as const;
 const LEGAL_EVIDENCE_FIELDS = [
   "environment", "document_key", "purpose_key", "document_version", "document_hash",
@@ -25,6 +36,23 @@ const AI_CONSENT_FIELDS = [
   "scope", "policy_version", "decision_status", "source", "decided_at",
   "accepted_at", "revoked_at", "locale", "created_at", "updated_at",
 ] as const;
+const OPTIONAL_AUTHORIZATION_EVENT_FIELDS = [
+  "scope", "decision_status", "policy_version", "source", "bundle_version",
+  "idempotency_key", "decided_at", "created_at",
+] as const;
+const OPTIONAL_AUTHORIZATION_RECEIPT_FIELDS = [
+  "bundle_version", "action", "idempotency_key", "decided_at", "created_at",
+] as const;
+const OPTIONAL_AUTHORIZATION_RECEIPT_SCOPES = [
+  ["AI_PROVIDER_PROCESSING_CONSENT", "2026-09-08-v2"],
+  ["AI_IMAGE_PROCESSING_CONSENT", "2026-09-08-v2"],
+  ["AI_LAUNCH_MONITOR_PROCESSING_CONSENT", "2026-09-08-v2"],
+  ["PERSONAL_MEMORY", "ai-first-phase1-v1"],
+  ["GLOBAL_LEARNING", "ai-first-phase1-v1"],
+  ["LOCATION_INTERNAL", "optional-features-2026-09-30-v1"],
+  ["NOTIFICATION_INTERNAL", "optional-features-2026-09-30-v1"],
+] as const;
+const OPTIONAL_AUTHORIZATION_RECEIPT_EXCLUSIONS = ["MARKETING", "FINANCIAL_PATRIMONIAL"] as const;
 
 type Scalar = string | number | boolean | null;
 export type LocalExportIdentity = Pick<BackyardProfile, "userId" | "displayName" | "email" | "defaultHandicap">
@@ -203,7 +231,7 @@ function safeScalar(value: unknown): Scalar | undefined {
 function project(value: unknown, fields: readonly string[]) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
-  const projected: Record<string, Scalar> = {};
+  const projected: Record<string, unknown> = {};
   for (const field of fields) {
     const scalar = safeScalar(source[field]);
     if (scalar !== undefined) projected[field] = scalar;
@@ -212,10 +240,77 @@ function project(value: unknown, fields: readonly string[]) {
 }
 
 function exportCollection(source: AccountExportSource, fields: readonly string[], limit = ACCOUNT_DATA_EXPORT_LIMIT) {
-  if (!source.available) return { status: "unavailable" as const, truncated: false, records: [] as Record<string, Scalar>[] };
+  if (!source.available) return { status: "unavailable" as const, truncated: false, records: [] as Record<string, unknown>[] };
   const values = Array.isArray(source.data) ? source.data : source.data ? [source.data] : [];
-  const records = values.slice(0, limit).map((value) => project(value, fields)).filter((value): value is Record<string, Scalar> => Boolean(value));
+  const records = values.slice(0, limit).map((value) => project(value, fields)).filter((value): value is Record<string, unknown> => Boolean(value));
   return { status: "included" as const, truncated: values.length > limit, records };
+}
+
+/** The receipt JSON is evidence, not arbitrary user data. Export only the
+ * current canonical seven scope/version pairs and the two express exclusions;
+ * ignore every other nested or top-level key. */
+function projectOptionalAuthorizationFeatureSet(value: unknown, action: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  const rawScopes = source.scopes;
+  const rawExcluded = source.excluded;
+  const rawProjections = source.projections;
+  if (!Array.isArray(rawScopes) || rawScopes.length !== OPTIONAL_AUTHORIZATION_RECEIPT_SCOPES.length
+    || !Array.isArray(rawExcluded) || rawExcluded.length !== OPTIONAL_AUTHORIZATION_RECEIPT_EXCLUSIONS.length
+    || !rawProjections || typeof rawProjections !== "object" || Array.isArray(rawProjections)
+    || (action !== "authorize_all" && action !== "decline_all")) return undefined;
+
+  const scopes = rawScopes.map((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return null;
+    const item = candidate as Record<string, unknown>;
+    return OPTIONAL_AUTHORIZATION_RECEIPT_SCOPES.some(([scope, policyVersion]) => item.scope === scope && item.policyVersion === policyVersion)
+      ? { scope: item.scope as string, policyVersion: item.policyVersion as string }
+      : null;
+  });
+  if (scopes.some((scope) => !scope)
+    || new Set(scopes.map((scope) => scope?.scope)).size !== OPTIONAL_AUTHORIZATION_RECEIPT_SCOPES.length
+    || !OPTIONAL_AUTHORIZATION_RECEIPT_EXCLUSIONS.every((exclusion) => rawExcluded.includes(exclusion))) return undefined;
+
+  const projectionSource = rawProjections as Record<string, unknown>;
+  const sharing = projectionSource.sharing;
+  const notifications = projectionSource.notifications;
+  if (!sharing || typeof sharing !== "object" || Array.isArray(sharing)
+    || !notifications || typeof notifications !== "object" || Array.isArray(notifications)) return undefined;
+  const expected = action === "authorize_all";
+  const sharingFields = ["enabledForFriends", "rounds", "achievements", "equipment", "courses"] as const;
+  const notificationFields = ["internal", "master", "push", "email", "rounds", "reminders"] as const;
+  const sharingSource = sharing as Record<string, unknown>;
+  const notificationSource = notifications as Record<string, unknown>;
+  if (projectionSource.profileVisibility !== (expected ? "public" : "private")
+    || projectionSource.socialPrivacy !== (expected ? "FRIENDS" : "PRIVATE")
+    || projectionSource.socialProfilePrivacy !== (expected ? "PUBLIC" : "PRIVATE")
+    || !sharingFields.every((field) => sharingSource[field] === expected)
+    || !notificationFields.every((field) => notificationSource[field] === expected)) return undefined;
+
+  return {
+    scopes,
+    excluded: [...OPTIONAL_AUTHORIZATION_RECEIPT_EXCLUSIONS],
+    projections: {
+      profileVisibility: projectionSource.profileVisibility,
+      socialPrivacy: projectionSource.socialPrivacy,
+      socialProfilePrivacy: projectionSource.socialProfilePrivacy,
+      sharing: Object.fromEntries(sharingFields.map((field) => [field, expected])),
+      notifications: Object.fromEntries(notificationFields.map((field) => [field, expected])),
+    },
+  };
+}
+
+function exportOptionalAuthorizationReceipts(source: AccountExportSource) {
+  if (!source.available) return { status: "unavailable" as const, truncated: false, records: [] as Record<string, unknown>[] };
+  const values = Array.isArray(source.data) ? source.data : source.data ? [source.data] : [];
+  const records = values.slice(0, ACCOUNT_DATA_EXPORT_LIMIT).map((value) => {
+    const receipt = project(value, OPTIONAL_AUTHORIZATION_RECEIPT_FIELDS);
+    if (!receipt || !value || typeof value !== "object" || Array.isArray(value)) return receipt;
+    const source = value as Record<string, unknown>;
+    const featureSet = projectOptionalAuthorizationFeatureSet(source.feature_set, source.action);
+    return featureSet ? { ...receipt, feature_set: featureSet } : receipt;
+  }).filter((value): value is Record<string, unknown> => Boolean(value));
+  return { status: "included" as const, truncated: values.length > ACCOUNT_DATA_EXPORT_LIMIT, records };
 }
 
 /**
@@ -228,19 +323,27 @@ export function buildLimitedAccountExport(input: {
   environment: AccountExportEnvironment;
   generatedAt?: string;
   profile: AccountExportSource;
+  socialProfile: AccountExportSource;
   preferences: AccountExportSource;
+  socialActivityPreferences: AccountExportSource;
   legalAcceptances: AccountExportSource;
   legalEvidence: AccountExportSource;
   aiProcessingConsents: AccountExportSource;
+  optionalAuthorizationEvents: AccountExportSource;
+  optionalAuthorizationReceipts: AccountExportSource;
 }) {
   return {
-    exportVersion: 2,
+    exportVersion: 3,
     generatedAt: input.generatedAt || new Date().toISOString(),
     account: { userId: input.userId, environment: input.environment },
     scope: {
       kind: "limited_account_copy",
       completeCloudExport: false,
-      included: ["profile", "preferences", "legal_acceptances", "legal_evidence", "ai_processing_consents"],
+      included: [
+        "profile", "social_profile", "preferences", "social_activity_preferences",
+        "legal_acceptances", "legal_evidence", "ai_processing_consents",
+        "optional_authorization_events", "optional_authorization_bundle_receipts",
+      ],
       omitted: [
         "authentication and session tokens",
         "secrets and provider credentials",
@@ -253,10 +356,14 @@ export function buildLimitedAccountExport(input: {
     },
     data: {
       profile: exportCollection(input.profile, PROFILE_FIELDS, 1),
+      socialProfile: exportCollection(input.socialProfile, SOCIAL_PROFILE_FIELDS, 1),
       preferences: exportCollection(input.preferences, PREFERENCE_FIELDS, 1),
+      socialActivityPreferences: exportCollection(input.socialActivityPreferences, SOCIAL_ACTIVITY_PREFERENCE_FIELDS, 1),
       legalAcceptances: exportCollection(input.legalAcceptances, LEGAL_ACCEPTANCE_FIELDS),
       legalEvidence: exportCollection(input.legalEvidence, LEGAL_EVIDENCE_FIELDS),
       aiProcessingConsents: exportCollection(input.aiProcessingConsents, AI_CONSENT_FIELDS),
+      optionalAuthorizationEvents: exportCollection(input.optionalAuthorizationEvents, OPTIONAL_AUTHORIZATION_EVENT_FIELDS),
+      optionalAuthorizationReceipts: exportOptionalAuthorizationReceipts(input.optionalAuthorizationReceipts),
     },
     note: "Esta es una copia técnica limitada de las fuentes enumeradas; no afirma ser una exportación completa de todos los datos en nube o del dispositivo. Para ejercer derechos ARCO escribe a privacidad@thebackyard.com.mx.",
   };

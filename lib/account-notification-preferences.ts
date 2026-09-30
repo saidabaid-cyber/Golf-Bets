@@ -21,8 +21,8 @@ export type AccountNotificationPreferenceResponse = {
 };
 
 export const DEFAULT_ACCOUNT_NOTIFICATION_PREFERENCES: AccountNotificationPreferences = {
-  // This is the legacy/unknown fallback, not the new-account product default.
-  // New accounts have explicit true values inserted server-side.
+  // Absence remains fail-closed. New accounts receive explicit OFF values;
+  // only the optional-authorization transaction changes them to ON.
   push: false,
   email: false,
   rounds: false,
@@ -94,7 +94,8 @@ export async function requestAccountNotificationPreferences(
 /** Migrates the former per-device preferences exactly once. A legacy database
  * row has NULL channel columns and is returned as initialized=false. Missing
  * local values stay OFF; explicit legacy true/false choices are sent unchanged.
- * New accounts never take this branch because Auth persisted all four values. */
+ * New accounts never take this branch because Auth persists all four OFF
+ * values until the explicit optional-authorization transaction runs. */
 export async function bootstrapAccountNotificationPreferences(
   accessToken: string,
   local: Omit<AccountNotificationPreferences, "updatedAt">,

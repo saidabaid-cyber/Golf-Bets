@@ -76,15 +76,21 @@ export async function PUT(request: NextRequest) {
     const body = await readJsonBodyWithLimit(request, 2_048);
     const preferences = body.ok ? parsePreferences(body.value) : null;
     if (!preferences) return json({ error: "Preferencias no válidas." }, 400);
-    const row = { user_id: account.userId, ...preferences, updated_at: new Date().toISOString() };
-    const { data, error } = await account.client.from("user_preferences").upsert(row, { onConflict: "user_id" })
-      .select(COLUMNS).abortSignal(AbortSignal.timeout(8_000)).maybeSingle();
+    // The RPC consumes any unresolved one-time onboarding offer and writes the
+    // four channel choices in the same database transaction. If the write
+    // fails, eligibility remains available for a safe retry.
+    const { data, error } = await account.client.rpc("set_my_notification_preferences_v1", {
+      requested_push: preferences.push_notifications_enabled,
+      requested_email: preferences.email_notifications_enabled,
+      requested_rounds: preferences.round_notifications_enabled,
+      requested_reminders: preferences.reminders_enabled,
+    }).abortSignal(AbortSignal.timeout(8_000));
     if (error || !data) return json({ error: "No pudimos guardar tus preferencias de notificaciones." }, 503);
-    const saved = response(data);
-    if (saved.preferences.push !== row.push_notifications_enabled
-      || saved.preferences.email !== row.email_notifications_enabled
-      || saved.preferences.rounds !== row.round_notifications_enabled
-      || saved.preferences.reminders !== row.reminders_enabled) {
+    const saved = response(data as Record<string, unknown>);
+    if (saved.preferences.push !== preferences.push_notifications_enabled
+      || saved.preferences.email !== preferences.email_notifications_enabled
+      || saved.preferences.rounds !== preferences.round_notifications_enabled
+      || saved.preferences.reminders !== preferences.reminders_enabled) {
       return json({ error: "No pudimos confirmar tus preferencias de notificaciones." }, 503);
     }
     return json(saved);

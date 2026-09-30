@@ -56,11 +56,30 @@ test("aplicar preferencias remotas no se convierte en nueva edición; HCP puede 
   const local = bundle({ preferences: { ...remote.preferences, defaultHandicap: 7, updatedAt: "2026-01-01" } });
   assert.equal(mergeLocalAndCloud(local, remote).preferences.defaultHandicap, null);
 });
-test("lectura cloud no infiere avisos ON cuando falta la fila legacy", async () => {
+test("lectura cloud genérica ignora la columna legacy de avisos", async () => {
   const db = new CloudDb();
   assert.equal((await readCloudBundle(db.client, "legacy-owner")).preferences.notificationsEnabled, false);
   db.rows("user_preferences").push({ user_id: "new-owner", notifications_enabled: true });
-  assert.equal((await readCloudBundle(db.client, "new-owner")).preferences.notificationsEnabled, true);
+  assert.equal((await readCloudBundle(db.client, "new-owner")).preferences.notificationsEnabled, false);
+});
+test("escritura cloud genérica preserva avisos canónicos y nunca crea esa proyección", async () => {
+  const existing = new CloudDb();
+  existing.rows("user_preferences").push({
+    user_id: "user-a",
+    high_contrast: true,
+    locale: "es-MX",
+    notifications_enabled: true,
+    default_handicap: null,
+    updated_at: earlier,
+  });
+  await write(existing, bundle({
+    preferences: { ...bundle().preferences, highContrast: false, notificationsEnabled: false, updatedAt: later },
+  }));
+  assert.equal(existing.rows("user_preferences")[0].notifications_enabled, true, "un cliente stale no revoca la decisión canónica");
+
+  const fresh = new CloudDb();
+  await write(fresh, bundle({ preferences: { ...bundle().preferences, notificationsEnabled: true, updatedAt: later } }));
+  assert.equal(Object.hasOwn(fresh.rows("user_preferences")[0], "notifications_enabled"), false);
 });
 test("histórico corregido gana sin duplicado y conserva foto/configuración/resultados", () => {
   const merged = mergeLocalAndCloud(bundle({ history: [round()] }), bundle({ history: [round(3, later)] }));
