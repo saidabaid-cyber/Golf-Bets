@@ -17,10 +17,13 @@ function text(value: unknown): string { if (Array.isArray(value)) return value.m
 
 function wizard(profileIndex: number | null = null, profileSource: handicap.BallFitHandicapSource | null = null, savedInput?: fitting.BallFitInput, persistedDraft?: { input: fitting.BallFitInput; step: number }) {
   const slots: unknown[] = []; let cursor = 0; const effects: (() => void)[] = [];
+  const scrollResetKeys: string[] = [];
   const storageValues = new Map<string, string>();
-  const storage = { getItem: (key: string) => storageValues.get(key) ?? null, setItem: (key: string, value: string) => { storageValues.set(key, value); }, removeItem: (key: string) => { storageValues.delete(key); } };
+  const storageWrites: string[] = [];
+  const storage = { getItem: (key: string) => storageValues.get(key) ?? null, setItem: (key: string, value: string) => { storageValues.set(key, value); storageWrites.push(value); }, removeItem: (key: string) => { storageValues.delete(key); } };
   if (persistedDraft) draft.saveBallFitDraft(storage, persistedDraft.input, persistedDraft.step, "2026-09-28T12:30:00.000Z");
   const sent: fitting.BallFitInput[] = [], saved: fitting.BallFitInput[] = [];
+  let cancelCount = 0;
   const exports: Record<string, (props: unknown) => Node> = {};
   const jsx = (type: unknown, props: Record<string, unknown>) => typeof type === "function" ? type(props) : { type, props };
   const react = {
@@ -37,7 +40,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     return { ok: true, json: async () => ({ provider: "internal-fixture", scope: { complete: true, activeCandidateCount: 1, evaluatedCandidateCount: 1, maximumCandidates: 2000 }, result, catalog }) };
   }, require: (name: string) => {
     if (name === "react") return react;
-    if (name === "./use-view-scroll-reset") return { useViewScrollReset() {} };
+    if (name === "./use-view-scroll-reset") return { useViewScrollReset(key: unknown) { react.useEffect(() => { scrollResetKeys.push(String(key)); }, [key]); } };
     if (name === "./numeric-capture-input") return { NumericCaptureInput: (props: Record<string, unknown>) => ({ type: "input", props }) };
     if (name === "./anchored-search") return {
       AnchoredSearch: (props: Record<string, unknown>) => ({ type: "anchored-search", props }),
@@ -61,11 +64,28 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
   } });
   let props = { userId: "flow-owner", defaultHandicap: profileIndex, defaultHandicapSource: profileSource, savedInput,
     profileDefaults: { trajectoryPreference: "MID", priorities: ["WEDGE_SPIN"] }, currentBall: null, catalog: golfBallCatalog,
-    onCancel() {}, onComplete(_result: fitting.BallFitResult, input: fitting.BallFitInput) { saved.push(input); } };
+    onCancel() { cancelCount += 1; }, onComplete(_result: fitting.BallFitResult, input: fitting.BallFitInput) { saved.push(input); } };
   let tree: Node;
   function render() { cursor = 0; tree = exports.BallFitWizard(props); effects.splice(0).forEach((effect) => effect()); return tree; }
   render(); render();
-  return { sent, saved, render, text: () => text(tree), applyLaunchSession(session: LaunchMonitorSession | null) {
+  return { sent, saved, scrollResetKeys, render, text: () => text(tree), cancelCount: () => cancelCount,
+    classCount(className: string) { return nodes(tree).filter((node) => String(node.props.className || "").split(/\s+/).includes(className)).length; },
+    ballVisualCount: () => nodes(tree).filter((node) => node.type === "ball-fit-ball").length,
+    progress() {
+      const track = nodes(tree).find((node) => node.props.className === "progressTrack"); assert.ok(track, "progress track");
+      return { label: track.props["aria-label"], active: nodes(track).filter((node) => node.type === "span" && node.props["data-active"] === true).length };
+    },
+    buttonProps(label: string) {
+      const button = nodes(tree).find((node) => node.type === "button" && text(node.props.children).trim().startsWith(label)); assert.ok(button, `button ${label}`);
+      return button.props;
+    },
+    clearStorageWrites() { storageWrites.length = 0; },
+    lastDraftWrite() {
+      const serialized = storageWrites.at(-1);
+      return serialized ? draft.normalizeBallFitDraft(JSON.parse(serialized), "flow-owner") : null;
+    },
+    draftStep: () => draft.loadBallFitDraft(storage, "flow-owner")?.step ?? null,
+    applyLaunchSession(session: LaunchMonitorSession | null) {
     let capture = nodes(tree).find((node) => node.type === "launch-capture"); assert.ok(capture, "launch capture");
     (capture.props.onChange as (value: LaunchMonitorSession | null) => void)(session); render();
     capture = nodes(tree).find((node) => node.type === "launch-capture"); assert.ok(capture, "launch capture after change");
@@ -91,6 +111,104 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     (field.props.onValueChange as (value: number) => void)(Number(value)); render();
   } };
 }
+
+const BALL_FIT_INTRO_COPY = /Encuentra la pelota ideal para tu juego|Balance en cada golpe|Llega más lejos|Juega con precisión|Siente la diferencia/;
+
+test("Ball Fit keeps the full hero on Step 1 and progressively discloses Steps 2 through 6", async () => {
+  const h = wizard(null, null);
+  const steps = [
+    { title: "Tu juego actual", progress: "17% del fitting" },
+    { title: "¿Cómo quieres continuar?", progress: "33% del fitting" },
+    { title: "Feel y vuelo", progress: "50% del fitting" },
+    { title: "Approach y green", progress: "67% del fitting" },
+    { title: "¿Qué quieres mejorar?", progress: "83% del fitting" },
+    { title: "Precio y color", progress: "100% del fitting" },
+  ];
+
+  for (const [index, expected] of steps.entries()) {
+    const copy = h.text();
+    assert.match(copy, new RegExp(`Paso ${index + 1} de 6`));
+    assert.match(copy, new RegExp(expected.title.replace(/[?]/g, "\\?")));
+    for (const [otherIndex, other] of steps.entries()) {
+      if (otherIndex !== index) assert.doesNotMatch(copy, new RegExp(other.title.replace(/[?]/g, "\\?")));
+    }
+    assert.match(copy, /Guardar y regresar/);
+    assert.deepEqual(h.progress(), { label: expected.progress, active: index + 1 });
+    assert.equal(h.classCount("ballFitLead"), index === 0 ? 1 : 0);
+    assert.equal(h.classCount("ballFitHero"), index === 0 ? 1 : 0);
+    assert.equal(h.classCount("fitPillars"), index === 0 ? 1 : 0);
+    if (index === 0) assert.equal(h.ballVisualCount(), 1);
+    if (index === 0) assert.match(copy, BALL_FIT_INTRO_COPY);
+    else assert.doesNotMatch(copy, BALL_FIT_INTRO_COPY);
+
+    if (index < steps.length - 1) {
+      assert.notEqual(h.buttonProps("Siguiente →").disabled, true);
+      await h.click("Siguiente →");
+      assert.equal(h.scrollResetKeys.at(-1), `${index + 1}:false:true:false`);
+    } else {
+      assert.match(copy, /Ver mi Top 3/);
+      assert.doesNotMatch(copy, /Siguiente →/);
+    }
+  }
+
+  await h.click("Ver mi Top 3");
+  assert.equal(h.scrollResetKeys.at(-1), "6:false:true:false");
+  assert.match(h.text(), /Tu mejor grupo de bolas/);
+  assert.doesNotMatch(h.text(), /Paso 7 de 6/);
+  assert.doesNotMatch(h.text(), BALL_FIT_INTRO_COPY);
+  assert.deepEqual(h.progress(), { label: "100% del fitting", active: 6 });
+
+  await h.click("← Anterior");
+  assert.equal(h.scrollResetKeys.at(-1), "5:false:true:false");
+  assert.match(h.text(), /Paso 6 de 6[\s\S]*Precio y color/);
+  assert.doesNotMatch(h.text(), BALL_FIT_INTRO_COPY);
+  for (let index = 4; index >= 0; index -= 1) {
+    await h.click("← Anterior");
+    assert.equal(h.scrollResetKeys.at(-1), `${index}:false:true:false`);
+    assert.match(h.text(), new RegExp(`Paso ${index + 1} de 6`));
+    assert.match(h.text(), new RegExp(steps[index].title.replace(/[?]/g, "\\?")));
+  }
+  assert.match(h.text(), BALL_FIT_INTRO_COPY);
+  assert.equal(h.buttonProps("← Anterior").disabled, true);
+});
+
+test("Ball Fit keeps save-and-return and resets scroll only when the displayed step changes", async () => {
+  const h = wizard(null, null);
+  const initialResetCount = h.scrollResetKeys.length;
+  await h.click("No conozco mi hándicap / Estoy empezando");
+  assert.equal(h.scrollResetKeys.length, initialResetCount, "answer edits must not reset the view");
+
+  await h.click("Siguiente →");
+  assert.equal(h.scrollResetKeys.at(-1), "1:false:true:false");
+  await h.click("Siguiente →");
+  await h.click("Siguiente →");
+  assert.equal(h.scrollResetKeys.at(-1), "3:false:true:false");
+  assert.match(h.text(), /Paso 4 de 6[\s\S]*Approach y green/);
+
+  await h.click("← Anterior");
+  assert.equal(h.scrollResetKeys.at(-1), "2:false:true:false");
+  assert.match(h.text(), /Paso 3 de 6[\s\S]*Feel y vuelo/);
+  await h.click("Siguiente →");
+  assert.equal(h.scrollResetKeys.at(-1), "3:false:true:false");
+
+  h.clearStorageWrites();
+  await h.click("Guardar y regresar");
+  assert.equal(h.cancelCount(), 1);
+  assert.equal(h.draftStep(), 3);
+  assert.equal(h.lastDraftWrite()?.step, 3);
+  assert.equal(h.lastDraftWrite()?.input.handicapSource, "UNKNOWN");
+});
+
+test("a persisted result sentinel resumes at compact Step 6 instead of showing Step 7", async () => {
+  const input = fitting.normalizeBallFitInput({ userId: "flow-owner", handicapSource: "UNKNOWN" });
+  assert.ok(input);
+  const h = wizard(null, null, undefined, { input, step: 6 });
+  assert.match(h.text(), /Tienes un fitting en progreso/);
+  await h.click("Reanudar fitting");
+  assert.match(h.text(), /Paso 6 de 6[\s\S]*Precio y color/);
+  assert.doesNotMatch(h.text(), /Paso 7 de 6/);
+  assert.doesNotMatch(h.text(), BALL_FIT_INTRO_COPY);
+});
 
 for (const mode of ["MANUAL", "UNKNOWN", "BACKYARD"] as const) test(`wizard actual handlers complete ${mode} fitting without overwriting profile or inventing zero`, async () => {
   const h = wizard(mode === "BACKYARD" ? 7.2 : null, mode === "BACKYARD" ? "BACKYARD" : null);

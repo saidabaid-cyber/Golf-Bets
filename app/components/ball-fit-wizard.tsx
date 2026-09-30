@@ -140,6 +140,17 @@ function OptionGrid<T extends string>({ values, labels, selected, onSelect }: {
   return <div className={styles.optionGrid}>{values.map((value) => <button key={value} type="button" className={`${styles.optionButton} ${selected === value ? styles.selected : ""}`} aria-pressed={selected === value} onClick={() => onSelect(value)}>{labels[value]}</button>)}</div>;
 }
 
+function BallFitIntroHero({ currentBall }: { currentBall: PlayerBall | null }) {
+  return <>
+    <div className={styles.ballFitLead}><h3>Encuentra la pelota ideal para tu juego</h3><p>Analizamos tu forma de jugar para recomendarte el tipo de bola que mejor se adapta a ti.</p></div>
+    <div className={styles.ballFitHero}>
+      <span className={styles.ballFitOrb}><BallFitBallVisual /></span>
+      <div><small>{currentBall ? "TU BOLA ACTUAL" : "PERFIL DE BOLA"}</small><b>{currentBall ? `${currentBall.ballBrand} ${currentBall.ballModel}` : "Balance en cada golpe"}</b><p>{currentBall ? [currentBall.generation, currentBall.year].filter(Boolean).join(" · ") || "Modelo guardado" : "El equilibrio ideal entre distancia, control y sensación."}</p></div>
+    </div>
+    <div className={styles.fitPillars}><span><BackyardIcon name="arrow" size={22} /><b>Distancia</b><small>Llega más lejos</small></span><span><BackyardIcon name="approach" size={22} /><b>Control</b><small>Juega con precisión</small></span><span><BackyardIcon name="ball" size={22} /><b>Sensación</b><small>Siente la diferencia</small></span></div>
+  </>;
+}
+
 type BallFitWizardProps = {
   userId: string;
   accessToken?: string | null;
@@ -374,12 +385,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   return <div className={styles.wizard}>
     <div className={styles.wizardHeader}><div><div className="eyebrow">THE BACKYARD BALL FIT</div><h2>{result ? "Tu mejor grupo de bolas" : `Paso ${step + 1} de 6`}</h2><p>{result ? "Recomendaciones según tus preferencias" : "2–4 minutos · puedes guardar y regresar"}</p></div><button type="button" className="textButton" onClick={saveAndClose}>Guardar y regresar</button></div>
     <div className={styles.progressTrack} aria-label={`${progress}% del fitting`}>{[0, 1, 2, 3, 4, 5].map((item) => <span key={item} data-active={result !== null || item <= step} />)}</div>
-    {!result && <div className={styles.ballFitLead}><h3>Encuentra la pelota ideal para tu juego</h3><p>Analizamos tu forma de jugar para recomendarte el tipo de bola que mejor se adapta a ti.</p></div>}
-    <div className={styles.ballFitHero}>
-      <span className={styles.ballFitOrb}><BallFitBallVisual /></span>
-      <div><small>{currentBall ? "TU BOLA ACTUAL" : "PERFIL DE BOLA"}</small><b>{currentBall ? `${currentBall.ballBrand} ${currentBall.ballModel}` : "Balance en cada golpe"}</b><p>{currentBall ? [currentBall.generation, currentBall.year].filter(Boolean).join(" · ") || "Modelo guardado" : "El equilibrio ideal entre distancia, control y sensación."}</p></div>
-    </div>
-    {!result && <div className={styles.fitPillars}><span><BackyardIcon name="arrow" size={22} /><b>Distancia</b><small>Llega más lejos</small></span><span><BackyardIcon name="approach" size={22} /><b>Control</b><small>Juega con precisión</small></span><span><BackyardIcon name="ball" size={22} /><b>Sensación</b><small>Siente la diferencia</small></span></div>}
+    {!result && step === 0 && <BallFitIntroHero currentBall={currentBall} />}
 
     {!result && step === 0 && <section className={styles.questionBlock}>
       <h3>Tu juego actual</h3>
