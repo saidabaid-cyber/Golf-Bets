@@ -40,3 +40,29 @@ export function profileCompletion(input: { displayName?: string | null; givenNam
  return { version: 2 as const, percent: Math.round(100 * required.filter(section => section.complete).length / REQUIRED_COMPLETION_SECTIONS.length), sections };
 }
 export type ProfileCompletion = ReturnType<typeof profileCompletion>;
+
+/** Apply the locally-confirmed equipment aggregate to an otherwise canonical
+ * server completion response. Only equipment-owned sections are replaced;
+ * identity, golf and handicap facts remain server-authoritative. */
+export function profileCompletionWithEquipment(progress: ProfileCompletion, equipment: EquipmentProfile): ProfileCompletion {
+ const facts: Record<"equipment" | "ball" | "fitting", boolean> = {
+  equipment: equipment.clubs.length > 0,
+  ball: equipment.balls.some((ball) => ball.isCurrent) || equipment.ballPreference === "NO_FIXED_BALL",
+  fitting: Boolean(equipment.lastBallFit),
+ };
+ const sections = progress.sections.map((section) => {
+  if (section.id !== "equipment" && section.id !== "ball" && section.id !== "fitting") return section;
+  const complete = facts[section.id];
+  return {
+   ...section,
+   complete,
+   status: complete ? "Completo" : section.id === "fitting" ? "Opcional" : "Falta completar",
+  };
+ });
+ const required = sections.filter((section) => !section.optional);
+ return {
+  ...progress,
+  percent: Math.round(100 * required.filter((section) => section.complete).length / REQUIRED_COMPLETION_SECTIONS.length),
+  sections,
+ };
+}

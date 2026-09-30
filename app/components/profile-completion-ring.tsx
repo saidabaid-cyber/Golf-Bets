@@ -1,17 +1,22 @@
 "use client";
 
-import { useCallback, useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
-import type { CompletionChoices, CompletionSection, ProfileCompletion } from "../../lib/profile-completion";
+import { profileCompletionWithEquipment, type CompletionChoices, type CompletionSection, type ProfileCompletion } from "../../lib/profile-completion";
+import { completionEquipmentOverride, type CompletionEquipmentRevision } from "../../lib/profile-completion-client";
+import { EQUIPMENT_PROFILE_UPDATED_EVENT, type EquipmentProfileUpdatedDetail } from "../../lib/equipment-profile-events";
+import { equipmentProfileStorageKey } from "../../lib/golf-equipment";
+import { equipmentSyncStateStorageKey } from "../../lib/equipment-offline-store";
 import { socialErrorMessage, socialRequest } from "../../lib/social-activity-client";
 import { ModalShell } from "./modal-shell";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import styles from "./profile-completion-ring.module.css";
 
-type Result = { choices: CompletionChoices; progress: ProfileCompletion };
+type Result = { choices: CompletionChoices; progress: ProfileCompletion; equipmentRevision: CompletionEquipmentRevision };
 
-export function ProfileCompletionRing({ token, avatar, name, revision, onOpen }: {
+export function ProfileCompletionRing({ token, userId, avatar, name, revision, onOpen }: {
   token?: string | null;
+  userId: string;
   avatar: string;
   name: string;
   revision: string;
@@ -20,25 +25,62 @@ export function ProfileCompletionRing({ token, avatar, name, revision, onOpen }:
   const [result, setResult] = useState<Result | null>(null);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
+  const requestGeneration = useRef(0);
+
+  const applyLocalEquipment = useCallback(() => {
+    setResult((current) => {
+      if (!current) return current;
+      const local = completionEquipmentOverride(localStorage, userId, current.equipmentRevision);
+      return local ? {
+        ...current,
+        progress: profileCompletionWithEquipment(current.progress, local),
+      } : current;
+    });
+  }, [userId]);
 
   const refresh = useCallback(async (signal?: AbortSignal) => {
     if (!token) return;
+    const generation = requestGeneration.current + 1;
+    requestGeneration.current = generation;
     try {
       const value = await socialRequest<Result>("/api/account/completion", token, { signal });
-      if (!signal?.aborted) {
-        setResult(value);
+      if (!signal?.aborted && requestGeneration.current === generation) {
+        const localEquipment = completionEquipmentOverride(localStorage, userId, value.equipmentRevision);
+        setResult(localEquipment ? { ...value, progress: profileCompletionWithEquipment(value.progress, localEquipment) } : value);
         setError("");
       }
     } catch (caught) {
-      if (!signal?.aborted) setError(socialErrorMessage(caught));
+      if (!signal?.aborted && requestGeneration.current === generation) setError(socialErrorMessage(caught));
     }
-  }, [token]);
+  }, [token, userId]);
 
   useEffect(() => {
     const controller = new AbortController();
     void refresh(controller.signal);
     return () => controller.abort();
   }, [refresh, revision]);
+
+  useEffect(() => {
+    const profileKey = equipmentProfileStorageKey(userId);
+    const syncKey = equipmentSyncStateStorageKey(userId);
+    const onEquipmentUpdated = (event: Event) => {
+      const detail = (event as CustomEvent<EquipmentProfileUpdatedDetail>).detail;
+      if (detail?.userId !== userId) return;
+      applyLocalEquipment();
+      void refresh();
+    };
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== profileKey && event.key !== syncKey) return;
+      applyLocalEquipment();
+      void refresh();
+    };
+    window.addEventListener(EQUIPMENT_PROFILE_UPDATED_EVENT, onEquipmentUpdated);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      window.removeEventListener(EQUIPMENT_PROFILE_UPDATED_EVENT, onEquipmentUpdated);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, [applyLocalEquipment, refresh, userId]);
 
   const percent = result?.progress.percent ?? 0;
   return <>

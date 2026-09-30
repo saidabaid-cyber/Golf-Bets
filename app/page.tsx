@@ -3660,7 +3660,7 @@ function GolfBetsApp() {
       displayName={identity.displayName}
       username={identity.username}
       avatarUrl={identity.avatarUrl}
-      profileCompletion={identity.mode === 'authenticated' ? <ProfileCompletionRing token={identity.accessToken} avatar={identity.avatarUrl} name={identity.displayName} revision={JSON.stringify(identity)} onOpen={section => { setProfileCompletionTarget(section); setProfileFocus(section === 'equipment' || section === 'ball' || section === 'fitting' ? 'equipment' : 'profile'); setTab('profile'); }} /> : undefined}
+      profileCompletion={identity.mode === 'authenticated' ? <ProfileCompletionRing token={identity.accessToken} userId={identity.userId} avatar={identity.avatarUrl} name={identity.displayName} revision={JSON.stringify(identity)} onOpen={section => { setProfileCompletionTarget(section); setProfileFocus(section === 'equipment' || section === 'ball' || section === 'fitting' ? 'equipment' : 'profile'); setTab('profile'); }} /> : undefined}
       onEditActiveRound={() => { setEditingRound(true); setTab('setup'); }}
       onCancelActiveRound={() => { setNewRoundBackupError(''); setShowDeleteRoundConfirm(true); }}
       activeRound={activeRoundSummary?.status === "setup" ? null : activeRoundSummary}

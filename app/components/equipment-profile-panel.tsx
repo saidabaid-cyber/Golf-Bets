@@ -15,6 +15,7 @@ import {
   replaceCurrentPlayerClub,
   setBallOnboardingStatus,
   setBallPreference,
+  setCatalogBallAsCurrent,
   setCurrentPlayerBall,
   setEquipmentOnboardingStatus,
   setLastBallFit,
@@ -30,7 +31,7 @@ import {
   type PlayerClub,
   type PlayerClubDistance,
 } from "../../lib/golf-equipment";
-import { BallFitResults, BallFitWizard } from "./ball-fit-wizard";
+import { BallFitResults, BallFitWizard, type BallFitCompletionChoice } from "./ball-fit-wizard";
 import { CatalogProductMedia } from "./catalog-product-media";
 import { BallEditor, CLUB_CATEGORY_ICONS, CLUB_CATEGORY_LABELS, ClubDistanceEditor, ClubEditor } from "./equipment-editors";
 import { equipmentStatusLabel, useEquipmentProfile } from "./use-equipment-profile";
@@ -96,6 +97,10 @@ function clubFacts(playerClub: PlayerClub, shafts: readonly GolfShaftCatalog[]) 
 
 function savedFitId() {
   return globalThis.crypto?.randomUUID?.() || `fit-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function playerBallId() {
+  return globalThis.crypto?.randomUUID?.() || `ball-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function savedClubLabel(club: PlayerClub) {
@@ -248,6 +253,11 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     return saved;
   }
 
+  function selectFitCurrentBall(ball: GolfBallCatalog) {
+    const now = new Date().toISOString();
+    return update((current) => setCatalogBallAsCurrent(current, ball, playerBallId(), now));
+  }
+
   function deleteBall(ball: PlayerBall) {
     setDeleteIntent({ kind: "ball", ball, name: `${ball.ballBrand} ${ball.ballModel}` });
   }
@@ -266,11 +276,22 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     }
   }
 
-  function completeFit(result: BallFitResult, input: BallFitInput) {
+  function completeFit(result: BallFitResult, input: BallFitInput, choice: BallFitCompletionChoice) {
     const now = new Date().toISOString();
-    const summary = toEquipmentBallFitSummary(result, savedFitId(), now, input);
-    if (!summary) return false;
-    const saved = update((current) => setLastBallFit(current, summary, now));
+    const saved = update((current) => {
+      const currentAtFit = current.balls.find((ball) => ball.isCurrent) || null;
+      const selection = choice ? {
+        selectionAction: choice.action,
+        selectedCatalogBallId: choice.action === "RECOMMENDATION" ? choice.ball.id : currentAtFit?.catalogBallId || null,
+        currentBallAtFitId: currentAtFit?.id || null,
+      } as const : null;
+      const summary = toEquipmentBallFitSummary(result, savedFitId(), now, input, selection);
+      if (!summary) return null;
+      const withChoice = choice?.action === "RECOMMENDATION"
+        ? setCatalogBallAsCurrent(current, choice.ball, playerBallId(), now)
+        : current;
+      return withChoice ? setLastBallFit(withChoice, summary, now) : null;
+    });
     if (saved) setFitOpen(false);
     return saved;
   }
@@ -284,7 +305,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     }
   }
 
-  if (fitOpen) return <div className={styles.fullPageFlow} data-equipment-screen="ball-fit"><section className={styles.editorPage}><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} savedInput={restoredFit?.input} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setFitOpen(false)} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>;
+  if (fitOpen) return <div className={styles.fullPageFlow} data-equipment-screen="ball-fit"><section className={styles.editorPage}><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} savedInput={restoredFit?.input} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setFitOpen(false)} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>;
   if (savedFitOpen && profile.lastBallFit) return <div className={styles.fullPageFlow} data-equipment-screen="saved-ball-fit"><section className={styles.editorPage}><button type="button" className={styles.pageBack} onClick={() => setSavedFitOpen(false)}>← Volver a Mi Bolsa</button><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2>{restoredFit && <p>{BALL_FIT_HANDICAP_LABELS[restoredFit.input.handicapSource || "UNKNOWN"]}{restoredFit.input.handicap === null ? "" : `: ${restoredFit.input.handicap}`}</p>}</div></div>{restoredFit ? <BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /> : <SavedBallFitComparison summary={profile.lastBallFit} catalog={ballCatalog.items} currentBall={currentBall} />}</section></div>;
   if (clubEditor) return <div className={styles.fullPageFlow} data-equipment-screen="club-editor">
     <ClubEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} existing={clubEditor === "new" ? null : clubEditor} initialCategory={clubEditor === "new" ? newClubCategory || undefined : undefined} defaultHandedness={defaultHandedness} presentation="page" onSelectBall={() => { setClubEditor(null); setNewClubCategory(null); setBallEditor("new"); }} onCancel={() => { setClubEditor(null); setNewClubCategory(null); }} onSave={saveClub} />

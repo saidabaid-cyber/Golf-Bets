@@ -71,7 +71,7 @@ test("equipment and Ball Fit use owned premium product art with selected and emp
   assert.match(panel, /EQUIPMENT_CATEGORY_ASSETS/);
   assert.match(panel, /CanonicalCategoryImage/);
   assert.match(wizard, /BallFitBallVisual/);
-  assert.equal((wizard.match(/<BallFitBallVisual \/>/g) || []).length, 2, "Ball Fit reutiliza una sola pelota aprobada");
+  assert.equal((wizard.match(/<BallFitBallVisual \/>/g) || []).length, 3, "Ball Fit reutiliza la pelota aprobada también para conservar la bola actual");
   assert.match(visuals, /export function BallFitBallVisual/);
   assert.match(visuals, /data-ball-fit-ball="approved"/);
   assert.match(visualCss, /\.ballFitBallBranding \{[^}]*left:50%;top:50%/);

@@ -53,6 +53,7 @@ test("window online uploads the durable offline equipment edit and acknowledges 
     },
   };
   const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const published: golfEquipment.EquipmentProfile[] = [];
   const fetcher: typeof fetch = async (input, init) => {
     const url = String(input);
     calls.push({ url, init });
@@ -126,6 +127,11 @@ test("window online uploads the durable offline equipment edit and acknowledges 
           options: Parameters<typeof equipmentSync.uploadEquipmentProfile>[2],
         ) => equipmentSync.uploadEquipmentProfile(profile, accessToken, options, fetcher),
       };
+      if (name.endsWith("/equipment-profile-events")) return {
+        publishEquipmentProfileUpdated(profile: golfEquipment.EquipmentProfile) {
+          published.push(profile);
+        },
+      };
       throw new Error(`unexpected_require:${name}`);
     },
   });
@@ -162,6 +168,7 @@ test("window online uploads the durable offline equipment edit and acknowledges 
   const uploaded = JSON.parse(String(put.init?.body)) as { mutationId: string; profile: golfEquipment.EquipmentProfile };
   assert.equal(uploaded.mutationId, queued.mutationId);
   assert.equal(uploaded.profile.equipmentOnboarding, "COMPLETED");
+  assert.ok(published.some((profile) => profile.equipmentOnboarding === "COMPLETED"));
   const acknowledged = equipmentOfflineStore.readEquipmentSyncState(storage, USER_ID);
   assert.equal(acknowledged.base?.lastMutationId, queued.mutationId);
   assert.equal(acknowledged.base?.version, 1);

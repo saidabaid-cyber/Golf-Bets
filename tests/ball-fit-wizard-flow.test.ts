@@ -15,7 +15,7 @@ type Node = { type: unknown; props: Record<string, unknown> };
 function nodes(value: unknown): Node[] { if (Array.isArray(value)) return value.flatMap(nodes); if (!value || typeof value !== "object" || !("props" in value)) return []; const node = value as Node; return [node, ...nodes(node.props.children)]; }
 function text(value: unknown): string { if (Array.isArray(value)) return value.map(text).join(" "); if (value && typeof value === "object") return text((value as Node).props?.children); return typeof value === "string" || typeof value === "number" ? String(value) : ""; }
 
-function wizard(profileIndex: number | null = null, profileSource: handicap.BallFitHandicapSource | null = null, savedInput?: fitting.BallFitInput, persistedDraft?: { input: fitting.BallFitInput; step: number }) {
+function wizard(profileIndex: number | null = null, profileSource: handicap.BallFitHandicapSource | null = null, savedInput?: fitting.BallFitInput, persistedDraft?: { input: fitting.BallFitInput; step: number }, currentBall: equipment.PlayerBall | null = null) {
   const slots: unknown[] = []; let cursor = 0; const effects: (() => void)[] = [];
   const scrollResetKeys: string[] = [];
   const storageValues = new Map<string, string>();
@@ -23,6 +23,8 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
   const storage = { getItem: (key: string) => storageValues.get(key) ?? null, setItem: (key: string, value: string) => { storageValues.set(key, value); storageWrites.push(value); }, removeItem: (key: string) => { storageValues.delete(key); } };
   if (persistedDraft) draft.saveBallFitDraft(storage, persistedDraft.input, persistedDraft.step, "2026-09-28T12:30:00.000Z");
   const sent: fitting.BallFitInput[] = [], saved: fitting.BallFitInput[] = [];
+  const currentSelections: equipment.GolfBallCatalog[] = [];
+  const savedChoices: unknown[] = [];
   let cancelCount = 0;
   const exports: Record<string, (props: unknown) => Node> = {};
   const jsx = (type: unknown, props: Record<string, unknown>) => typeof type === "function" ? type(props) : { type, props };
@@ -63,12 +65,12 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
     throw new Error(name);
   } });
   let props = { userId: "flow-owner", defaultHandicap: profileIndex, defaultHandicapSource: profileSource, savedInput,
-    profileDefaults: { trajectoryPreference: "MID", priorities: ["WEDGE_SPIN"] }, currentBall: null, catalog: golfBallCatalog,
-    onCancel() { cancelCount += 1; }, onComplete(_result: fitting.BallFitResult, input: fitting.BallFitInput) { saved.push(input); } };
+    profileDefaults: { trajectoryPreference: "MID", priorities: ["WEDGE_SPIN"] }, currentBall, catalog: golfBallCatalog,
+    onCancel() { cancelCount += 1; }, onCurrentBallSelect(ball: equipment.GolfBallCatalog) { currentSelections.push(ball); }, onComplete(_result: fitting.BallFitResult, input: fitting.BallFitInput, choice: unknown) { saved.push(input); savedChoices.push(choice); } };
   let tree: Node;
   function render() { cursor = 0; tree = exports.BallFitWizard(props); effects.splice(0).forEach((effect) => effect()); return tree; }
   render(); render();
-  return { sent, saved, scrollResetKeys, render, text: () => text(tree), cancelCount: () => cancelCount,
+  return { sent, saved, savedChoices, currentSelections, scrollResetKeys, render, text: () => text(tree), cancelCount: () => cancelCount,
     classCount(className: string) { return nodes(tree).filter((node) => String(node.props.className || "").split(/\s+/).includes(className)).length; },
     ballVisualCount: () => nodes(tree).filter((node) => node.type === "ball-fit-ball").length,
     progress() {
@@ -103,6 +105,13 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
   }, updateAccountIndex(value: number | null, source: handicap.BallFitHandicapSource | null) {
     props = { ...props, defaultHandicap: value, defaultHandicapSource: source };
     render();
+  }, selectRadio(label: string) {
+    const radio = nodes(tree).find((node) => node.type === "input" && node.props.type === "radio" && node.props["aria-label"] === label); assert.ok(radio, label);
+    (radio.props.onChange as () => void)(); render();
+  }, checkedRadios() {
+    return nodes(tree).filter((node) => node.type === "input" && node.props.type === "radio" && node.props.checked === true).map((node) => node.props["aria-label"]);
+  }, radioLabels() {
+    return nodes(tree).filter((node) => node.type === "input" && node.props.type === "radio").map((node) => String(node.props["aria-label"]));
   }, async click(label: string) {
     const button = nodes(tree).find((node) => node.type === "button" && text(node.props.children).trim().startsWith(label)); assert.ok(button, `button ${label}`);
     assert.notEqual(button.props.disabled, true); await (button.props.onClick as () => unknown)(); render();
@@ -210,6 +219,23 @@ test("a persisted result sentinel resumes at compact Step 6 instead of showing S
   assert.doesNotMatch(h.text(), BALL_FIT_INTRO_COPY);
 });
 
+test("resuming a legacy draft reconciles its selected comparison ball into Equipment", async () => {
+  const selected = golfBallCatalog.find((ball) => ball.active)!;
+  const input = fitting.normalizeBallFitInput({
+    userId: "flow-owner",
+    handicapSource: "UNKNOWN",
+    currentBallId: selected.id,
+  });
+  assert.ok(input);
+  const h = wizard(null, null, undefined, { input, step: 5 });
+
+  await h.click("Reanudar fitting");
+
+  assert.equal(h.currentSelections.length, 1);
+  assert.equal(h.currentSelections[0].id, selected.id);
+  assert.match(h.text(), /Paso 6 de 6[\s\S]*Precio y color/);
+});
+
 for (const mode of ["MANUAL", "UNKNOWN", "BACKYARD"] as const) test(`wizard actual handlers complete ${mode} fitting without overwriting profile or inventing zero`, async () => {
   const h = wizard(mode === "BACKYARD" ? 7.2 : null, mode === "BACKYARD" ? "BACKYARD" : null);
   if (mode === "MANUAL") {
@@ -221,7 +247,7 @@ for (const mode of ["MANUAL", "UNKNOWN", "BACKYARD"] as const) test(`wizard actu
   await h.click("Ver mi Top 3");
   assert.equal(h.sent.length, 1); assert.equal(h.sent[0].handicapSource, mode);
   assert.equal(h.sent[0].handicap, mode === "MANUAL" ? 21.3 : mode === "BACKYARD" ? 7.2 : null);
-  await h.click("Guardar resultado");
+  await h.click("Guardar elección y terminar");
   assert.equal(h.saved[0].handicapSource, mode); assert.equal(h.saved[0].userId, "flow-owner");
 });
 
@@ -232,7 +258,7 @@ test("Actualizar fit restores saved answers, edits them independently, and prese
   h.changeNumber("95", 40); await h.click("Siguiente →");
   assert.equal(h.number(50), 245);
   for (let index = 0; index < 4; index++) await h.click("Siguiente →");
-  await h.click("Ver mi Top 3"); await h.click("Guardar resultado");
+  await h.click("Ver mi Top 3"); await h.click("Guardar elección y terminar");
   assert.equal(h.saved[0].typicalScore, 95); assert.equal(h.saved[0].driverDistanceYards, 245);
   assert.equal(h.saved[0].swingSpeedBand, "UNKNOWN"); assert.equal(h.saved[0].handicapSource, "MANUAL");
   assert.equal(previous.typicalScore, 82);
@@ -642,9 +668,11 @@ test("selecting a catalog ball saves its canonical id, closes results and keeps 
   const label = "Seleccionar Titleist Pro V1x Left Dash";
   assert.equal(h.catalogOptionCount(label), 1);
   h.selectCatalogBall(label);
+  assert.equal(h.currentSelections.length, 1);
+  assert.equal(h.currentSelections[0].id, golfBallCatalog.find((ball) => ball.brand === "Titleist" && ball.model === "Pro V1x Left Dash")?.id);
   assert.equal(h.search().expanded, false);
   assert.equal(h.search().value, "Titleist Pro V1x Left Dash");
-  assert.match(h.text(), /✓ Seleccionada:\s*Titleist\s+Pro V1x Left Dash/);
+  assert.match(String(h.search().status), /✓ Seleccionada:\s*Titleist\s+Pro V1x Left Dash/);
   assert.match(h.text(), /2025/);
   assert.doesNotMatch(h.text(), /2025 · 2025|Generación sin dato publicado/);
   h.focusSearch();
@@ -654,4 +682,54 @@ test("selecting a catalog ball saves its canonical id, closes results and keeps 
   const canonical = golfBallCatalog.find((ball) => ball.brand === "Titleist" && ball.model === "Pro V1x Left Dash");
   assert.ok(canonical);
   assert.equal(h.sent[0].currentBallId, canonical.id);
+});
+
+test("No comparar changes only fitting input and never clears the saved current ball", async () => {
+  const h = wizard(null, null);
+  for (let index = 0; index < 5; index++) await h.click("Siguiente →");
+  h.focusSearch();
+  h.selectCatalogBall("Seleccionar Titleist Pro V1x Left Dash");
+  assert.equal(h.currentSelections.length, 1);
+  h.focusSearch();
+  h.selectCatalogBall("No comparar con una bola");
+  assert.equal(h.currentSelections.length, 1, "No comparar must not call profile persistence");
+  await h.click("Ver mi Top 3");
+  assert.equal(h.sent[0].currentBallId, null);
+});
+
+test("Top 3 is a single accessible choice and defaults to keeping the current ball", async () => {
+  const catalogBall = golfBallCatalog.find((ball) => ball.active)!;
+  const currentBall: equipment.PlayerBall = {
+    id: "current-player-ball", userId: "flow-owner", catalogBallId: catalogBall.id,
+    ballBrand: catalogBall.brand, ballModel: catalogBall.model, generation: catalogBall.generation,
+    year: catalogBall.year, color: null, notes: null, isCurrent: true,
+    startedUsingAt: "2026-09-29T12:00:00.000Z", stoppedUsingAt: null,
+    createdAt: "2026-09-29T12:00:00.000Z", updatedAt: "2026-09-29T12:00:00.000Z",
+  };
+  const keep = wizard(null, null, undefined, undefined, currentBall);
+  for (let index = 0; index < 5; index++) await keep.click("Siguiente →");
+  await keep.click("Ver mi Top 3");
+  assert.deepEqual(keep.checkedRadios(), ["Conservar mi bola actual"]);
+  assert.equal(keep.radioLabels().filter((label) => label.startsWith("Elegir ")).length, 3);
+  await keep.click("Guardar elección y terminar");
+  assert.equal((keep.savedChoices[0] as { action: string }).action, "KEEP_CURRENT");
+
+  const recommendation = wizard(null, null, undefined, undefined, currentBall);
+  for (let index = 0; index < 5; index++) await recommendation.click("Siguiente →");
+  await recommendation.click("Ver mi Top 3");
+  const recommendationLabel = recommendation.radioLabels().find((label) => label.startsWith("Elegir "))!;
+  recommendation.selectRadio(recommendationLabel);
+  assert.deepEqual(recommendation.checkedRadios(), [recommendationLabel]);
+  await recommendation.click("Guardar elección y terminar");
+  assert.equal((recommendation.savedChoices[0] as { action: string }).action, "RECOMMENDATION");
+});
+
+test("a fitting without a current ball keeps the existing optional finish behavior", async () => {
+  const h = wizard(null, null);
+  for (let index = 0; index < 5; index++) await h.click("Siguiente →");
+  await h.click("Ver mi Top 3");
+  assert.deepEqual(h.checkedRadios(), []);
+  assert.doesNotMatch(h.text(), /Conservar mi bola actual/);
+  await h.click("Guardar elección y terminar");
+  assert.equal(h.savedChoices[0], null);
 });

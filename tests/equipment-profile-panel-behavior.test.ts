@@ -4,6 +4,9 @@ import { runInNewContext } from "node:vm";
 import test from "node:test";
 import ts from "typescript";
 
+import * as ballFitting from "../lib/ball-fitting";
+import * as golfEquipment from "../lib/golf-equipment";
+
 type Node = { type: unknown; props: Record<string, unknown> };
 
 function nodes(value: unknown): Node[] {
@@ -34,28 +37,96 @@ const equipmentAssets = Object.fromEntries(bagSections.flatMap((section) => sect
   src: `/approved/${category.toLowerCase()}.png`, width: 1006, height: 412,
 }])));
 
+function catalogBall(id: string, brand: string, model: string): golfEquipment.GolfBallCatalog {
+  return {
+    id,
+    aliases: [],
+    brand,
+    model,
+    generation: "2026",
+    year: 2026,
+    active: true,
+    bagEligible: true,
+    fitEligible: true,
+    coverMaterial: "Urethane",
+    construction: "3-piece",
+    constructionPieces: 3,
+    compression: null,
+    compressionType: "UNKNOWN",
+    compressionSource: null,
+    compressionSourceUrl: null,
+    flight: "MID",
+    driverSpin: "LOW",
+    ironSpin: "HIGH",
+    shortGameSpin: "HIGH",
+    feel: "LOW",
+    colors: ["White"],
+    priceTier: "PREMIUM",
+    targetProfile: ["Control"],
+    officialUrl: `https://example.com/${id}`,
+    sourceName: "Fabricante",
+    sourceUrl: `https://example.com/${id}`,
+    sourceType: "OFFICIAL",
+    confidence: "HIGH",
+    license: null,
+    provenance: [],
+    verifiedAt: "2026-09-01T00:00:00.000Z",
+    createdAt: "2026-09-01T00:00:00.000Z",
+    updatedAt: "2026-09-01T00:00:00.000Z",
+  };
+}
+
+function fitInput(currentBallId = "ball-current"): ballFitting.BallFitInput {
+  return {
+    userId: "owner",
+    currentBallId,
+    handicap: 12.4,
+    typicalScore: 86,
+    driverDistanceYards: 245,
+    swingSpeedBand: "FROM_95_TO_105",
+    feelPreference: "SOFT",
+    trajectoryPreference: "MID",
+    greenFirmness: "FIRM",
+    priorities: ["STOP_ON_GREEN", "WEDGE_SPIN", "LESS_DRIVER_SPIN"],
+    approachBehavior: "ROLLS_TOO_MUCH",
+    wantsGreensideSpin: "YES",
+    pricePreference: "PREMIUM",
+    colorPreference: "WHITE",
+    launchMonitorSession: null,
+  };
+}
+
 function harness() {
   const slots: unknown[] = [];
   let cursor = 0;
-  const currentClub = {
+  const currentClub: golfEquipment.PlayerClub = {
     id: "club-driver", userId: "owner", category: "DRIVER", catalogClubId: "catalog-driver", customBrand: "Ping", customModel: "G430",
     generation: "2025", year: 2025, loft: 10.5, handedness: "RH", shaftId: null, customShaftBrand: null, customShaftModel: null,
     customShaft: null, flex: null, shaftFlexLabel: null, shaftWeightGrams: null, lengthInches: null, lieDegrees: null, grip: null,
-    notes: null, setComposition: [], isCurrent: true, createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:00:00.000Z",
+    notes: null, setComposition: [], isCurrent: true, startedUsingAt: "2026-09-28T10:00:00.000Z", stoppedUsingAt: null,
+    createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:00:00.000Z",
   };
-  const currentClubs = [
+  const currentClubs: golfEquipment.PlayerClub[] = [
     currentClub,
     { ...currentClub, id: "club-woods", category: "FAIRWAY_WOOD", catalogClubId: "catalog-woods", customBrand: "Cleveland", customModel: "Launcher DST" },
     { ...currentClub, id: "club-hybrid", category: "HYBRID", catalogClubId: "catalog-hybrid", customBrand: "Callaway", customModel: "Quantum Hybrid" },
     { ...currentClub, id: "club-irons", category: "IRON_SET", catalogClubId: "catalog-irons", customBrand: "Takomo", customModel: "Iron 101", setComposition: ["5", "6", "7", "8", "9", "PW"] },
     { ...currentClub, id: "club-wedge", category: "WEDGE", catalogClubId: "catalog-wedge", customBrand: "TaylorMade", customModel: "Hi-Toe 4", loft: 58 },
   ];
-  const currentBall = {
+  const currentBall: golfEquipment.PlayerBall = {
     id: "player-ball", userId: "owner", catalogBallId: "ball-current", ballBrand: "Titleist", ballModel: "Pro V1", generation: "2025",
-    year: 2025, color: "Blanca", notes: null, isCurrent: true, createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:00:00.000Z",
+    year: 2025, color: "Blanca", notes: null, isCurrent: true, startedUsingAt: "2026-09-28T10:00:00.000Z", stoppedUsingAt: null,
+    createdAt: "2026-09-28T10:00:00.000Z", updatedAt: "2026-09-28T10:00:00.000Z",
   };
-  const profile = {
-    userId: "owner", clubs: currentClubs, balls: [currentBall], distances: [], ballPreference: "FIXED",
+  let profile: golfEquipment.EquipmentProfile = {
+    schemaVersion: 2,
+    userId: "owner",
+    equipmentOnboarding: "COMPLETED",
+    ballOnboarding: "COMPLETED",
+    clubs: currentClubs,
+    balls: [currentBall],
+    distances: [],
+    ballPreference: "FIXED",
     lastBallFit: {
       id: "legacy-fit", completedAt: "2026-09-28T12:00:00.000Z", currentBallId: currentBall.catalogBallId, inputCompleteness: 75,
       algorithmVersion: null, status: null, input: null, warnings: [],
@@ -64,6 +135,8 @@ function harness() {
         why: ["Menor spin guardado"], attributes: null, comparisonToCurrent: ["Trayectoria más baja guardada"],
       }],
     },
+    createdAt: "2026-09-28T10:00:00.000Z",
+    updatedAt: "2026-09-28T12:00:00.000Z",
   };
   const clubCatalog = [
     { id: "catalog-driver", brand: "Ping", model: "G430", generation: "2025" },
@@ -73,9 +146,12 @@ function harness() {
     { id: "catalog-wedge", brand: "TaylorMade", model: "Hi-Toe 4", generation: "2024" },
   ];
   const ballCatalog = [
-    { id: "ball-current", brand: "Titleist", model: "Pro V1", generation: "2025" },
-    { id: "ball-tour", brand: "Bridgestone", model: "Tour B X", generation: "2026" },
+    catalogBall("ball-current", "Titleist", "Pro V1"),
+    catalogBall("ball-tour", "Bridgestone", "Tour B X"),
+    catalogBall("ball-soft", "Srixon", "Z-Star"),
+    catalogBall("ball-flight", "TaylorMade", "TP5"),
   ];
+  const updates: golfEquipment.EquipmentProfile[] = [];
   const exports: Record<string, (props: Record<string, unknown>) => Node> = {};
   const jsx = (type: unknown, props: Record<string, unknown>) => typeof type === "function" ? type(props) : { type, props };
   const react = {
@@ -98,10 +174,10 @@ function harness() {
       if (name === "react/jsx-runtime") return { jsx, jsxs: jsx, Fragment: "fragment" };
       if (name === "next/image") return { default: (props: Record<string, unknown>) => ({ type: "image", props }) };
       if (name === "./use-view-scroll-reset") return { useViewScrollReset() {} };
-      if (name.endsWith("/ball-fitting")) return { restoreEquipmentBallFitSummary: () => null, toEquipmentBallFitSummary: () => null };
+      if (name.endsWith("/ball-fitting")) return ballFitting;
       if (name.endsWith("/ball-fitting-storage")) return { removeBallFitDraft() {} };
       if (name.endsWith("/ball-fit-handicap")) return { BALL_FIT_HANDICAP_LABELS: { UNKNOWN: "Sin índice" } };
-      if (name.endsWith("/golf-equipment")) return new Proxy({}, { get: () => (value: unknown) => value });
+      if (name.endsWith("/golf-equipment")) return golfEquipment;
       if (name === "./ball-fit-wizard") return {
         BallFitResults: (props: Record<string, unknown>) => ({ type: "ball-fit-results", props }),
         BallFitWizard: (props: Record<string, unknown>) => ({ type: "ball-fit-wizard", props }),
@@ -116,7 +192,21 @@ function harness() {
       };
       if (name === "./use-equipment-profile") return {
         equipmentStatusLabel: () => "Guardado",
-        useEquipmentProfile: () => ({ profile, status: "ready", message: "", update: () => true, retry() {}, resolveConflict() {}, recoverLocalProfile() {} }),
+        useEquipmentProfile: () => ({
+          profile,
+          status: "ready",
+          message: "",
+          update: (mutation: (current: golfEquipment.EquipmentProfile) => golfEquipment.EquipmentProfile | null) => {
+            const next = mutation(profile);
+            if (!next) return false;
+            profile = next;
+            updates.push(next);
+            return true;
+          },
+          retry() {},
+          resolveConflict() {},
+          recoverLocalProfile() {},
+        }),
       };
       if (name === "./use-equipment-catalog-search") return { useEquipmentCatalogSearch: ({ kind }: { kind: string }) => ({ items: kind === "CLUB" ? clubCatalog : kind === "BALL" ? ballCatalog : [] }) };
       if (name === "./equipment-visuals") return {
@@ -151,7 +241,17 @@ function harness() {
     render();
   }
   render();
-  return { render, click, nodes: () => nodes(tree), text: () => text(tree), currentClub, currentBall };
+  return {
+    render,
+    click,
+    nodes: () => nodes(tree),
+    text: () => text(tree),
+    currentClub,
+    currentBall,
+    ballCatalog,
+    profile: () => profile,
+    updates,
+  };
 }
 
 test("a compact missing category opens the club editor with that category preselected", () => {
@@ -225,4 +325,76 @@ test("Actualizar fit opens the wizard and a legacy saved fit always has a useful
   assert.match(compareView.text(), /91% coincidencia/);
   assert.match(compareView.text(), /Trayectoria más baja guardada/);
   assert.match(compareView.text(), /Menor spin guardado/);
+});
+
+test("Ball Fit current-ball selection persists immediately through the profile parent", () => {
+  const view = harness();
+  view.click("Actualizar fit");
+  const wizard = view.nodes().find((node) => node.type === "ball-fit-wizard");
+  assert.ok(wizard);
+
+  const selected = view.ballCatalog.find((ball) => ball.id === "ball-tour");
+  assert.ok(selected);
+  const saved = (wizard.props.onCurrentBallSelect as (ball: golfEquipment.GolfBallCatalog) => boolean)(selected);
+
+  assert.equal(saved, true);
+  assert.equal(view.updates.length, 1);
+  assert.equal(view.profile().ballPreference, "FIXED");
+  assert.equal(view.profile().ballOnboarding, "COMPLETED");
+  assert.equal(view.profile().balls.length, 2);
+  assert.equal(view.profile().balls.find((ball) => ball.isCurrent)?.catalogBallId, "ball-tour");
+  assert.equal(view.profile().balls.find((ball) => ball.id === view.currentBall.id)?.isCurrent, false);
+});
+
+test("Ball Fit KEEP_CURRENT stores the fit and selection metadata without changing the current ball", () => {
+  const view = harness();
+  view.click("Actualizar fit");
+  const wizard = view.nodes().find((node) => node.type === "ball-fit-wizard");
+  assert.ok(wizard);
+  const input = fitInput();
+  const result = ballFitting.runBackyardBallFit(view.ballCatalog, input);
+
+  const saved = (wizard.props.onComplete as (
+    result: ballFitting.BallFitResult,
+    input: ballFitting.BallFitInput,
+    choice: { action: "KEEP_CURRENT" },
+  ) => boolean)(result, input, { action: "KEEP_CURRENT" });
+
+  assert.equal(saved, true);
+  assert.equal(view.profile().balls.length, 1);
+  assert.equal(view.profile().balls.find((ball) => ball.isCurrent)?.id, view.currentBall.id);
+  assert.equal(view.profile().lastBallFit?.selectionAction, "KEEP_CURRENT");
+  assert.equal(view.profile().lastBallFit?.selectedCatalogBallId, "ball-current");
+  assert.equal(view.profile().lastBallFit?.currentBallAtFitId, view.currentBall.id);
+  assert.equal(view.profile().lastBallFit?.currentBallId, "ball-current");
+  view.render();
+  assert.equal(view.nodes().some((node) => node.type === "ball-fit-wizard"), false);
+});
+
+test("Ball Fit RECOMMENDATION replaces only the current marker, preserves history, and stores metadata", () => {
+  const view = harness();
+  view.click("Actualizar fit");
+  const wizard = view.nodes().find((node) => node.type === "ball-fit-wizard");
+  assert.ok(wizard);
+  const recommended = view.ballCatalog.find((ball) => ball.id === "ball-tour");
+  assert.ok(recommended);
+  const input = fitInput();
+  const result = ballFitting.runBackyardBallFit(view.ballCatalog, input);
+
+  const saved = (wizard.props.onComplete as (
+    result: ballFitting.BallFitResult,
+    input: ballFitting.BallFitInput,
+    choice: { action: "RECOMMENDATION"; ball: golfEquipment.GolfBallCatalog },
+  ) => boolean)(result, input, { action: "RECOMMENDATION", ball: recommended });
+
+  assert.equal(saved, true);
+  assert.equal(view.profile().balls.length, 2);
+  assert.equal(view.profile().balls.filter((ball) => ball.isCurrent).length, 1);
+  assert.equal(view.profile().balls.find((ball) => ball.isCurrent)?.catalogBallId, recommended.id);
+  assert.equal(view.profile().balls.find((ball) => ball.id === view.currentBall.id)?.isCurrent, false);
+  assert.equal(view.profile().balls.find((ball) => ball.id === view.currentBall.id)?.catalogBallId, "ball-current");
+  assert.equal(view.profile().lastBallFit?.selectionAction, "RECOMMENDATION");
+  assert.equal(view.profile().lastBallFit?.selectedCatalogBallId, recommended.id);
+  assert.equal(view.profile().lastBallFit?.currentBallAtFitId, view.currentBall.id);
+  assert.equal(view.profile().lastBallFit?.currentBallId, "ball-current");
 });

@@ -30,6 +30,7 @@ import {
   type EquipmentCloudRecord,
   type EquipmentSyncScope,
 } from "../../lib/equipment-sync";
+import { publishEquipmentProfileUpdated } from "../../lib/equipment-profile-events";
 
 export type EquipmentPersistenceStatus = "loading" | "local" | "saving" | "synced" | "pending" | "offline" | "conflict" | "error";
 export type EquipmentConflictChoice = "local" | "remote";
@@ -89,6 +90,7 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
     const saved = saveEquipmentProfile(localStorage, next);
     if (!saved.ok || !saved.profile) throw new Error("equipment_local_write_failed");
     applyProfile(saved.profile);
+    publishEquipmentProfileUpdated(saved.profile);
     return saved.profile;
   }, [applyProfile]);
 
@@ -326,6 +328,7 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
       } catch {
         setStatus("error");
         setMessage("El cambio quedó guardado, pero no pudimos preparar su sincronización.");
+        publishEquipmentProfileUpdated(result.profile);
         return true;
       }
     }
@@ -337,6 +340,7 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
       setMessage("");
       if (cloudEnabledRef.current) enqueueSync(activeScopeRef.current);
     }
+    publishEquipmentProfileUpdated(result.profile);
     return true;
   }, [accessToken, applyProfile, enqueueSync, userId]);
 
@@ -360,6 +364,7 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
       if (accessToken) queueEquipmentSyncOutbox(localStorage, userId, saved.profile, mutationId());
       conflictRef.current = false;
       applyProfile(saved.profile);
+      publishEquipmentProfileUpdated(saved.profile);
       setStatus(cloudEnabledRef.current ? navigator.onLine ? "pending" : "offline" : "local");
       setMessage("Se creó un perfil opcional nuevo. La copia anterior quedó guardada localmente para recuperación técnica.");
       if (cloudEnabledRef.current) enqueueSync(activeScopeRef.current);

@@ -631,6 +631,7 @@ export function toEquipmentBallFitSummary(
   idValue: string,
   completedAtValue: string,
   inputValue: unknown,
+  selection?: import("./golf-equipment").EquipmentBallFitSelection | null,
 ): EquipmentBallFitSummary | null {
   const id = text(idValue);
   const completedAt = text(completedAtValue);
@@ -656,6 +657,11 @@ export function toEquipmentBallFitSummary(
       comparisonToCurrent: recommendation.comparisonToCurrent,
     })),
     warnings: result.warnings,
+    ...(selection ? {
+      selectionAction: selection.selectionAction,
+      selectedCatalogBallId: selection.selectedCatalogBallId,
+      currentBallAtFitId: selection.currentBallAtFitId,
+    } : {}),
   };
 }
 

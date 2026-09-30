@@ -30,6 +30,7 @@ import {
   saveEquipmentProfile,
   setBallOnboardingStatus,
   setBallPreference,
+  setCatalogBallAsCurrent,
   setCurrentPlayerBall,
   setEquipmentOnboardingStatus,
   setLastBallFit,
@@ -387,6 +388,91 @@ test("cambiar modelo desde editar preserva la bola anterior como histórico", ()
   assert.equal(profile.balls.find((ball) => ball.id === "player-ball-next")?.isCurrent, true);
 });
 
+test("seleccionar una bola canónica nueva la guarda como actual y completa el onboarding", () => {
+  const profile = required(setCatalogBallAsCurrent(
+    emptyProfile(),
+    ballCatalog(),
+    "player-ball-catalog-one",
+    "2026-09-06T13:00:00.000Z",
+  ));
+
+  assert.equal(profile.balls.length, 1);
+  assert.deepEqual(profile.balls[0], {
+    id: "player-ball-catalog-one",
+    userId: USER_ID,
+    catalogBallId: "ball-one",
+    ballBrand: "Marca verificada",
+    ballModel: "Modelo verificado",
+    generation: "2026",
+    year: 2026,
+    color: null,
+    notes: null,
+    isCurrent: true,
+    startedUsingAt: "2026-09-06T13:00:00.000Z",
+    stoppedUsingAt: null,
+    createdAt: "2026-09-06T13:00:00.000Z",
+    updatedAt: "2026-09-06T13:00:00.000Z",
+  });
+  assert.equal(profile.ballPreference, "FIXED");
+  assert.equal(profile.ballOnboarding, "COMPLETED");
+});
+
+test("cambiar la bola canónica actual conserva la anterior en el historial", () => {
+  let profile = required(setCatalogBallAsCurrent(
+    emptyProfile(),
+    ballCatalog(),
+    "player-ball-catalog-one",
+    "2026-09-06T13:00:00.000Z",
+  ));
+  profile = required(setCatalogBallAsCurrent(
+    profile,
+    ballCatalog({
+      id: "ball-two",
+      brand: "Otra marca",
+      model: "Modelo dos",
+      generation: null,
+      year: 2025,
+    }),
+    "player-ball-catalog-two",
+    "2026-09-06T14:00:00.000Z",
+  ));
+
+  assert.equal(profile.balls.length, 2);
+  assert.equal(profile.balls.filter((ball) => ball.isCurrent).length, 1);
+  assert.equal(profile.balls.find((ball) => ball.catalogBallId === "ball-two")?.isCurrent, true);
+  assert.equal(profile.balls.find((ball) => ball.catalogBallId === "ball-one")?.isCurrent, false);
+  assert.equal(profile.balls.find((ball) => ball.catalogBallId === "ball-one")?.stoppedUsingAt, "2026-09-06T14:00:00.000Z");
+  assert.equal(profile.ballPreference, "FIXED");
+  assert.equal(profile.ballOnboarding, "COMPLETED");
+});
+
+test("reactivar una bola canónica histórica no crea un PlayerBall duplicado", () => {
+  let profile = required(setCatalogBallAsCurrent(
+    emptyProfile(),
+    ballCatalog(),
+    "player-ball-catalog-one",
+    "2026-09-06T13:00:00.000Z",
+  ));
+  profile = required(setCatalogBallAsCurrent(
+    profile,
+    ballCatalog({ id: "ball-two", model: "Modelo dos" }),
+    "player-ball-catalog-two",
+    "2026-09-06T14:00:00.000Z",
+  ));
+  profile = required(setCatalogBallAsCurrent(
+    profile,
+    ballCatalog(),
+    "unused-player-ball-id",
+    "2026-09-06T15:00:00.000Z",
+  ));
+
+  assert.equal(profile.balls.length, 2);
+  assert.equal(profile.balls.filter((ball) => ball.catalogBallId === "ball-one").length, 1);
+  assert.equal(profile.balls.filter((ball) => ball.isCurrent).length, 1);
+  assert.equal(profile.balls.find((ball) => ball.isCurrent)?.id, "player-ball-catalog-one");
+  assert.equal(profile.balls.find((ball) => ball.catalogBallId === "ball-two")?.stoppedUsingAt, "2026-09-06T15:00:00.000Z");
+});
+
 test("guardar, cerrar y reabrir usa un envelope versionado y aislado por userId", () => {
   const storage = new MemoryStorage();
   const profile = required(upsertPlayerClub(emptyProfile(), manualClub(), UPDATED_AT));
@@ -446,6 +532,40 @@ test("el último resultado de fitting se incorpora al mismo perfil versionado", 
   assert.equal(profile.lastBallFit?.recommendations.length, 1);
   assert.equal(profile.lastBallFit?.recommendations[0]?.catalogBallId, "ball-one");
   assert.equal(profile.lastBallFit?.recommendations[0]?.matchScore, 91);
+});
+
+test("la elección final de Ball Fit conserva su metadata opcional al codificar y reabrir", () => {
+  const profile = required(setLastBallFit(emptyProfile(), {
+    id: "fit-selection",
+    completedAt: UPDATED_AT,
+    currentBallId: "ball-current",
+    inputCompleteness: 100,
+    recommendations: [{ catalogBallId: "ball-one", matchScore: 97 }],
+    selectionAction: "RECOMMENDATION",
+    selectedCatalogBallId: "ball-one",
+    currentBallAtFitId: "player-ball-current",
+  }, UPDATED_AT));
+  const reopened = required(decodeEquipmentProfile(required(encodeEquipmentProfile(profile)), USER_ID));
+
+  assert.equal(reopened.lastBallFit?.selectionAction, "RECOMMENDATION");
+  assert.equal(reopened.lastBallFit?.selectedCatalogBallId, "ball-one");
+  assert.equal(reopened.lastBallFit?.currentBallAtFitId, "player-ball-current");
+});
+
+test("un Ball Fit legacy sin metadata de elección sigue decodificando sin inventarla", () => {
+  const legacy = required(setLastBallFit(emptyProfile(), {
+    id: "fit-legacy",
+    completedAt: UPDATED_AT,
+    currentBallId: "ball-one",
+    inputCompleteness: 75,
+    recommendations: [{ catalogBallId: "ball-one", matchScore: 91 }],
+  }, UPDATED_AT));
+  const reopened = required(decodeEquipmentProfile(required(encodeEquipmentProfile(legacy)), USER_ID));
+
+  assert.equal(reopened.lastBallFit?.id, "fit-legacy");
+  assert.equal(Object.hasOwn(reopened.lastBallFit ?? {}, "selectionAction"), false);
+  assert.equal(Object.hasOwn(reopened.lastBallFit ?? {}, "selectedCatalogBallId"), false);
+  assert.equal(Object.hasOwn(reopened.lastBallFit ?? {}, "currentBallAtFitId"), false);
 });
 
 test("la normalización no pierde el perfil existente por entradas opcionales inválidas", () => {

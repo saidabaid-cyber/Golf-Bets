@@ -280,6 +280,16 @@ export type EquipmentBallFitSummary = {
     comparisonToCurrent: string[];
   }>;
   warnings: string[];
+  /** Optional v2 selection audit. Historical summaries intentionally omit it. */
+  selectionAction?: "RECOMMENDATION" | "KEEP_CURRENT";
+  selectedCatalogBallId?: string | null;
+  currentBallAtFitId?: string | null;
+};
+
+export type EquipmentBallFitSelection = {
+  selectionAction: "RECOMMENDATION" | "KEEP_CURRENT";
+  selectedCatalogBallId: string | null;
+  currentBallAtFitId: string | null;
 };
 
 /** Versioned, provider-neutral snapshot of the answers that produced the last
@@ -973,6 +983,12 @@ function normalizeBallFitSummary(value: unknown, expectedUserId: string): Equipm
       comparisonToCurrent: uniqueTextArray(item.comparisonToCurrent, 6),
     }];
   });
+  const selectionAction = memberOf(source.selectionAction, ["RECOMMENDATION", "KEEP_CURRENT"] as const);
+  const selectedCatalogBallId = identifier(source.selectedCatalogBallId);
+  const currentBallAtFitId = identifier(source.currentBallAtFitId);
+  const selection = selectionAction && (selectionAction !== "RECOMMENDATION" || selectedCatalogBallId)
+    ? { selectionAction, selectedCatalogBallId, currentBallAtFitId }
+    : null;
   return {
     id,
     completedAt,
@@ -983,6 +999,7 @@ function normalizeBallFitSummary(value: unknown, expectedUserId: string): Equipm
     input: normalizeBallFitInputSnapshot(source.input, expectedUserId),
     recommendations,
     warnings: uniqueTextArray(source.warnings, 12),
+    ...(selection || {}),
   };
 }
 
@@ -1330,6 +1347,42 @@ export function setCurrentPlayerBall(profile: EquipmentProfile, ballIdValue: str
     ballPreference: "FIXED",
     updatedAt,
   };
+}
+
+/** Select a canonical catalog ball without duplicating an existing historical
+ * PlayerBall. Callers provide the new entity id so tests and clients retain
+ * control over identity generation. */
+export function setCatalogBallAsCurrent(
+  profile: EquipmentProfile,
+  catalogBallValue: unknown,
+  newPlayerBallIdValue: string,
+  now = new Date().toISOString(),
+): EquipmentProfile | null {
+  const validProfile = normalizeEquipmentProfile(profile, profile.userId);
+  const catalogBall = normalizeGolfBallCatalog(catalogBallValue);
+  const newPlayerBallId = identifier(newPlayerBallIdValue);
+  const timestamp = isoDate(now);
+  if (!validProfile || !catalogBall || !newPlayerBallId || !timestamp) return null;
+  const existing = validProfile.balls.find((ball) => ball.catalogBallId === catalogBall.id);
+  const selected = existing
+    ? setCurrentPlayerBall(validProfile, existing.id, timestamp)
+    : upsertPlayerBall(validProfile, {
+      id: newPlayerBallId,
+      userId: validProfile.userId,
+      catalogBallId: catalogBall.id,
+      ballBrand: catalogBall.brand,
+      ballModel: catalogBall.model,
+      generation: catalogBall.generation,
+      year: catalogBall.year,
+      color: null,
+      notes: null,
+      isCurrent: true,
+      startedUsingAt: timestamp,
+      stoppedUsingAt: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    }, timestamp);
+  return selected ? setBallOnboardingStatus(selected, "COMPLETED", timestamp) : null;
 }
 
 export function setBallPreference(profile: EquipmentProfile, preference: BallPreference, now = new Date().toISOString()): EquipmentProfile | null {

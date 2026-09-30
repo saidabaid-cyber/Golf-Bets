@@ -7,15 +7,17 @@ import { toEquipmentBallFitSummary, type BallFitInput, type BallFitProfileDefaul
 import {
   setBallOnboardingStatus,
   setBallPreference,
+  setCatalogBallAsCurrent,
   setEquipmentOnboardingStatus,
   setLastBallFit,
   upsertPlayerBall,
   upsertPlayerClub,
   type PlayerBall,
+  type GolfBallCatalog,
   type PlayerClub,
   type ClubCategory,
 } from "../../lib/golf-equipment";
-import { BallFitWizard } from "./ball-fit-wizard";
+import { BallFitWizard, type BallFitCompletionChoice } from "./ball-fit-wizard";
 import type { BallFitHandicapSource } from "../../lib/ball-fit-handicap";
 import { BallEditor, ClubEditor } from "./equipment-editors";
 import { BrandLockup } from "./brand-lockup";
@@ -49,6 +51,10 @@ type EquipmentOnboardingProps = {
 
 function fitId() {
   return globalThis.crypto?.randomUUID?.() || `fit-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function playerBallId() {
+  return globalThis.crypto?.randomUUID?.() || `ball-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 function initialStep(profile: ReturnType<typeof useEquipmentProfile>["profile"]): Step {
@@ -117,6 +123,11 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
     return saved;
   }
 
+  function selectFitCurrentBall(ball: GolfBallCatalog) {
+    const now = new Date().toISOString();
+    return update((current) => setCatalogBallAsCurrent(current, ball, playerBallId(), now));
+  }
+
   function chooseNoFixedBall() {
     update((current) => {
       const noFixed = setBallPreference(current, "NO_FIXED_BALL");
@@ -133,11 +144,22 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
     setStep("fit-prompt");
   }
 
-  function completeFit(result: BallFitResult, input: BallFitInput) {
+  function completeFit(result: BallFitResult, input: BallFitInput, choice: BallFitCompletionChoice) {
     const now = new Date().toISOString();
-    const summary = toEquipmentBallFitSummary(result, fitId(), now, input);
-    if (!summary) return false;
-    const saved = update((current) => setLastBallFit(current, summary, now));
+    const saved = update((current) => {
+      const currentAtFit = current.balls.find((ball) => ball.isCurrent) || null;
+      const selection = choice ? {
+        selectionAction: choice.action,
+        selectedCatalogBallId: choice.action === "RECOMMENDATION" ? choice.ball.id : currentAtFit?.catalogBallId || null,
+        currentBallAtFitId: currentAtFit?.id || null,
+      } as const : null;
+      const summary = toEquipmentBallFitSummary(result, fitId(), now, input, selection);
+      if (!summary) return null;
+      const withChoice = choice?.action === "RECOMMENDATION"
+        ? setCatalogBallAsCurrent(current, choice.ball, playerBallId(), now)
+        : current;
+      return withChoice ? setLastBallFit(withChoice, summary, now) : null;
+    });
     if (saved) onComplete();
     return saved;
   }
@@ -216,7 +238,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
       <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => setStep("fit")}>Hacer Ball Fit</button><button type="button" className="secondary" onClick={() => { update((current) => setBallOnboardingStatus(current, "IN_PROGRESS")); setStep("ball-select"); }}>Registrar mi bola actual</button><button type="button" className={styles.onboardingSkip} onClick={onComplete}>Ahora no</button></div>
     </>}
 
-    {step === "fit" && (ballCatalog.items.length ? <BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setStep("fit-prompt")} onComplete={completeFit} /> : <div className={ballCatalog.status === "loading" ? styles.loadingState : styles.errorState} role="status">{ballCatalog.status === "loading" ? "Cargando catálogo de bolas…" : <>No pudimos cargar el catálogo. Puedes continuar y hacer el fitting después. <button type="button" className="textButton" onClick={ballCatalog.retry}>Reintentar</button><button type="button" className="secondary" onClick={onComplete}>Después</button></>}</div>)}
+    {step === "fit" && (ballCatalog.items.length ? <BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} currentBall={currentBall} catalog={ballCatalog.items} onCancel={() => setStep("fit-prompt")} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} /> : <div className={ballCatalog.status === "loading" ? styles.loadingState : styles.errorState} role="status">{ballCatalog.status === "loading" ? "Cargando catálogo de bolas…" : <>No pudimos cargar el catálogo. Puedes continuar y hacer el fitting después. <button type="button" className="textButton" onClick={ballCatalog.retry}>Reintentar</button><button type="button" className="secondary" onClick={onComplete}>Después</button></>}</div>)}
 
     {step !== "fit" && step !== "clubs-build" && <div className={styles.onboardingFooter}><button type="button" className="textButton" onClick={previous}>← Anterior</button><button type="button" className={styles.onboardingSkip} onClick={skipEverything}>Saltar por ahora y entrar a The Backyard</button></div>}
     <p className={styles.syncStatus} data-state={status} role="status">{equipmentStatusLabel(status)}{message ? ` · ${message}` : ""}</p>
