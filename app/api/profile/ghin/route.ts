@@ -57,6 +57,7 @@ function withGhinSessionCookie(response: ReturnType<typeof privateGhinJson>, ses
     sameSite: "strict",
     path: GHIN_SESSION_COOKIE_PATH,
     maxAge: Math.max(1, Math.floor((sealed.expiresAt - Date.now()) / 1_000)),
+    expires: new Date(sealed.expiresAt),
     priority: "high",
   });
   return response;
@@ -71,6 +72,7 @@ function withoutGhinSessionCookie(response: ReturnType<typeof privateGhinJson>) 
     sameSite: "strict",
     path: GHIN_SESSION_COOKIE_PATH,
     maxAge: 0,
+    expires: new Date(0),
     priority: "high",
   });
   return response;
@@ -395,7 +397,7 @@ export async function POST(request: NextRequest) {
       retryable: false,
       durationMs: 0,
     });
-    return privateGhinJson({ error: "Tu sesión GHIN terminó. Reautoriza para continuar.", code: "REAUTH_REQUIRED" }, 409);
+    return privateGhinJson({ error: "GHIN necesita renovar autorización para consultar datos nuevos.", code: "REAUTH_REQUIRED" }, 409);
   }
 
   if (operation === "scores") {
@@ -415,7 +417,7 @@ export async function POST(request: NextRequest) {
       const failure = clientError(error);
       if (failure.code === "unauthorized" || failure.code === "forbidden") clearGhinUserSession(context.userId);
       const requiresAuth = failure.code === "unauthorized" || failure.code === "forbidden";
-      const response = privateGhinJson({ error: requiresAuth ? "Tu sesión GHIN terminó. Reautoriza para continuar." : safeUpstreamMessage(failure.code), code: requiresAuth ? "REAUTH_REQUIRED" : failure.code.toUpperCase() }, requiresAuth ? 409 : failure.status);
+      const response = privateGhinJson({ error: requiresAuth ? "GHIN necesita renovar autorización para consultar datos nuevos." : safeUpstreamMessage(failure.code), code: requiresAuth ? "REAUTH_REQUIRED" : failure.code.toUpperCase() }, requiresAuth ? 409 : failure.status);
       return requiresAuth ? withoutGhinSessionCookie(response) : response;
     }
   }
@@ -452,7 +454,7 @@ export async function POST(request: NextRequest) {
     await recordFailedAttempt(context.userId, attemptedAt, failure.code);
     if (failure.code === "unauthorized" || failure.code === "forbidden") clearGhinUserSession(context.userId);
     const requiresAuth = failure.code === "unauthorized" || failure.code === "forbidden";
-    const response = privateGhinJson({ error: requiresAuth ? "Tu sesión GHIN terminó. Reautoriza para continuar." : "No se pudo actualizar GHIN. Conservamos el último índice válido.", code: requiresAuth ? "REAUTH_REQUIRED" : failure.code.toUpperCase() }, requiresAuth ? 409 : failure.status);
+    const response = privateGhinJson({ error: requiresAuth ? "GHIN necesita renovar autorización para consultar datos nuevos." : "No se pudo actualizar GHIN. Conservamos el último índice válido.", code: requiresAuth ? "REAUTH_REQUIRED" : failure.code.toUpperCase() }, requiresAuth ? 409 : failure.status);
     return requiresAuth ? withoutGhinSessionCookie(response) : response;
   }
 }

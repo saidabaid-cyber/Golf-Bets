@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 
 import type { GhinReadOnlyProfileController } from "./use-ghin-read-only-profile";
 import { ModalShell } from "./modal-shell";
@@ -25,16 +25,17 @@ export function GhinReadOnlyPanel({
   const [password, setPassword] = useState("");
   const [confirmUnlink, setConfirmUnlink] = useState(false);
 
-  useEffect(() => {
-    if (profile && control.reauthorizationRequired) setAuthMode("reauthorize");
-  }, [control.reauthorizationRequired, profile]);
-
   async function closeAuth() {
     if (control.authorizing) return;
     await control.cancelAuthorization();
     setPassword("");
     setLogin("");
     setAuthMode(null);
+  }
+
+  async function openReauthorization() {
+    await control.cancelAuthorization();
+    setAuthMode("reauthorize");
   }
 
   async function submitCredentials(event: FormEvent) {
@@ -86,11 +87,11 @@ export function GhinReadOnlyPanel({
         <div><dt>Última actualización</dt><dd>{new Date(profile.lastSyncedAt).toLocaleString("es-MX")}</dd></div>
       </dl>
       {profile.syncStatus !== "SUCCESS" && <p role="status" className={styles.warning}>La última actualización falló. Se conserva el último Handicap Index válido.</p>}
-      {control.reauthorizationRequired && <p role="status" className={styles.warning}>Tu sesión GHIN terminó. Reautoriza para consultar datos nuevos.</p>}
+      {control.reauthorizationRequired && <p role="status" className={styles.note}>GHIN necesita renovar autorización para actualizar datos. Tu vínculo y tu último índice permanecen activos.</p>}
       <div className={styles.actions}>
         {!sourceActive && <button type="button" className="primary" disabled={control.refreshing} onClick={() => void onUseGhin()}>USAR GHIN</button>}
-        <button type="button" className="secondary" disabled={control.refreshing} onClick={() => void control.refresh()}>{control.refreshing ? "ACTUALIZANDO…" : "ACTUALIZAR GHIN"}</button>
-        <button type="button" className="textButton" disabled={control.scoresLoading} onClick={() => void control.loadScores()}>{control.scoresLoading ? "CONSULTANDO SCORES…" : "VER SCORING RECORD"}</button>
+        <button type="button" className="secondary" disabled={control.refreshing} onClick={() => control.reauthorizationRequired ? void openReauthorization() : void control.refresh()}>{control.refreshing ? "ACTUALIZANDO…" : control.reauthorizationRequired ? "RENOVAR AUTORIZACIÓN" : "ACTUALIZAR GHIN"}</button>
+        <button type="button" className="textButton" disabled={control.scoresLoading} onClick={() => control.reauthorizationRequired ? void openReauthorization() : void control.loadScores()}>{control.scoresLoading ? "CONSULTANDO SCORES…" : "VER SCORING RECORD"}</button>
         <button type="button" className="textButton" onClick={() => setConfirmUnlink(true)}>DESVINCULAR GHIN</button>
       </div>
       {control.scores && <section className={styles.scores} aria-label="Scoring record GHIN read-only">
@@ -109,7 +110,7 @@ export function GhinReadOnlyPanel({
         </article>)}</div>
       </section>}
     </>}
-    {control.error && authMode === null && !confirmUnlink ? <p role="alert" className={styles.warning}>{control.error}</p> : null}
+    {control.error && !control.reauthorizationRequired && authMode === null && !confirmUnlink ? <p role="alert" className={styles.warning}>{control.error}</p> : null}
 
     <ModalShell open={authMode !== null} onClose={() => void closeAuth()} closeDisabled={control.authorizing} label={authMode === "reauthorize" ? "Reautorizar GHIN" : "Vincular GHIN"}>
       {!control.candidate || authMode === "reauthorize" ? <form className={styles.authForm} onSubmit={(event) => void submitCredentials(event)}>

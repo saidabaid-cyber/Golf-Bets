@@ -398,14 +398,15 @@ export function restoreGhinUserSession(ownerId: string, ghinNumber: string, seal
 
 export function getGhinUserSession(ownerId: string, ghinNumber: string, sealed?: string | null) {
   prune();
-  const session = activeSessions.get(ownerId) ?? null;
-  if (session && session.ghinNumber !== ghinNumber) activeSessions.delete(ownerId);
-  if (session?.ghinNumber === ghinNumber) {
-    session.lastUsedAt = Date.now();
-    return session;
-  }
+  // The authenticated, encrypted cookie is the portable source of truth. The
+  // process-local map is only a bounded cache and must never grant access when
+  // the browser did not present a valid sealed session (for example after a
+  // serverless cold start, cookie expiry or explicit cookie deletion).
   const restored = restoreGhinUserSession(ownerId, ghinNumber, sealed);
-  if (!restored) return null;
+  if (!restored) {
+    activeSessions.delete(ownerId);
+    return null;
+  }
   activateGhinSession(restored);
   return restored;
 }

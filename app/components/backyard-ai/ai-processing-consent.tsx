@@ -56,10 +56,11 @@ type ScopeState = {
   acceptedAt: string | null;
   checking: boolean;
   pendingRemoteRevocation: boolean;
+  unavailable: boolean;
 };
 
 function emptyScopeState(checking = false): ScopeState {
-  return { active: false, acceptedAt: null, checking, pendingRemoteRevocation: false };
+  return { active: false, acceptedAt: null, checking, pendingRemoteRevocation: false, unavailable: false };
 }
 
 function localScopeState(userId: string, scope: BackyardAiProcessingConsentScope): ScopeState {
@@ -69,7 +70,8 @@ function localScopeState(userId: string, scope: BackyardAiProcessingConsentScope
       active: consent?.revokedAt === null,
       acceptedAt: consent?.acceptedAt ?? null,
       checking: false,
-      pendingRemoteRevocation: false,
+      pendingRemoteRevocation: Boolean(consent?.revokedAt && consent.revocationSync === "pending"),
+      unavailable: false,
     };
   } catch {
     return emptyScopeState();
@@ -286,15 +288,15 @@ export type AiProcessingConsentSettingsProps = {
 
 export function AiProcessingConsentSettings({ userId, accessToken, requiresRemoteConsent }: AiProcessingConsentSettingsProps) {
   const [states, setStates] = useState<Record<BackyardAiProcessingConsentScope, ScopeState>>(() => ({
-    [AI_PROVIDER_PROCESSING_CONSENT]: typeof window === "undefined" || accessToken || requiresRemoteConsent
+    [AI_PROVIDER_PROCESSING_CONSENT]: typeof window === "undefined"
       ? emptyScopeState(Boolean(accessToken))
-      : localScopeState(userId, AI_PROVIDER_PROCESSING_CONSENT),
-    [AI_IMAGE_PROCESSING_CONSENT]: typeof window === "undefined" || accessToken || requiresRemoteConsent
+      : { ...localScopeState(userId, AI_PROVIDER_PROCESSING_CONSENT), checking: Boolean(accessToken) },
+    [AI_IMAGE_PROCESSING_CONSENT]: typeof window === "undefined"
       ? emptyScopeState(Boolean(accessToken))
-      : localScopeState(userId, AI_IMAGE_PROCESSING_CONSENT),
-    [AI_LAUNCH_MONITOR_PROCESSING_CONSENT]: typeof window === "undefined" || accessToken || requiresRemoteConsent
+      : { ...localScopeState(userId, AI_IMAGE_PROCESSING_CONSENT), checking: Boolean(accessToken) },
+    [AI_LAUNCH_MONITOR_PROCESSING_CONSENT]: typeof window === "undefined"
       ? emptyScopeState(Boolean(accessToken))
-      : localScopeState(userId, AI_LAUNCH_MONITOR_PROCESSING_CONSENT),
+      : { ...localScopeState(userId, AI_LAUNCH_MONITOR_PROCESSING_CONSENT), checking: Boolean(accessToken) },
   }));
   const [busyScope, setBusyScope] = useState<BackyardAiProcessingConsentScope | null>(null);
   const [authorizingScope, setAuthorizingScope] = useState<BackyardAiProcessingConsentScope | null>(null);
@@ -348,15 +350,16 @@ export function AiProcessingConsentSettings({ userId, accessToken, requiresRemot
         acceptedAt: result.consent?.acceptedAt ?? result.acceptedAt,
         checking: false,
         pendingRemoteRevocation: result.pendingLocalRevocation,
+        unavailable: false,
       });
     } catch (reason: unknown) {
       if (controller.signal.aborted || generation !== generations.current[scope] || (reason instanceof DOMException && reason.name === "AbortError")) return;
-      setStates((current) => ({
-        ...current,
-        [scope]: { ...emptyScopeState(), pendingRemoteRevocation: current[scope].pendingRemoteRevocation },
-      }));
+      // A timeout or unreadable cloud record is unknown, not a revocation.
+      // Keep the last confirmed/cache-backed state and make uncertainty
+      // explicit instead of silently changing an authorization to false.
+      setStates((current) => ({ ...current, [scope]: { ...current[scope], checking: false, unavailable: true } }));
       setMessageKind("error");
-      setMessage("No pude verificar una autorización de IA en tu cuenta. Se mantiene desactivada hasta poder consultar el registro seguro.");
+      setMessage("No pude verificar una autorización de IA en este momento. Se conserva el último estado conocido; inténtalo de nuevo cuando recuperes conexión.");
     } finally {
       if (!controller.signal.aborted && generation === generations.current[scope]) {
         setStates((current) => ({ ...current, [scope]: { ...current[scope], checking: false } }));
@@ -406,7 +409,7 @@ export function AiProcessingConsentSettings({ userId, accessToken, requiresRemot
       // Remote remains the authenticated authority; the UI still fails closed
       // while the explicit revocation request is in progress.
     }
-    setScopeState(scope, { active: false, acceptedAt: known.acceptedAt, checking: false, pendingRemoteRevocation: Boolean(accessToken) || requiresRemoteConsent });
+    setScopeState(scope, { active: false, acceptedAt: known.acceptedAt, checking: false, pendingRemoteRevocation: Boolean(accessToken) || requiresRemoteConsent, unavailable: false });
     setBusyScope(scope);
     setMessage("");
     try {
@@ -418,11 +421,11 @@ export function AiProcessingConsentSettings({ userId, accessToken, requiresRemot
       } else if (requiresRemoteConsent) {
         throw new Error("authenticated_session_missing");
       }
-      setScopeState(scope, { active: false, acceptedAt: known.acceptedAt, checking: false, pendingRemoteRevocation: false });
+      setScopeState(scope, { active: false, acceptedAt: known.acceptedAt, checking: false, pendingRemoteRevocation: false, unavailable: false });
       setMessageKind("status");
       setMessage("Autorización revocada. La aceptación original se conserva únicamente como registro auditable.");
     } catch {
-      setScopeState(scope, { active: false, acceptedAt: known.acceptedAt, checking: false, pendingRemoteRevocation: Boolean(accessToken) || requiresRemoteConsent });
+      setScopeState(scope, { active: false, acceptedAt: known.acceptedAt, checking: false, pendingRemoteRevocation: Boolean(accessToken) || requiresRemoteConsent, unavailable: false });
       setMessageKind("error");
       setMessage(accessToken || requiresRemoteConsent
         ? "La función quedó bloqueada en este dispositivo, pero no pude completar la sincronización de esta revocación. Usa Reintentar revocación cuando recuperes conexión."
@@ -441,11 +444,13 @@ export function AiProcessingConsentSettings({ userId, accessToken, requiresRemot
         return <div className={styles.setting} key={scope}>
           <span className={styles.settingCopy}><b>{copy.title}</b><small>{copy.detail}</small></span>
           <span className={styles.settingActions}>
-            <b>{state.checking ? "Verificando…" : state.active ? "ACTIVADO" : "DESACTIVADO"}</b>
+            <b>{state.checking ? "Verificando…" : state.active ? "ACTIVADO" : state.unavailable ? "ESTADO NO DISPONIBLE" : "DESACTIVADO"}</b>
             {state.active && <small>{acceptedLabel(state.acceptedAt)}</small>}
             {state.pendingRemoteRevocation && <small>Revocación pendiente de sincronizar</small>}
             {(state.active || state.pendingRemoteRevocation)
               ? <button type="button" className="textButton" disabled={Boolean(busyScope) || state.checking} onClick={() => void revoke(scope)}>{busyScope === scope ? "Revocando…" : state.pendingRemoteRevocation ? "Reintentar revocación" : "Revocar"}</button>
+              : state.unavailable
+                ? <button type="button" className="textButton" disabled={Boolean(busyScope) || state.checking} onClick={() => void loadScope(scope)}>Reintentar</button>
               : <button type="button" className="textButton" disabled={Boolean(busyScope) || state.checking || (requiresRemoteConsent && !accessToken)} onClick={() => { setMessage(""); setAuthorizingScope(scope); }}>Autorizar</button>}
           </span>
         </div>;
@@ -463,7 +468,7 @@ export function AiProcessingConsentSettings({ userId, accessToken, requiresRemot
       onAccepted={(consent, persistence) => {
         if (!aiProcessingConsentAllowsTransport(persistence)) return;
         setAuthorizingScope(null);
-        setScopeState(consent.scope, { active: true, acceptedAt: consent.acceptedAt, checking: false, pendingRemoteRevocation: false });
+        setScopeState(consent.scope, { active: true, acceptedAt: consent.acceptedAt, checking: false, pendingRemoteRevocation: false, unavailable: false });
         setMessageKind("status");
         setMessage("Autorización guardada. Ya puedes usar esta función sin otra solicitud de permiso.");
       }}

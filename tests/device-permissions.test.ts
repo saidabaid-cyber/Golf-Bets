@@ -202,6 +202,53 @@ test("location timeout remains retryable and is not persisted as a denial", asyn
   assert.notEqual(timedOut.location, "denied");
 });
 
+test("a transient location timeout never disables a previously enabled preference", async () => {
+  const storage = memoryStorage();
+  saveDevicePermissionPreferences(storage, {
+    ...emptyDevicePermissionPreferences("user-a"),
+    location: "granted",
+    locationPreference: "enabled",
+    locationPreferenceUpdatedAt: "2026-09-29T12:00:00.000Z",
+    locationEnabled: true,
+  });
+  const timedOut = await requestInitialLocation(storage, "user-a", {
+    getCurrentPosition(_success: PositionCallback, failure: PositionErrorCallback) {
+      failure({ code: 3, TIMEOUT: 3, PERMISSION_DENIED: 1 } as GeolocationPositionError);
+    },
+  } as Geolocation);
+  assert.equal(timedOut.location, "timeout");
+  assert.equal(timedOut.locationEnabled, true);
+  assert.equal(timedOut.locationPreference, "enabled");
+});
+
+test("a stale permission refresh cannot overwrite a newer explicit choice", async () => {
+  const storage = memoryStorage();
+  const userId = "permission-race-user";
+  saveDevicePermissionPreferences(storage, {
+    ...emptyDevicePermissionPreferences(userId),
+    location: "granted",
+    locationPreference: "enabled",
+    locationEnabled: true,
+    locationPreferenceUpdatedAt: "2026-09-29T18:00:00.000Z",
+  });
+  let releaseQuery!: (value: PermissionStatus) => void;
+  let current = true;
+  const refresh = refreshDevicePermissionStateWithoutPrompt(storage, userId, {
+    permissions: {
+      query: () => new Promise<PermissionStatus>((resolve) => { releaseQuery = resolve; }),
+    },
+  } as unknown as Navigator, undefined, { shouldCommit: () => current });
+
+  disableLocationForApp(storage, userId);
+  current = false;
+  releaseQuery({ state: "granted" } as PermissionStatus);
+  await refresh;
+
+  const saved = readDevicePermissionPreferences(storage, userId);
+  assert.equal(saved.locationPreference, "disabled");
+  assert.equal(saved.locationEnabled, false);
+});
+
 test("location denial is persisted as denied without enabling location", async () => {
   const storage = memoryStorage();
   const denied = await requestInitialLocation(storage, "user-a", {

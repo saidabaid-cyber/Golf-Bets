@@ -85,7 +85,6 @@ import {
   legalClientEnvironment,
   legalEvidenceStateKey,
   legalEvidenceSyncMessage,
-  LegalEvidenceSyncError,
   hasResolvedFinancialChoice,
   hasResolvedFinancialConsent,
   readLegalEvidence,
@@ -921,6 +920,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(merged));
           return merged;
         });
+        setCloudConsentChecked(true);
+      } else if (legalResult.error) {
+        // An unreadable canonical ledger is unknown, not evidence that the
+        // account never accepted. Keep the consent screen closed until a
+        // successful retry resolves the account record.
+        setCloudConsentChecked(false);
       }
       const profileWriteStillPending = Boolean(readPendingProfileWrite(localStorage, authenticatedUserId));
       // A newer edit may already have completed and cleared its marker while
@@ -979,7 +984,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }).catch((error) => {
       if (mounted && activeUserId.current === authenticatedUserId) setCloudIssue("profile", cloudIssueFromError("profile", error, navigator.onLine));
     }).finally(() => {
-      if (mounted && activeUserId.current === authenticatedUserId) { setCloudConsentChecked(true); setProfileChecked(true); }
+      if (mounted && activeUserId.current === authenticatedUserId) setProfileChecked(true);
     });
     return () => { mounted = false; };
   }, [authenticatedUserId, authenticatedAccessToken, accountEntry, accountReloadRevision, issueWithMessage, profileWriterFor, setCloudIssue]);
@@ -1132,10 +1137,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         actorKey,
         environment: legalEnvironment,
         events: readLegalEvidence(localStorage, actorKey, legalEnvironment),
-        // Initial hydration remains fail-closed. A later retry cannot erase a
-        // resolution or explicit local ceremony that was already established.
+        // Initial hydration remains unresolved. Once an authoritative state
+        // has been established, a timeout/unavailable response is unknown and
+        // cannot erase it; a real remote revocation arrives through the
+        // successful merge path above.
         resolved: current?.actorKey === actorKey && current.environment === legalEnvironment
-          && !(error instanceof LegalEvidenceSyncError && error.resolutionBlocked)
           ? current.resolved
           : false,
         resolvedSubjects: current?.actorKey === actorKey && current.environment === legalEnvironment ? current.resolvedSubjects : [],
@@ -1168,11 +1174,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       queueMicrotask(() => {
         refreshQueued = false;
         if (!accountMutationStillActive(userId)) return;
-        // A foreground/network transition may hide a revocation made on
-        // another device. Close the financial gate until GET resolves again.
-        setLegalEvidenceState((current) => current?.actorKey === actorKey && current.environment === legalEnvironment
-          ? { ...current, resolved: false }
-          : current);
+        // A foreground/network transition is only a request to refresh. It is
+        // not evidence of revocation, so retain the last resolved decision
+        // until an authoritative response actually changes it.
         setLegalRetryRevision((value) => value + 1);
       });
     };

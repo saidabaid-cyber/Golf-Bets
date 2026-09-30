@@ -518,6 +518,12 @@ test("provider wires explicit ceremonies and retries queues on online/manual tri
   assert.match(provider, /setLegalEvidenceState\(\{ actorKey, environment: legalEnvironment, events, resolved: mode === "guest", resolvedSubjects: \[\] \}\)/);
   assert.match(provider, /window\.addEventListener\("focus", refreshOnFocus\)/);
   assert.match(provider, /document\.addEventListener\("visibilitychange", refreshWhenVisible\)/);
+  const foregroundRefresh = provider.slice(provider.indexOf("const requestRemoteResolution"), provider.indexOf("const rehydrateFromAnotherTab"));
+  assert.match(foregroundRefresh, /setLegalRetryRevision/);
+  assert.doesNotMatch(foregroundRefresh, /resolved:\s*false/, "focus/online refresh is not evidence of legal revocation");
+  assert.match(provider, /a timeout\/unavailable response is unknown[\s\S]*\? current\.resolved[\s\S]*: false/);
+  assert.match(provider, /An unreadable canonical ledger is unknown[\s\S]*setCloudConsentChecked\(false\)/);
+  assert.doesNotMatch(provider, /finally\(\(\) => \{[\s\S]{0,180}setCloudConsentChecked\(true\)/);
   const online = provider.slice(provider.indexOf("const restoreWhenOnline"), provider.indexOf("window.addEventListener(\"online\""));
   assert.match(online, /setLegalRetryRevision/);
   assert.match(online, /setAccountReloadRevision/);

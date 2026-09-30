@@ -79,6 +79,22 @@ test("the GHIN read session is authenticated-encrypted and survives a stateless 
 
     assert.match(issued.value, /^v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
     assert.doesNotMatch(issued.value, /never-visible|provider|90000001|00000000/);
+    sessionModule.activateGhinSession({
+      ownerId: "00000000-0000-4000-8000-000000000001",
+      ghinNumber: "90000001",
+      client,
+      lastUsedAt: now,
+    });
+    assert.equal(sessionModule.getGhinUserSession(
+      "00000000-0000-4000-8000-000000000001",
+      "90000001",
+      null,
+    ), null, "process memory alone must not restore live GHIN access");
+    assert.equal(sessionModule.getGhinUserSession(
+      "00000000-0000-4000-8000-000000000001",
+      "90000001",
+      issued.value,
+    )?.client.hasUsableSession(), true);
     sessionModule.clearGhinUserSession("00000000-0000-4000-8000-000000000001");
     const restored = sessionModule.restoreGhinUserSession(
       "00000000-0000-4000-8000-000000000001",
@@ -109,10 +125,26 @@ test("the route keeps the session server-only, scoped and fail-closed", () => {
   assert.match(route, /secure:\s*true/);
   assert.match(route, /sameSite:\s*"strict"/);
   assert.match(route, /path:\s*GHIN_SESSION_COOKIE_PATH/);
+  assert.match(route, /expires:\s*new Date\(sealed\.expiresAt\)/);
   assert.match(route, /request\.cookies\.get\(GHIN_SESSION_COOKIE_NAME\)/);
   assert.match(route, /withoutGhinSessionCookie[\s\S]*operation === "unlink"|operation === "unlink"[\s\S]*withoutGhinSessionCookie/);
   assert.match(session, /createCipheriv\("aes-256-gcm"/);
   assert.match(session, /createDecipheriv\("aes-256-gcm"/);
   assert.match(session, /payload\.ownerId !== ownerId/);
+  assert.match(session, /const restored = restoreGhinUserSession\(ownerId, ghinNumber, sealed\)/);
+  assert.doesNotMatch(session.slice(session.indexOf("export function getGhinUserSession"), session.indexOf("export async function reauthorizeGhinSession")), /activeSessions\.get/);
   assert.doesNotMatch(`${route}\n${session}`, /console\.(?:log|info|warn|error)\([^\n]*(?:accessToken|password|cookie)/i);
+});
+
+test("expired live access never changes the persistent GHIN-linked presentation", () => {
+  const panel = readFileSync("app/components/ghin-read-only-panel.tsx", "utf8");
+  const route = readFileSync("app/api/profile/ghin/route.ts", "utf8");
+  assert.match(panel, /✓ GHIN VINCULADO/);
+  assert.match(panel, /Tu vínculo y tu último índice permanecen activos/);
+  assert.match(panel, /RENOVAR AUTORIZACIÓN/);
+  assert.doesNotMatch(panel, /if \(profile && control\.reauthorizationRequired\) setAuthMode/);
+  const liveSessionStart = route.lastIndexOf("if (!session)");
+  const liveSessionFailure = route.slice(liveSessionStart, route.indexOf("if (operation === \"scores\")", liveSessionStart));
+  assert.match(liveSessionFailure, /REAUTH_REQUIRED/);
+  assert.doesNotMatch(liveSessionFailure, /unlink_ghin_profile|association_status|handicap_index/);
 });

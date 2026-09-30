@@ -367,7 +367,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   </Shell>;
 
   if (progress.step === "permissions") return <Shell progress={progress} {...navigationProps} eyebrow="PERMISOS OPCIONALES" title="Decide una sola vez" description="Puedes usar The Backyard sin ubicación ni notificaciones. Después podrás revisar o desactivar estos permisos desde Configuración." actions={null}>
-    <InitialDevicePermissions key={`initial-permissions-${profile.userId}`} userId={profile.userId} onContinue={() => advance("course")} />
+    <InitialDevicePermissions key={`initial-permissions-${profile.userId}`} userId={profile.userId} accessToken={accessToken} onContinue={() => advance("course")} />
   </Shell>;
 
   return null;

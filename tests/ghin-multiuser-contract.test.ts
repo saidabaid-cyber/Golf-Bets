@@ -58,10 +58,12 @@ test("normal-user GHIN runtime cannot use the environment QA identity or client 
 test("server session and pending confirmation stores are owner-bound and unlink clears one owner", () => {
   const session = source("lib/ghin/user-session.server.ts");
   assert.match(session, /activeSessions\.set\(session\.ownerId, activated\)/);
-  assert.match(session, /const session = activeSessions\.get\(ownerId\)/);
-  assert.match(session, /session\.ghinNumber !== ghinNumber/);
+  const restore = session.slice(session.indexOf("export function getGhinUserSession"), session.indexOf("export async function reauthorizeGhinSession"));
+  assert.match(restore, /restoreGhinUserSession\(ownerId, ghinNumber, sealed\)/);
+  assert.doesNotMatch(restore, /activeSessions\.get/, "process memory is never live-session authority");
   assert.match(session, /pending\?\.ownerId === ownerId/);
   assert.match(session, /payload\.ownerId !== ownerId/);
+  assert.match(session, /payload\.ghinNumber !== ghinNumber/);
   assert.match(session, /activeSessions\.delete\(ownerId\)/);
   assert.match(session, /if \(pending\.ownerId === ownerId\) pendingAuthorizations\.delete\(challengeId\)/);
   assert.match(session, /client\.discardCredentials\(\)/);

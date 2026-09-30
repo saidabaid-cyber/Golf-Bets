@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   acceptAiProcessingConsent, acknowledgeRemoteAiProcessingConsentRevocation,
@@ -110,4 +111,14 @@ test("server confirmation requires a real monotonic ledger identity, not a newer
     assert.equal(acknowledgeRemoteAiProcessingConsentRevocation(storage, owner, SCOPE, revoked(recordId)).ok, false);
   }
   assert.equal(readAiProcessingConsent(storage, owner, SCOPE)?.revocationSync, "pending");
+});
+
+test("settings treat a transient consent read failure as unknown instead of revocation", () => {
+  const source = readFileSync("app/components/backyard-ai/ai-processing-consent.tsx", "utf8");
+  assert.match(source, /localScopeState\(userId, AI_PROVIDER_PROCESSING_CONSENT\)/);
+  assert.match(source, /\{ \.\.\.current\[scope\], checking: false, unavailable: true \}/);
+  assert.match(source, /Se conserva el último estado conocido/);
+  assert.match(source, /ESTADO NO DISPONIBLE/);
+  const failure = source.slice(source.indexOf("} catch (reason: unknown)"), source.indexOf("} finally", source.indexOf("} catch (reason: unknown)")));
+  assert.doesNotMatch(failure, /emptyScopeState/);
 });

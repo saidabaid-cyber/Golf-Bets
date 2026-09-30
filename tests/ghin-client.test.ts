@@ -201,6 +201,31 @@ test("normal-user auth exposes only the public GHIN identity and discards creden
   assert.equal(loginCalls, 1, "credentialless 401 must require explicit reauthorization");
 });
 
+test("a GHIN response without expiry gets the documented 55-minute effective session and no invented refresh credential", async () => {
+  const now = Date.UTC(2026, 8, 29, 12);
+  const client = new GhinReadOnlyClient({
+    baseUrl: "https://api2.ghin.com/api/v1",
+    credentials,
+    now: () => now,
+    fetchImpl: async (input) => {
+      const url = new URL(String(input));
+      if (isFirebase(url)) return firebaseResponse();
+      return jsonResponse(200, {
+        golfer_user: {
+          golfer_user_token: "provider-session-without-expiry",
+          golfers: [{ ghin_number: "11103349", player_name: "QA Golfer" }],
+        },
+      });
+    },
+  });
+  const auth = await client.authenticate();
+  assert.equal(auth.expiresAt, new Date(now + 55 * 60_000).toISOString());
+  const portable = client.exportPortableSession();
+  assert.ok(portable);
+  assert.equal(portable.effectiveExpiresAt, now + 55 * 60_000);
+  assert.equal("refreshToken" in portable, false);
+});
+
 test("a sealed read session can be restored without retaining or replaying the password", async () => {
   const now = Date.UTC(2026, 8, 28, 12);
   let firebaseCalls = 0;

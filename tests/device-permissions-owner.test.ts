@@ -66,7 +66,7 @@ test("onboarding conecta el prompt nativo sólo al tap explícito y evita texto 
   assert.match(source, /mostrarte y ordenar campos cercanos/);
   assert.match(source, /invitaciones a rondas y grupos/);
   assert.match(source, /value\.location === "granted" && value\.locationEnabled/);
-  assert.match(source, /setValue\(enableLocationForApp\(localStorage, userId\)\)/);
+  assert.match(source, /persistPreference\("location", enableLocationForApp\(localStorage, userId\)\)/);
   assert.match(source, /"Usar ubicación"/);
   assert.equal((source.match(/finishInitialDevicePermissions\(localStorage, userId\)/g) || []).length, 2);
   assert.equal((source.match(/onContinue\(\)/g) || []).length, 2);
