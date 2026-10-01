@@ -129,6 +129,24 @@ test("GET and POST clients accept the SQL-shaped response containing receipt.id"
   });
 });
 
+test("GET and POST clients accept the normalized response emitted by the API route", async () => {
+  const normalized = parseOptionalAuthorizationState(sqlOptionalAuthorizationState("authorize_all"));
+  assert.ok(normalized);
+  const transport = (async () => Response.json(normalized)) as typeof fetch;
+
+  const read = await requestOptionalAuthorizationState("access-token", undefined, transport);
+  const saved = await resolveOptionalAuthorizationBundle(
+    "access-token",
+    "authorize_all",
+    REQUEST_ID,
+    undefined,
+    transport,
+  );
+
+  assert.deepEqual(read, normalized);
+  assert.deepEqual(saved, normalized);
+});
+
 test("a completed POST remains readable after reload without duplicating the decision", async () => {
   const persisted = sqlOptionalAuthorizationState("decline_all");
   let postCount = 0;

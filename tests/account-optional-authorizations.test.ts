@@ -104,6 +104,13 @@ test("canonical optional bundle parses all seven explicit scopes", () => {
   assert.equal(isCompleteBundleResolution(parsed, "authorize_all"), true);
 });
 
+test("the normalized HTTP state can be parsed again by the browser client", () => {
+  const normalized = parseOptionalAuthorizationState(rawBundle("authorize_all"));
+  assert.ok(normalized);
+  assert.deepEqual(parseOptionalAuthorizationState(normalized), normalized);
+  assert.equal(isCompleteBundleResolution(normalized, "authorize_all"), true);
+});
+
 test("volatile canonical learning decision defeats stale local ON when storage writes fail", () => {
   const values = new Map<string, string>();
   const storage = {

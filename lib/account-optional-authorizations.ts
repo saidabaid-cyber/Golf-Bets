@@ -145,16 +145,18 @@ export function parseOptionalAuthorizationState(value: unknown): OptionalAuthori
   let receipt: OptionalAuthorizationState["receipt"] = null;
   if (body.receipt !== null) {
     const rawReceipt = object(body.receipt);
-    // The canonical Postgres getter includes the internal receipt UUID. Older
-    // fixtures and clients predate that metadata, so accept exactly either
-    // known shape while continuing to reject every other unexpected field.
-    // The UUID is validated but intentionally omitted from the public client
-    // state because callers only need the idempotency key and decision.
-    const receiptKeys = ["action", "bundleVersion", "idempotencyKey", "decidedAt", "featureSet"] as const;
-    const receiptKeysWithId = [...receiptKeys, "id"] as const;
+    // Postgres includes the feature-set evidence and its internal receipt UUID;
+    // the HTTP boundary intentionally returns only the normalized public
+    // receipt. Accept exactly those two contracts (plus the pre-id SQL shape)
+    // so parsing is idempotent across DB -> route -> browser without allowing
+    // unknown fields through either boundary.
+    const publicReceiptKeys = ["action", "idempotencyKey", "decidedAt"] as const;
+    const canonicalReceiptKeys = ["action", "bundleVersion", "idempotencyKey", "decidedAt", "featureSet"] as const;
+    const canonicalReceiptKeysWithId = [...canonicalReceiptKeys, "id"] as const;
     const receiptHasId = Boolean(rawReceipt && Object.prototype.hasOwnProperty.call(rawReceipt, "id"));
-    const receiptHasKnownShape = Boolean(rawReceipt
-      && (exactKeys(rawReceipt, receiptKeys) || exactKeys(rawReceipt, receiptKeysWithId)));
+    const receiptIsPublic = Boolean(rawReceipt && exactKeys(rawReceipt, publicReceiptKeys));
+    const receiptIsCanonical = Boolean(rawReceipt
+      && (exactKeys(rawReceipt, canonicalReceiptKeys) || exactKeys(rawReceipt, canonicalReceiptKeysWithId)));
     const rawFeatureSet = object(rawReceipt?.featureSet);
     const rawFeatureScopes = rawFeatureSet?.scopes;
     const rawExcluded = rawFeatureSet?.excluded;
@@ -162,32 +164,34 @@ export function parseOptionalAuthorizationState(value: unknown): OptionalAuthori
     const rawProjectionSharing = object(rawProjections?.sharing);
     const rawProjectionNotifications = object(rawProjections?.notifications);
     const decidedAt = iso(rawReceipt?.decidedAt);
-    if (!rawReceipt || !receiptHasKnownShape
+    if (!rawReceipt || (!receiptIsPublic && !receiptIsCanonical)
       || (rawReceipt.action !== "authorize_all" && rawReceipt.action !== "decline_all")
-      || rawReceipt.bundleVersion !== OPTIONAL_AUTHORIZATION_BUNDLE_VERSION
       || typeof rawReceipt.idempotencyKey !== "string" || !UUID.test(rawReceipt.idempotencyKey) || !decidedAt
-      || (receiptHasId && (typeof rawReceipt.id !== "string" || !UUID.test(rawReceipt.id)))
+      || (receiptHasId && (typeof rawReceipt.id !== "string" || !UUID.test(rawReceipt.id)))) return null;
+    if (receiptIsCanonical && (rawReceipt.bundleVersion !== OPTIONAL_AUTHORIZATION_BUNDLE_VERSION
       || !rawFeatureSet || !exactKeys(rawFeatureSet, ["scopes", "excluded", "projections"])
       || !Array.isArray(rawFeatureScopes) || rawFeatureScopes.length !== OPTIONAL_AUTHORIZATION_SCOPES.length
       || !Array.isArray(rawExcluded) || rawExcluded.length !== 2
       || !rawExcluded.includes("MARKETING") || !rawExcluded.includes("FINANCIAL_PATRIMONIAL")
       || !rawProjections || !exactKeys(rawProjections, ["profileVisibility", "socialPrivacy", "socialProfilePrivacy", "sharing", "notifications"])
       || !rawProjectionSharing || !exactKeys(rawProjectionSharing, ["enabledForFriends", "rounds", "achievements", "equipment", "courses"])
-      || !rawProjectionNotifications || !exactKeys(rawProjectionNotifications, ["internal", "master", "push", "email", "rounds", "reminders"])) return null;
-    const receiptEnabled = rawReceipt.action === "authorize_all";
-    if (rawProjections.profileVisibility !== (receiptEnabled ? "public" : "private")
-      || rawProjections.socialPrivacy !== (receiptEnabled ? "FRIENDS" : "PRIVATE")
-      || rawProjections.socialProfilePrivacy !== (receiptEnabled ? "PUBLIC" : "PRIVATE")
-      || !Object.values(rawProjectionSharing).every((value) => value === receiptEnabled)
-      || !Object.values(rawProjectionNotifications).every((value) => value === receiptEnabled)) return null;
-    const receiptScopes = new Set<OptionalAuthorizationScope>();
-    for (const rawFeatureScope of rawFeatureScopes) {
-      const featureScope = object(rawFeatureScope);
-      const scope = parseOptionalAuthorizationScope(featureScope?.scope);
-      if (!featureScope || !exactKeys(featureScope, ["scope", "policyVersion"])
-        || !scope || featureScope.policyVersion !== OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope]
-        || receiptScopes.has(scope)) return null;
-      receiptScopes.add(scope);
+      || !rawProjectionNotifications || !exactKeys(rawProjectionNotifications, ["internal", "master", "push", "email", "rounds", "reminders"]))) return null;
+    if (receiptIsCanonical) {
+      const receiptEnabled = rawReceipt.action === "authorize_all";
+      if (rawProjections!.profileVisibility !== (receiptEnabled ? "public" : "private")
+        || rawProjections!.socialPrivacy !== (receiptEnabled ? "FRIENDS" : "PRIVATE")
+        || rawProjections!.socialProfilePrivacy !== (receiptEnabled ? "PUBLIC" : "PRIVATE")
+        || !Object.values(rawProjectionSharing!).every((value) => value === receiptEnabled)
+        || !Object.values(rawProjectionNotifications!).every((value) => value === receiptEnabled)) return null;
+      const receiptScopes = new Set<OptionalAuthorizationScope>();
+      for (const rawFeatureScope of rawFeatureScopes as unknown[]) {
+        const featureScope = object(rawFeatureScope);
+        const scope = parseOptionalAuthorizationScope(featureScope?.scope);
+        if (!featureScope || !exactKeys(featureScope, ["scope", "policyVersion"])
+          || !scope || featureScope.policyVersion !== OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope]
+          || receiptScopes.has(scope)) return null;
+        receiptScopes.add(scope);
+      }
     }
     receipt = { action: rawReceipt.action, idempotencyKey: rawReceipt.idempotencyKey, decidedAt };
   }
