@@ -2,115 +2,33 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const source = readFileSync("app/components/home-dashboard.tsx", "utf8");
-const bottomNav = readFileSync("lib/app-navigation.ts", "utf8");
-const bottomNavComponent = readFileSync("app/components/app-bottom-nav.tsx", "utf8");
-const homeStyles = readFileSync("app/components/home-dashboard-clean.module.css", "utf8");
-
-const moreHub = readFileSync("app/components/more-hub.tsx", "utf8");
-
-test("approved Home uses one ball action and offers manual or AI setup in a closable choice dialog", () => {
-  assert.match(source, /data-home-version="approved-golf-home-v2"/);
-  assert.match(source, /const playAction = activeRound \? onContinueRound : onPlayOptions \|\| \(\(\) => setRoundChoiceOpen\(true\)\)/);
-  assert.match(readFileSync("app/page.tsx", "utf8"), /onPlayOptions=\{\(\) => setTab\("play"\)\}/);
-  assert.match(source, /aria-label=\{activeRound \? "Continuar ronda" : "Elegir cómo armar tu ronda"\}/);
-  assert.match(source, /<BackyardBallAction activeRound=\{activeRound\} onClick=\{playAction\} \/>/);
-  assert.match(source, /<ModalShell open=\{roundChoiceOpen\}/);
-  assert.match(source, /CONFIGURAR MANUALMENTE/);
-  assert.match(source, /ARMAR CON BACKYARD AI/);
-  assert.match(source, /chooseRoundSetup\("manual"\)/);
-  assert.match(source, /chooseRoundSetup\("ai"\)/);
-  assert.doesNotMatch(source, /className=\{styles\.aiButton\}/);
-  assert.match(source, /THE BACKYARD/);
-  assert.match(source, /PLAY WITH IT/);
-  assert.match(source, /src="\/brand\/home-hero-sunrise\.jpg"/);
-  assert.match(source, /src="\/brand\/the-backyard-logo\.svg"/);
-  assert.match(source, /src="\/brand\/home-swing\.jpg"/);
-  assert.match(source, /src="\/brand\/home-golf-ball\.jpg"/);
-  assert.match(homeStyles, /\.ballLogoFull \{[^}]*overflow: hidden/);
-  assert.match(source, /data-home-logo/);
-  assert.match(source, /data-home-play/);
-  assert.match(homeStyles, /\.ballLogoFull \{[^}]*position: relative/);
-  assert.match(homeStyles, /\.playCircle \{[^}]*left: 50%[^}]*transform: translate\(-50%, -50%\)/);
+const home = readFileSync("app/components/home-dashboard.tsx", "utf8");
+const page = readFileSync("app/page.tsx", "utf8");
+test("Inicio composes the real paginated friends feed, without private local history or duplicate destinations", () => {
+  assert.match(home, /data-home-version="community-feed-v3"/);
+  assert.match(home, /<CloudSocialActivity key=\{identityUserId\} viewerId=\{identityUserId\} accessToken=\{accessToken\} friendsOnly/);
+  assert.doesNotMatch(home, /QuickCard|onOpenStats|onOpenRules|onAiRound|insights|activeRound=|fake|fixture/i);
+  assert.match(home, /Amigos y solicitudes/);
+  assert.match(home, /Qué comparto/);
+  assert.match(page, /onPrivacy=\{\(\) => openAccountSettings\("privacy"\)\}/);
 });
-
-test("Home keeps dynamic full names in a responsive, non-overlapping headline zone", () => {
-  assert.match(source, /const resolvedDisplayName = displayName\.trim\(\) \|\| "Golfista"/);
-  assert.match(source, /data-name-size=\{heroNameSize\}/);
-  assert.match(source, /data-home-headline/);
-  assert.match(source, /<em>\{resolvedDisplayName\}<\/em>/);
-  assert.match(homeStyles, /\.heroCopy\[data-name-size="long"\]/);
-  assert.match(homeStyles, /\.heroCopy\[data-name-size="extended"\]/);
-  assert.match(homeStyles, /white-space: normal/);
+test("composer enables saved rounds and leaves unsupported manual publishing disabled", () => {
+  assert.match(home, /¿Qué estás compartiendo hoy\?/);
+  assert.match(home, /onClick=\{onOpenRounds\}>⚑ Ronda/);
+  for (const label of ["Foto", "Logro", "Encuesta"]) assert.match(home, new RegExp('disabled[^>]*>[^<]*' + label));
+  assert.match(page, /onOpenRounds=\{\(\) => setTab\("history"\)\}/);
 });
-
-test("approved Home has exactly three quick actions and only two More Backyard actions", () => {
-  const quickSection = source.match(/<nav className=\{styles\.quickActions\}[\s\S]*?<\/nav>/)?.[0] || "";
-  const moreSection = source.match(/<section className=\{styles\.moreBackyard\}[\s\S]*?<\/section>/)?.[0] || "";
-  assert.equal((quickSection.match(/<QuickCard/g) || []).length, 3);
-  for (const label of ["Estadísticas", "Historial", "Reglas de golf"]) assert.match(quickSection, new RegExp(label));
-  assert.doesNotMatch(quickSection, /Mi Bolsa|Perfil|Campos|JUGAR/);
-  assert.equal((moreSection.match(/<button/g) || []).length, 2);
-  assert.match(moreSection, /Balances/);
-  assert.match(moreSection, /Grupos/);
+test("server-filtered feed retains pagination, truthful empty states, likes and comments", () => {
+  const feed = readFileSync("app/components/cloud-social-activity.tsx", "utf8");
+  assert.match(feed, /nextCursor/);
+  assert.match(feed, /Ver más actividad/);
+  assert.match(feed, /Aún no hay actividad compartida/);
+  assert.match(feed, /expectedHash: card.currentHash/);
+  assert.match(feed, /\/api\/social\/activity/);
+  assert.match(feed, /Ver en Trophy Room/);
 });
-
-test("Home uses only saved golf data for progress and preserves an elegant empty state", () => {
-  assert.match(source, /insights\.scoreSampleRounds > 0/);
-  assert.match(source, /en \{insights\.scoreSampleRounds\} ronda/);
-  assert.match(source, /de \{insights\.scoreScopeHoles\}H/);
-  assert.doesNotMatch(source, /en \{insights\.scoredRounds\} ronda/);
-  assert.match(source, /typeof insights\.averageScore === "number"/);
-  assert.match(source, /Tips, insights/);
-  assert.match(source, /typeof insights\.betBalance === "number"/);
-  assert.doesNotMatch(source, /Tu promedio es 80|Ganaste|Mejoraste/);
-});
-
-test("active round remains inside the approved Home and routes both visible continuation controls", () => {
-  assert.match(source, /<small>RONDA ACTIVA<\/small>/);
-  assert.match(source, /onClick=\{onContinueRound\}/);
-  assert.match(source, /CONTINUAR RONDA/);
-  assert.match(source, /currentHole/);
-  assert.match(source, /activeRoundLabel/);
-  assert.match(source, /partialToPar/);
-});
-
-test("Home balance keeps historical settlements while sports metrics honor stats reset", () => {
-  const page = readFileSync("app/page.tsx", "utf8");
-  const home = page.slice(page.indexOf('<HomeDashboard'), page.indexOf('onOpenRules={openRulesForRound}'));
-  assert.match(home, /insights=\{\{ \.\.\.betaGolfInsights, betBalance: historicalGolfInsights\.betBalance \}\}/);
-  assert.match(page, /buildGolfInsights\(statisticsHistory\)/);
-  assert.match(page, /historicalGolfInsights = useMemo\(\(\) => buildGolfInsights\(history\)/);
-});
-
-test("an unstarted draft keeps all three Play entries accessible and remains resumable in Play", () => {
-  const page = readFileSync("app/page.tsx", "utf8");
-  const home = page.slice(page.indexOf('<HomeDashboard'), page.indexOf('onOpenRules={openRulesForRound}'));
-  const play = page.match(/<PlayHub[\s\S]*?\/>/)?.[0] || "";
-  assert.match(home, /activeRound=\{activeRoundSummary\?\.status === "setup" \? null : activeRoundSummary\}/);
-  assert.match(home, /onPlayOptions=\{\(\) => setTab\("play"\)\}/);
-  assert.match(play, /activeRound=\{activeRoundSummary\}/);
-  assert.match(play, /onContinueRound=\{continueActiveRound\}/);
-});
-
-test("header keeps Profile and notifications, with settings only inside Perfil", () => {
-  assert.match(source, /aria-label="Abrir mi perfil"/);
-  assert.match(source, /aria-label="Abrir notificaciones"/);
-  assert.doesNotMatch(source, /onOpenSettings|Abrir Configuración|name="settings"/);
-  assert.doesNotMatch(moreHub, /onOpenSettings|Configuración adicional|icon: "settings"/);
-  assert.match(source, /ProfileAvatarMedia/);
-});
-
-test("bottom navigation has five approved tabs with safe-area spacing", () => {
-  const block = bottomNav.match(/export const BOTTOM_NAV_TARGETS = \{[\s\S]*?\} as const/)?.[0] || "";
-  for (const label of ["Inicio", "Carrera", "Play", "My Coach", "Reglas"]) assert.match(block, new RegExp(label));
-  for (const removed of ["Social", "Más", "Perfil"]) assert.doesNotMatch(block, new RegExp(removed));
-  assert.equal((block.match(/:\s*"/g) || []).length, 5);
-  assert.match(bottomNavComponent, /aria-label=\{label\}/);
-  assert.match(readFileSync("app/components/app-bottom-nav.module.css", "utf8"), /safe-area-inset-bottom/);
-  assert.match(readFileSync("app/navigation-redesign.css", "utf8"), /padding:[^;]*safe-area-inset-bottom/);
-});
-test("Más is a real scalable tool container", () => {
-  for (const label of ["Campos", "Mi Bolsa", "Handicap / GHIN", "Fitting", "GPS / Hole Map"]) assert.match(moreHub, new RegExp(label.replace("/", "\\/")));
-  assert.match(moreHub, /consulta GHIN read-only cuando está autorizada/);
+test("community feed scrolls within a shell that reserves safe-area navigation space", () => {
+  assert.match(readFileSync("app/components/home-dashboard-clean.module.css", "utf8"), /overflow:visible/);
+  assert.match(readFileSync("app/navigation-redesign.css", "utf8"), /padding:[^;]*112px[^;]*safe-area-inset-bottom/);
+  assert.doesNotMatch(page, /tab === "more"|<MoreHub/);
 });

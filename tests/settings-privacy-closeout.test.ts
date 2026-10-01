@@ -36,26 +36,17 @@ function load(file: string, dependencies: Record<string, unknown>) {
   return exports;
 }
 
-test("actual Home and Más markup has no settings control; remaining profile/notifications work", () => {
-  const visited: string[] = [];
-  const home = load("app/components/home-dashboard.tsx", {
-    react: { useState: () => [false, () => {}] }, "next/image": { __esModule: true, default: "img" },
-    "./modal-shell": { ModalShell: () => null }, "./profile-avatar-media": { ProfileAvatarMedia: () => null },
-  });
-  const tree = home.HomeDashboard({ displayName: "Golfista", insights: {}, groupCount: 0, onOpenProfile: () => visited.push("profile"), onOpenNotifications: () => visited.push("notifications") });
-  const buttons = nodes(tree).filter((node) => node.type === "button");
-  assert.ok(buttons.length > 2);
-  assert.ok(buttons.every((node) => !/configuraci[oó]n|settings/i.test(String(node.props["aria-label"]) + text(node))));
-  for (const label of ["Abrir mi perfil", "Abrir notificaciones"]) (buttons.find((node) => node.props["aria-label"] === label)!.props.onClick as () => void)();
-  assert.deepEqual(visited, ["profile", "notifications"]);
-  const more = load("app/components/more-hub.tsx", { "./feedback-dialog": { FeedbackLink: ({children}: {children:unknown}) => jsx("button", {children}) } });
-  const tools = nodes(more.MoreHub({ hasActiveRound: false })).filter((node) => node.type === "button");
-  assert.equal(tools.length, 8); assert.ok(tools.every((node) => !/Configuración|settings/.test(text(node))));
-  const page = readFileSync("app/page.tsx", "utf8");
-  assert.doesNotMatch(page, /onOpenSettings/);
+test("all five primary headers open the existing profile and notification actions", () => {
+  const profile = load("app/components/profile-navigation-button.tsx", { "./profile-avatar-media": { ProfileAvatarMedia: () => null } });
+  const header = load("app/components/primary-header.tsx", { "./profile-navigation-button": profile, "../../lib/app-navigation": navigation });
+  for (const tab of Object.values(navigation.BOTTOM_NAV_TARGETS)) {
+    const visited: string[] = [];
+    const buttons = nodes(header.PrimaryHeader({ tab, displayName: "Golfista", avatarUrl: "", onProfile: () => visited.push("profile"), onNotifications: () => visited.push("notifications") })).filter((node) => node.type === "button");
+    for (const label of ["Ir a Mi Perfil", "Notificaciones"]) (buttons.find((node) => node.props["aria-label"] === label)!.props.onClick as () => void)();
+    assert.deepEqual(visited, ["profile", "notifications"]);
+  }
   assert.match(readFileSync("app/components/profile-account-panel.tsx", "utf8"), /<b>Configuración<\/b><small>Preferencias, cuenta, notificaciones, privacidad y permisos/);
 });
-
 test("actual bottom navigation has five tabs and Play is always the central destination", () => {
   const nav = load("app/components/app-bottom-nav.tsx", { "next/image": { __esModule: true, default: "img" }, "../../lib/app-navigation": navigation });
   let resumed = 0;

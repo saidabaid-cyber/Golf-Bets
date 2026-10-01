@@ -276,14 +276,14 @@ test("comparison counts only exact shared rounds and never presents legacy owner
   assert.equal(compareLedgerEntries(ledger, "missing", "account:user-juan").roundsTogether, 0);
 });
 
-test("Balances UI is wired from Home and Jugar without presenting payment as known state", () => {
+test("Balances UI is wired from Play without presenting payment as known state", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const home = readFileSync("app/components/home-dashboard.tsx", "utf8");
+
   const play = readFileSync("app/components/play-hub.tsx", "utf8");
   const panel = readFileSync("app/components/balance-ledger-panel.tsx", "utf8");
   const css = readFileSync("app/components/balance-ledger-panel.module.css", "utf8");
   assert.match(page, /tab === "balances" && <BalanceLedgerPanel history=\{history\}/);
-  assert.match(home, /onOpenBalances/);
+
   assert.match(play, /onOpenBalances/);
   assert.match(panel, /REFERENCIA POR RONDA/);
   assert.match(panel, /Puede haber sido liquidada fuera de The Backyard/);

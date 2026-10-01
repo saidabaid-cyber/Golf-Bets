@@ -205,7 +205,7 @@ test("Home, navegación, ronda y Social consumen el mismo media validado; onboar
   const social = readFileSync("app/components/social-connections-panel.tsx", "utf8");
   const group = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
   assert.match(media, /safeProfileAvatarValue\(value\)/);
-  assert.match(home, /<ProfileAvatarMedia value=\{avatarUrl\}/);
+  assert.match(home, /<ProfileAvatarMedia[^>]*value=\{avatarUrl\}/);
   assert.match(navigation, /<ProfileAvatarMedia value=\{avatarUrl\}/);
   assert.match(round, /<ProfileAvatarMedia className=\{styles.avatar\} value=\{activePlayer.id === owner\?\.id \? ownerAvatarUrl : undefined\}/);
   assert.match(social, /<ProfileAvatarMedia value=\{p.avatar_url\}/);

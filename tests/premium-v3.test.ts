@@ -87,14 +87,10 @@ test("V3 QR keeps the share canvas and identifier without displaying a technical
   assert.match(qr, /toBlob\(resolve,"image\/png"\)/);
   assert.match(qr, /navigator.canShare/);
 });
-test("V3 Home grows with active-round controls instead of clipping the quick actions", () => {
-  assert.match(source("app/design-system.css"), /\.backyardV3 \.app\.homeApp \{ height: auto; min-height: 100dvh; overflow: visible;/);
-  const home = source("app/components/home-dashboard-clean.module.css");
-  assert.match(home, /grid-template-rows: var\(--home-hero-height\) auto/);
-  const content = home.match(/\.content \{([^}]+)\}/)![1];
-  assert.match(content, /grid-auto-rows: auto/);
-  assert.match(content, /overflow: visible/);
-  assert.match(content, /96px \+ env\(safe-area-inset-bottom\)/);
+test("V3 community feed scrolls without clipping content behind navigation", () => {
+  assert.match(source("app/navigation-redesign.css"), /height:auto;min-height:100dvh;overflow:visible/);
+  assert.match(source("app/navigation-redesign.css"), /112px \+ env\(safe-area-inset-bottom\)/);
+  assert.match(source("app/components/home-dashboard-clean.module.css"), /overflow:visible/);
 });
 test("V3 keeps product status legible and rules disclosure actions accessible", () => {
   assert.match(source("app/components/equipment.module.css"), /\.itemHeader > \.currentBadge \{ flex-shrink: 0; white-space: nowrap;/);

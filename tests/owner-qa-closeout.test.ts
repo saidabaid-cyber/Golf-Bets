@@ -65,22 +65,18 @@ test("los wizards reinician su propio scroll y conservan el contexto detrás", (
   assert.match(onboarding, /titleRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
 });
 
-test("Home aprobada concentra manual y AI en un selector sin romper sus contratos reales", () => {
+test("Inicio is the existing social feed and round creation remains in Play", () => {
   const home = read("app/components/home-dashboard.tsx");
-  assert.match(home, /data-home-version="approved-golf-home-v2"/);
-  assert.match(home, /const playAction = activeRound \? onContinueRound : onPlayOptions \|\| \(\(\) => setRoundChoiceOpen\(true\)\)/);
-  assert.match(home, /<ModalShell open=\{roundChoiceOpen\}/);
-  assert.match(home, /CONFIGURAR MANUALMENTE/);
-  assert.match(home, /ARMAR CON BACKYARD AI/);
-  assert.match(home, /onOpenGroups/);
-  assert.match(home, /onOpenHistory/);
-  assert.match(home, /onOpenStats/);
-  assert.doesNotMatch(home, /onOpenSettings/);
-  assert.match(home, /onOpenNotifications/);
-  assert.equal((home.match(/onAiRound/g) || []).length, 3, "prop, destructuring y una única acción AI dentro del selector esperadas");
-  assert.doesNotMatch(home, /estadísticas vacías|primera ronda/i);
+  assert.match(home, /data-home-version="community-feed-v3"/);
+  assert.match(home, /CloudSocialActivity/);
+  assert.match(home, /onOpenFriends/);
+  assert.match(home, /onOpenRounds/);
+  assert.doesNotMatch(home, /onOpenStats|onOpenRules|onNewRound/);
+  const play = read("app/components/play-hub.tsx");
+  assert.match(play, /onNewRound/);
+  assert.match(play, /onAiRound/);
+  assert.match(play, /onContinueRound/);
 });
-
 test("onboarding y editor de ronda conservan configuración avanzada de apuestas", () => {
   const onboarding = read("app/components/beta-onboarding-flow.tsx");
   const templateEditor = read("app/components/group-bet-template-editor.tsx");

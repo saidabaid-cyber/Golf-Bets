@@ -112,15 +112,13 @@ test("Términos aclaran que The Backyard no recibe ni procesa dinero", () => {
   assert.match(termsContent, /No sustituye al Comité, al árbitro/i);
 });
 
-test("Home conecta grupos y perfil dentro de los cuatro destinos aprobados", () => {
-  assert.match(read("app/components/home-dashboard.tsx"), /onOpenGroups/);
-  assert.match(page, /setTab\("profile"\)/);
-  const navigation = read("lib/app-navigation.ts");
-  for (const label of ["Inicio", "Social", "Más", "Perfil"]) assert.match(navigation, new RegExp(label));
-  assert.doesNotMatch(navigation.match(/BOTTOM_NAV_TARGETS = \{[\s\S]*?\}/)?.[0] || "", /Jugar|Grupos/);
-  assert.match(read("app/globals.css"), /bottomNav\.betaBottomNav\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)!important/);
+test("Inicio connects community and avatar Profile within the five approved destinations", () => {
+  assert.match(read("app/components/home-dashboard.tsx"), /onOpenFriends/);
+  assert.match(page, /onProfile=\{openProfileRoot\}/);
+  const navigation = read("lib/app-navigation.ts").match(/BOTTOM_NAV_TARGETS = \{[\s\S]*?\}/)?.[0] || "";
+  for (const label of ["Inicio", "Carrera", "Play", "My Coach", "Reglas"]) assert.match(navigation, new RegExp(label));
+  assert.doesNotMatch(navigation, /Social|Más|Perfil/);
 });
-
 test("grupo generado puede compartirse, guardarse y cargarse a una ronda", () => {
   assert.match(page, /startRoundWithGeneratedGroup/);
   assert.match(page, /requestNewRoundIntent\(\{ kind: "players", players: structuredClone\(groupPlayers\) \}\)/);

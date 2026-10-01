@@ -51,8 +51,8 @@ function dateLabel(value: string) {
   return Number.isNaN(date.valueOf()) ? "Fecha no disponible" : new Intl.DateTimeFormat("es-MX", { day: "numeric", month: "short", year: "numeric", timeZone: "America/Mexico_City" }).format(date);
 }
 
-export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh }: {
-  card: SocialActivityCard; viewerId: string; accessToken: string; onRefresh: () => Promise<void>;
+export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh, onOpenAchievements }: {
+  card: SocialActivityCard; viewerId: string; accessToken: string; onRefresh: () => Promise<void>; onOpenAchievements?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<SocialActivityCard | null>(null);
@@ -96,7 +96,8 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
     <header className={styles.author}><ProfileAvatarMedia className={styles.avatar} value={card.author.avatarUrl} fallback={card.author.displayName[0] || "G"} /><div><b>{card.author.displayName}</b>{card.author.username && <small>@{card.author.username}</small>}<small>{dateLabel(card.round?.date || card.createdAt)} · {card.audience === "OWNER" ? "Privado" : "Amigos"}</small></div></header>
     {card.round ? <><h3>{card.round.courseName}</h3><p className={styles.score}>{card.round.ownerScore ?? "—"}<span>golpes · {card.round.holesPlayed} hoyos{card.round.totalOnly ? " · Sólo total" : ""}</span></p></> : <h3>{card.type === "EQUIPMENT_UPDATED" ? "Actualizó su bolsa." : "Logros de ronda"}</h3>}
     {card.courseEvent && <p>Nuevo campo jugado · fuera de su Home Club</p>}
-    {card.achievements.length > 0 && <ul className={styles.achievements}>{card.achievements.map((item) => <li key={item}>{item}</li>)}</ul>}
+    {card.round?.teeName && <p className={styles.tee}>Tee · {card.round.teeName}</p>}
+    {card.achievements.length > 0 && <><ul className={styles.achievements}>{card.achievements.map((item) => <li key={item}>{item}</li>)}</ul>{card.author.userId === viewerId && onOpenAchievements && <button type="button" className="textButton" onClick={onOpenAchievements}>Ver en Trophy Room</button>}</>}
     {card.round && <p className={styles.attest}>{card.attestCount ? `Atestada por ${card.attestCount} ${card.attestCount === 1 ? "jugador" : "jugadores"}` : "Sin atestar"}<small>Confirmación de compañeros. No es certificación GHIN/WHS.</small></p>}
     <div className={styles.actions}>
       <button type="button" disabled={busy} aria-pressed={card.likedByMe} onClick={() => void act(like)}>{card.likedByMe ? "♥" : "♡"} Like · {card.likesCount}</button>
@@ -154,7 +155,7 @@ export function CloudSocialNotifications({ viewerId, accessToken, onFriends, onR
 }
 
 /** Key this component by authenticated identity; never carry another account's feed across login. */
-export function CloudSocialActivity({ viewerId, accessToken, localRoundId, friendsOnly = false }: { viewerId: string; accessToken?: string; localRoundId?: string; friendsOnly?: boolean }) {
+export function CloudSocialActivity({ viewerId, accessToken, localRoundId, friendsOnly = false, onOpenAchievements }: { viewerId: string; accessToken?: string; localRoundId?: string; friendsOnly?: boolean; onOpenAchievements?: () => void }) {
   const [cards, setCards] = useState<SocialActivityCard[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -192,7 +193,7 @@ export function CloudSocialActivity({ viewerId, accessToken, localRoundId, frien
     {loading && <p role="status">Cargando actividad…</p>}
     {message && <div className={styles.notice} role="status"><p>{message}</p><button type="button" onClick={() => void refresh().catch((error) => setMessage(socialErrorMessage(error)))}>Reintentar</button></div>}
     {!loading && !message && !cards.length && <div className={styles.empty}><h2>{localRoundId ? "Tarjeta social pendiente" : "Aún no hay actividad compartida"}</h2><p>{localRoundId ? "Estará disponible cuando la ronda termine y su sincronización cloud se confirme." : "Tus preferencias controlan qué compartes. No publicamos rondas en tiempo real."}</p></div>}
-    {cards.map((card) => <SocialRoundActivityCard key={`${viewerId}:${card.id}`} card={card} viewerId={viewerId} accessToken={accessToken} onRefresh={refresh} />)}
+    {cards.map((card) => <SocialRoundActivityCard key={`${viewerId}:${card.id}`} card={card} viewerId={viewerId} accessToken={accessToken} onRefresh={refresh} onOpenAchievements={onOpenAchievements} />)}
     {nextCursor && <div className={styles.actions}><button type="button" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Cargando…" : "Ver más actividad"}</button></div>}
   </section>;
 }

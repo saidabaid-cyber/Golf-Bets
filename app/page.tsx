@@ -117,7 +117,7 @@ import { useBackyardIndexPreference } from "./components/use-backyard-index-pref
 import { useGhinReadOnlyProfile } from "./components/use-ghin-read-only-profile";
 import { selectedHandicapIndex } from "../lib/handicap-source";
 import { HomeDashboard, type ActiveRoundSummary } from "./components/home-dashboard";
-import { ProfileCompletionRing } from './components/profile-completion-ring';
+
 import { ModalShell } from './components/modal-shell';
 import { roundBetResult } from '../lib/round-betting-boundary';
 import { PlayHub } from "./components/play-hub";
@@ -456,7 +456,7 @@ type NewRoundIntent =
   | { kind: "group"; group: FrequentGroup; selectedMemberIds: string[]; scoreOnly?: boolean };
 
 function GolfBetsApp() {
-  const { identity, adminAccess, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
+  const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
   const ghinControl = useGhinReadOnlyProfile(identity.mode === "authenticated" ? identity.accessToken : null);
   const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
@@ -3751,27 +3751,14 @@ function GolfBetsApp() {
 
     {tab === "welcome" && <HomeDashboard
       displayName={identity.displayName}
-      username={identity.username}
       avatarUrl={identity.avatarUrl}
-      profileCompletion={identity.mode === 'authenticated' ? <ProfileCompletionRing token={identity.accessToken} userId={identity.userId} avatar={identity.avatarUrl} name={identity.displayName} revision={JSON.stringify(identity)} onOpen={section => { setProfileCompletionTarget(section); setProfileFocus(section === 'equipment' || section === 'ball' || section === 'fitting' ? 'equipment' : 'profile'); setTab('profile'); }} /> : undefined}
-      onEditActiveRound={() => { setEditingRound(true); setTab('setup'); }}
-      onCancelActiveRound={() => { setNewRoundBackupError(''); setShowDeleteRoundConfirm(true); }}
-      activeRound={activeRoundSummary?.status === "setup" ? null : activeRoundSummary}
-      insights={{ ...betaGolfInsights, betBalance: historicalGolfInsights.betBalance }}
-      groupCount={frequentGroups.length}
-      onContinueRound={continueActiveRound}
-      onAiRound={requestAiRound}
-      onNewRound={requestNewRound}
-      onPlayOptions={() => setTab("play")}
-      onOpenProfile={() => { setProfileFocus("profile"); setTab("profile"); }}
-      onOpenNotifications={() => { setSocialInitialView("notifications"); setTab("social"); }}
-      onOpenHistory={() => setTab("history")}
-      onOpenBalances={() => setTab("balances")}
-      onOpenStats={() => setTab("stats")}
-      onOpenGroups={() => setTab("groups")}
-      onOpenRules={openRulesForRound}
+      identityUserId={identity.userId}
+      accessToken={identity.accessToken || undefined}
+      onOpenRounds={() => setTab("history")}
+      onOpenFriends={() => { setSocialInitialView("friends"); setTab("social"); }}
+      onPrivacy={() => openAccountSettings("privacy")}
+      onOpenAchievements={() => setTab("career")}
     />}
-
     {showPageBack && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
     {tab === "career" && <section className="navigationEmpty"><h2>Tu historia como jugador</h2><p>Progreso, estadísticas y rondas guardadas.</p><button type="button" className="secondary" onClick={() => setTab("stats")}>Estadísticas</button><button type="button" className="textButton" onClick={() => setTab("history")}>Historial</button></section>}
