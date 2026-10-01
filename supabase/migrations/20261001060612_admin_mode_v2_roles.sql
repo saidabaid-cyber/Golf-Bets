@@ -13,8 +13,8 @@ returns boolean language sql stable security definer set search_path='' as $$
       or ((m.scope_type='GLOBAL' or (m.scope_type=target_scope_type and m.scope_id=target_scope_id))
         and target_action <> 'AUDIT' and case m.role
           when 'ADMIN' then target_entity in ('COURSE','COURSE_CONFIGURATION','LOCAL_RULE_SET','CLUB_EQUIPMENT','BALL','SHAFT','COMPETITION','COMPETITION_RULE_SET','REQUEST','BET_PRESENTATION','APP_CONTENT')
-          when 'COURSE_ADMIN' then target_entity in ('COURSE','COURSE_CONFIGURATION','LOCAL_RULE_SET','IMPORT')
-          when 'CATALOG_ADMIN' then target_entity in ('CLUB_EQUIPMENT','BALL','SHAFT','EQUIPMENT_IMAGE','IMPORT')
+          when 'COURSE_ADMIN' then target_entity in ('COURSE','COURSE_CONFIGURATION','LOCAL_RULE_SET')
+          when 'CATALOG_ADMIN' then target_entity in ('CLUB_EQUIPMENT','BALL','SHAFT','EQUIPMENT_IMAGE')
           when 'COMPETITION_ADMIN' then target_entity in ('COMPETITION','COMPETITION_RULE_SET','COURSE_CONFIGURATION')
           when 'SUPPORT_ADMIN' then target_entity='REQUEST' and target_action in ('READ','CREATE_DRAFT','REVIEW')
           when 'CONTENT_ADMIN' then target_entity in ('LOCAL_RULE_SET','COMPETITION_RULE_SET','EQUIPMENT_IMAGE','BET_PRESENTATION','APP_CONTENT')

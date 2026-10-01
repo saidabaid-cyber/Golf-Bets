@@ -43,6 +43,11 @@ test("real Postgres role permissions deny direct writes, PLAYER, ADMIN escalatio
     await assert.rejects(db.query("select admin_change_role_v2($1,'PLAYER','ADMIN','Test',gen_random_uuid())", [playerId]), /SUPER_ADMIN_REQUIRED/);
     const directory = await db.query<{ email: string | null }>("select * from admin_user_directory_v2()");
     assert.ok(directory.rows.every(row => row.email === null));
+    for(const role of ['ADMIN','COURSE_ADMIN','CATALOG_ADMIN']){
+      await db.exec("reset role");await db.query("update admin_memberships set role=$1 where user_id=$2",[role,adminId]);await act(db,adminId);
+      assert.equal((await db.query<{allowed:boolean}>("select private.admin_has_scope_v1('IMPORT','GLOBAL',null,'CREATE_DRAFT') as allowed")).rows[0].allowed,false);
+      assert.equal((await db.query<{allowed:boolean}>("select private.admin_has_scope_v1('COURSE','GLOBAL',null,'AUDIT') as allowed")).rows[0].allowed,false);
+    }
     await act(db, superId);
     await assert.rejects(db.query("select admin_change_role_v2($1,'ADMIN','PLAYER','Test',gen_random_uuid())", [superId]), /SUPER_ADMIN_PROTECTED/);
   } finally { await db.close(); }

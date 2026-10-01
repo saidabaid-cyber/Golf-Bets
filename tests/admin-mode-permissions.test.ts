@@ -18,11 +18,14 @@ test("ADMIN has daily modules but cannot audit, import or administer administrat
 test("SUPER_ADMIN requires an actual global persisted grant", () => {
   assert.equal(applicationRole([{ ...admin, role: "SUPER_ADMIN" }]), "SUPER_ADMIN");
   assert.ok(simpleAdminModules([{ ...admin, role: "SUPER_ADMIN" }]).includes("administrators"));
+  assert.equal(membershipAllows({...admin,role:"SUPER_ADMIN",scopeId:"forged"},{entityType:"BALL",scopeType:"GLOBAL",scopeId:null},"PUBLISH"),false);
 });
 test("scoped legacy administrators retain their permitted domains", () => {
   const member: AdminMembership = { ...admin, role: "COURSE_ADMIN", scopeType: "COURSE", scopeId: "course-a" };
   assert.deepEqual(simpleAdminModules([member]), ["courses", "users"]);
   assert.equal(membershipAllows(member, { entityType: "COURSE", scopeType: "COURSE", scopeId: "course-b" }, "PUBLISH"), false);
+  assert.equal(membershipAllows(member,{entityType:"IMPORT",scopeType:"COURSE",scopeId:"course-a"},"CREATE_DRAFT"),false);
+  assert.equal(membershipAllows(member,{entityType:"COURSE",scopeType:"COURSE",scopeId:"course-a"},"AUDIT"),false);
 });
 test("a feature Preview must prove a distinct DB; frozen DEV, Production and forged URLs fail closed", () => {
   const env = { ADMIN_MODE_V2_ENABLED: "true", ADMIN_MODE_ISOLATED_DB_REF: "abcdefghijklmnopqrst", NEXT_PUBLIC_SUPABASE_URL: "https://abcdefghijklmnopqrst.supabase.co", VERCEL: "1", VERCEL_ENV: "preview", VERCEL_GIT_COMMIT_REF: "feature/admin-mode-v2" };

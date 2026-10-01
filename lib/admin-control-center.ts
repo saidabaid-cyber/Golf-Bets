@@ -49,8 +49,8 @@ export type AdminAction = "READ" | "CREATE_DRAFT" | "REVIEW" | "VERIFY" | "PUBLI
 
 const ROLE_ENTITIES: Record<Exclude<AdminRole, "SUPER_ADMIN">, readonly AdminEntityType[]> = {
   ADMIN: ["COURSE", "COURSE_CONFIGURATION", "LOCAL_RULE_SET", "CLUB_EQUIPMENT", "BALL", "SHAFT", "COMPETITION", "COMPETITION_RULE_SET", "REQUEST"],
-  COURSE_ADMIN: ["COURSE", "COURSE_CONFIGURATION", "LOCAL_RULE_SET", "IMPORT"],
-  CATALOG_ADMIN: ["CLUB_EQUIPMENT", "BALL", "SHAFT", "EQUIPMENT_IMAGE", "IMPORT"],
+  COURSE_ADMIN: ["COURSE", "COURSE_CONFIGURATION", "LOCAL_RULE_SET"],
+  CATALOG_ADMIN: ["CLUB_EQUIPMENT", "BALL", "SHAFT", "EQUIPMENT_IMAGE"],
   COMPETITION_ADMIN: ["COMPETITION", "COMPETITION_RULE_SET", "COURSE_CONFIGURATION"],
   SUPPORT_ADMIN: ["REQUEST"],
   CONTENT_ADMIN: ["LOCAL_RULE_SET", "COMPETITION_RULE_SET", "EQUIPMENT_IMAGE"],
@@ -65,8 +65,8 @@ function scopeMatches(membership: AdminMembership, target: AdminTarget) {
 /** Server and tests share this rule, but the database remains the final authority. */
 export function membershipAllows(membership: AdminMembership, target: AdminTarget, action: AdminAction) {
   if (!membership.active) return false;
-  if (membership.role === "SUPER_ADMIN") return membership.scopeType === "GLOBAL";
-  if (membership.role === "ADMIN" && action === "AUDIT") return false;
+  if (membership.role === "SUPER_ADMIN") return membership.scopeType === "GLOBAL" && membership.scopeId === null;
+  if (action === "AUDIT" || target.entityType === "IMPORT") return false;
   if (!ROLE_ENTITIES[membership.role].includes(target.entityType)) return false;
   if (!scopeMatches(membership, target)) return false;
   if (membership.role === "SUPPORT_ADMIN") return action === "READ" || action === "CREATE_DRAFT";
