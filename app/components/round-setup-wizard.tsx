@@ -113,17 +113,32 @@ export function WizardReviewBlock({ step, title, children }: { step: WizardStep;
   return <section className={`card ${styles.review}`}><div><h2>{title}</h2><button type="button" className="textButton" onClick={() => wizard.edit(step)}>Editar {STEPS[step - 1].toLowerCase()}</button></div>{children}</section>;
 }
 
-export function WizardBetCatalog({ entries, children }: { entries: readonly WizardBetEntry[]; children: ReactNode }) {
+export function WizardBetCatalog({ entries, requestAccess, children }: {
+  entries: readonly WizardBetEntry[];
+  requestAccess?: () => Promise<boolean>;
+  children: ReactNode;
+}) {
   const wizard = useContext(WizardContext);
+  const accessPending = useRef(false);
   const [selection, setSelection] = useState<{ id: string | null; revision: number | undefined }>({ id: null, revision: undefined });
   const selected = wizard.target && wizard.target.revision !== selection.revision && entries.some((entry) => entry.id === wizard.target?.id) ? wizard.target.id : selection.id;
   const select = (id: string | null) => setSelection({ id, revision: wizard.target?.revision });
+  async function configure(id: string) {
+    if (accessPending.current) return;
+    accessPending.current = true;
+    try {
+      // Entry into a financial editor uses the existing explicit consent gate.
+      // Declining keeps the catalog and every bet unchanged.
+      if (!requestAccess || await requestAccess()) select(id);
+    } catch { /* The existing consent dialog owns the recoverable error. */ }
+    finally { accessPending.current = false; }
+  }
   const active = entries.filter((entry) => entry.enabled);
   return <WizardBetEditorContext value={{ ids: entries.map((entry) => entry.id), selected, select }}>
     <div className={styles.catalog}>
       {selected ? <button type="button" className="secondary" onClick={() => select(null)}>← Elegir otra apuesta · {active.length} activa{active.length === 1 ? "" : "s"}</button> : <>
         <p className="hint">{active.length ? `${active.length} modalidades activas. Toca para editar.` : "Opcional. Puedes jugar sin apuestas."}</p>
-        <div className={styles.choices}>{entries.map((entry) => <button type="button" key={entry.id} aria-label={`Configurar ${entry.label}`} data-enabled={entry.enabled} onClick={() => select(entry.id)}><b>{entry.label}</b><small>{entry.enabled ? "✓ Activa · Editar" : "Configurar"}</small></button>)}</div>
+        <div className={styles.choices}>{entries.map((entry) => <button type="button" key={entry.id} aria-label={`Configurar ${entry.label}`} data-enabled={entry.enabled} onClick={() => void configure(entry.id)}><b>{entry.label}</b><small>{entry.enabled ? "✓ Activa · Editar" : "Configurar"}</small></button>)}</div>
       </>}
       {children}
     </div>

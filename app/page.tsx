@@ -4013,7 +4013,7 @@ function GolfBetsApp() {
       <section className="card">
         <div className="sectionTitle"><div><h2>3. Apuestas grupales</h2><p>Todas las modalidades del grupo, con su porcentaje y participantes.</p></div></div>
         {!bettingConsentGranted && <div className="notice compactConsentNotice" role="status">Para activar o registrar apuestas, completa el consentimiento específico desde <button type="button" className="textButton" onClick={() => setTab("account")}>Mi Cuenta</button>. Tus datos anteriores se conservan.</div>}
-        <WizardBetCatalog entries={wizardBets.group}>
+        <WizardBetCatalog entries={wizardBets.group} requestAccess={requestBettingConsent}>
 
         <SetupBetCard id="rabbits" icon="🐇" title="Conejos" description="Gana hoyos · captura y conserva el conejo" help="rabbits" enabled={bets.rabbits.enabled} locked={!bettingConsentGranted} requestActivation={requestBettingConsent} onEnabledChange={(enabled) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, enabled } }))}><BetModeControl label="conejos" value={rabbitMode} options={RABBIT_MODE_OPTIONS} onChange={(mode) => setBets((current) => ({ ...current, rabbits: { ...current.rabbits, mode, ...(mode === "continuous" ? { accumulate: true } : {}) } }))} /><div className="grid3"><MoneyInput label="Valor" value={bets.rabbits.value} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, value: v } })} /><HcpPercentInput value={bets.rabbits.hcpPct} onChange={(v) => setBets({ ...bets, rabbits: { ...bets.rabbits, hcpPct: v } })} /><HandicapModeSelect value={bets.rabbits.decimals} onChange={(decimals) => setBets({ ...bets, rabbits: { ...bets.rabbits, decimals } })} /></div><label className="miniLabel">Participan</label><ParticipantChips players={players} selected={bets.rabbits.participantIds} onChange={(ids) => setBets({ ...bets, rabbits: { ...bets.rabbits, participantIds: ids } })} /></SetupBetCard>
 
@@ -4134,7 +4134,7 @@ function GolfBetsApp() {
       <RoundSetupStep step={4}>
       <section className="card"><h2>4. Personales y manuales</h2><p className="hint">Jugador vs jugador y acuerdos manuales, separados de las apuestas grupales.</p>
       {!bettingConsentGranted && <div className="notice compactConsentNotice">Para activar apuestas, completa el consentimiento específico desde <button type="button" className="textButton" onClick={() => setTab("account")}>Mi Cuenta</button>.</div>}
-      <WizardBetCatalog entries={wizardBets.personal}>
+      <WizardBetCatalog entries={wizardBets.personal} requestAccess={requestBettingConsent}>
       <ResultAccordion
         id="setup-manuals"
         title={<SetupModeTitle icon={BET_PRESENTATION.manuals.icon} title={BET_PRESENTATION.manuals.title} description="Importes directos por jugador · la suma debe cerrar en $0" />}
