@@ -1,6 +1,7 @@
 import { playingHandicap, strokeAllowanceForHole, personalRivalKey } from "./engine";
 import type { calculatePersonalBets } from "./engine";
 import { migratePersonalNassau } from "./personal-nassau";
+import { migrateSupplementalNassau } from "./nassau-migration";
 import type { Course, HoleScore, Player, RoundSnapshot } from "./types";
 import type { FrequentPlayer } from "./types";
 
@@ -73,7 +74,7 @@ export function normalizeRoundDraft(value: unknown) {
     ballFriendSetup: recordValue(source.ballFriendSetup) || {},
     expenses: recordValue(source.expenses),
   };
-  return migrateDraftPressures(draft);
+  return migrateDraftPressures(migrateSupplementalNassau(draft));
 }
 
 function validPuttRows(value: unknown) {

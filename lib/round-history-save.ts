@@ -26,7 +26,8 @@ export type SaveRoundHistoryOptions = {
 export type SaveRoundHistoryResult = {
   history: RoundSnapshot[];
   bundle: CloudDataBundle;
-  fingerprint: string;
+  fingerprint: string | null;
+  offlinePersisted: boolean;
 };
 
 /**
@@ -71,7 +72,17 @@ export async function saveRoundHistoryLocalFirst({
   bundle.history = verifiedHistory;
   bundle.activeDraft = null;
   bundle.activeDraftUpdatedAt = snapshot.updatedAt || snapshot.completedAt || new Date().toISOString();
-  const fingerprint = await persistOffline(ownerId, bundle, queueForCloud);
+  let fingerprint: string | null = null;
+  let offlinePersisted = false;
+  try {
+    fingerprint = await persistOffline(ownerId, bundle, queueForCloud);
+    offlinePersisted = true;
+  } catch {
+    // localStorage was already written and read back successfully. IndexedDB
+    // and the cloud outbox are an additional durability/sync layer; a failure
+    // there must not turn a confirmed on-device save into a lost round. The
+    // normal sync coordinator can rebuild its idempotent bundle from storage.
+  }
 
-  return { history: verifiedHistory, bundle, fingerprint };
+  return { history: verifiedHistory, bundle, fingerprint, offlinePersisted };
 }

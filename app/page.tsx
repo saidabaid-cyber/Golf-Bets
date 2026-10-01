@@ -71,6 +71,7 @@ import { ResultAccordion } from "./components/result-accordion";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
 import { FullScorecard } from "./components/full-scorecard";
 import { restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
+import { migrateSupplementalNassau } from "../lib/nassau-migration";
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { snapshotPersonalResult } from "../lib/personal-history";
 import { createHoleSummarySession, nextHoleDestination, type HoleSummarySession } from "../lib/hole-summary";
@@ -281,8 +282,16 @@ function normalizeExpenses(raw: any): Expense {
   };
 }
 
+function normalizeHistorySnapshot(round: RoundSnapshot): RoundSnapshot {
+  return migrateSupplementalNassau({ ...round, expenses: normalizeExpenses(round.expenses) });
+}
+
 function Toggle({ on, onClick, label = "activar" }: { on: boolean; onClick: () => void; label?: string }) {
   return <button className={`switch ${on ? "on" : ""}`} role="switch" aria-checked={on} onClick={onClick} aria-label={label}><span /></button>;
+}
+
+function SetupModeTitle({ icon, title, description }: { icon: string; title: string; description: string }) {
+  return <span className="setupModeTitle"><b>{icon} {title}</b><small>{description}</small></span>;
 }
 
 function ParticipantChips({
@@ -405,6 +414,8 @@ function GolfBetsApp() {
   const [expandedPersonalId, setExpandedPersonalId] = useState<string | null>(null);
   const personalSetupListRef = useRef<HTMLDivElement>(null);
   const pendingPersonalFocus = useRef<string | null>(null);
+  const manualSetupListRef = useRef<HTMLElement>(null);
+  const pendingManualFocus = useRef<string | null>(null);
   const [openResultSections, setOpenResultSections] = useState<Record<string, boolean>>({ "final-player-summary": true, "general-summary": true });
   const [pendingResultScroll, setPendingResultScroll] = useState<string | null>(null);
   const [highContrast, setHighContrast] = useState(true);
@@ -462,6 +473,16 @@ function GolfBetsApp() {
     section.scrollIntoView({ behavior: "smooth", block: "center" });
     field.focus({ preventScroll: true });
   }, [tab, personalSetupOpen, expandedPersonalId, personalBets]);
+  useEffect(() => {
+    const targetId = pendingManualFocus.current;
+    if (tab !== "setup" || !manualSetupOpen || !targetId) return;
+    const section = Array.from(manualSetupListRef.current?.querySelectorAll<HTMLElement>("[data-manual-editor]") || []).find((element) => element.dataset.manualEditor === targetId);
+    const field = section?.querySelector<HTMLElement>("[data-manual-first]");
+    if (!section || !field) return;
+    pendingManualFocus.current = null;
+    section.scrollIntoView({ behavior: "smooth", block: "center" });
+    field.focus({ preventScroll: true });
+  }, [tab, manualSetupOpen, manualBets]);
   useEffect(() => {
     const id = pendingResultScroll;
     if (tab !== "results" || !id || !openResultSections[id]) return;
@@ -584,7 +605,7 @@ function GolfBetsApp() {
       const savedFrequentGroups = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
       try {
         setCourses(mergeDefaultCourses(Array.isArray(savedCourses) ? savedCourses as Course[] : null));
-        if (Array.isArray(savedHistory)) setHistory(savedHistory.map((r: any) => ({ ...r, expenses: normalizeExpenses(r.expenses) })));
+        if (Array.isArray(savedHistory)) setHistory((savedHistory as RoundSnapshot[]).map(normalizeHistorySnapshot));
         if (Array.isArray(savedRivals)) setSavedPersonalRivals(savedRivals);
         if (Array.isArray(savedFrequentPlayers)) setFrequentPlayers(savedFrequentPlayers);
         setFrequentGroups(savedFrequentGroups);
@@ -663,7 +684,7 @@ function GolfBetsApp() {
     }
     const mergedCourses = mergeDefaultCourses(reconciled.courses);
     if (changed(local.courses, reconciled.courses)) setCourses(mergedCourses);
-    if (changed(local.history, reconciled.history)) setHistory(reconciled.history.map(round => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
+    if (changed(local.history, reconciled.history)) setHistory(reconciled.history.map(normalizeHistorySnapshot));
     if (changed(local.rivals, reconciled.rivals)) setSavedPersonalRivals(reconciled.rivals);
     if (changed(local.frequentPlayers, reconciled.frequentPlayers)) setFrequentPlayers(reconciled.frequentPlayers);
     if (changed(local.frequentGroups, reconciled.frequentGroups)) setFrequentGroups(reconciled.frequentGroups);
@@ -861,7 +882,7 @@ function GolfBetsApp() {
     resolved.courses = mergedCourses;
     writeCloudBundleToStorage(localStorage, resolved);
     setCourses(mergedCourses);
-    setHistory(resolved.history.map(round => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
+    setHistory(resolved.history.map(normalizeHistorySnapshot));
     setSavedPersonalRivals(resolved.rivals);
     setFrequentPlayers(resolved.frequentPlayers);
     setFrequentGroups(resolved.frequentGroups);
@@ -1159,12 +1180,24 @@ function GolfBetsApp() {
   }
 
   function newManualBet() {
+    const id = makeId();
+    setManualSetupOpen(true);
+    pendingManualFocus.current = id;
     setManualBets((bets) => [...bets, {
-      id: makeId(),
+      id,
       enabled: true,
       name: `Apuesta manual ${bets.length + 1}`,
       amounts: Object.fromEntries(players.map((p) => [p.id, 0])),
     }]);
+  }
+
+  function setManualModeEnabled(enabled: boolean) {
+    setManualSetupOpen(true);
+    if (enabled && manualBets.length === 0) {
+      newManualBet();
+      return;
+    }
+    setManualBets((items) => items.map((item) => ({ ...item, enabled })));
   }
 
   function updateManualBet(id: string, patch: Partial<ManualBet>) {
@@ -1244,6 +1277,15 @@ function GolfBetsApp() {
     setExpandedPersonalId(draft.id);
     pendingPersonalFocus.current = draft.id;
     setPersonalBets((bets) => [...bets, !rival && saved ? applySavedPersonalRivalTemplate(draft, saved) : draft]);
+  }
+
+  function setPersonalModeEnabled(enabled: boolean) {
+    setPersonalSetupOpen(true);
+    if (enabled && personalBets.length === 0) {
+      newPersonalBet();
+      return;
+    }
+    setPersonalBets((items) => items.map((item) => ({ ...item, enabled })));
   }
 
   function savePersonalRivalFromBet(bet: PersonalBet) {
@@ -1352,7 +1394,7 @@ function GolfBetsApp() {
         queueForCloud,
       });
       clearActiveRoundStorage(window.localStorage);
-      setHistory(() => saved.history.map(round => ({ ...round, expenses: normalizeExpenses(round.expenses) })));
+      setHistory(() => saved.history.map(normalizeHistorySnapshot));
       setRoundClosed(true);
       setDraftAvailable(false);
       const timestamp = new Date().toISOString();
@@ -1360,8 +1402,10 @@ function GolfBetsApp() {
       setSaveStatus("saved");
       if (queueForCloud) {
         setCloudStatus(navigator.onLine ? "pending" : "offline");
-        setFeedback("Ronda guardada en este dispositivo · Pendiente de sincronizar");
+        setFeedback("Ronda guardada en este dispositivo · sincronización pendiente.");
         requestCloudSync.current?.();
+      } else if (!saved.offlinePersisted) {
+        setFeedback("Ronda guardada en este dispositivo.");
       } else {
         setFeedback("Ronda guardada ✓");
       }
@@ -1677,14 +1721,14 @@ function GolfBetsApp() {
         </div>)}</div>
       </section>}
 
-      {!personalBets.length && <div className="empty">Todavía no hay apuestas personales. Toca “+ Personal”.</div>}
+      {!personalBets.length && <div className="empty">Todavía no hay Nassau Individual. Toca “+ Nassau Individual”.</div>}
 
       <div ref={personalSetupListRef} className="personalSetupList">{[...personalBets].sort((first, second) => Number(second.enabled !== false) - Number(first.enabled !== false)).map((bet) => {
         const groupRival = bet.rivalPlayerId ? players.find((p) => p.id === bet.rivalPlayerId) : undefined;
         const displayRival = bet.rivalMode === "group" ? (groupRival?.name || "Rival") : (bet.rivalName || "Rival");
         const expanded = expandedPersonalId === bet.id;
         return <section className={`card personalSetupItem ${bet.enabled === false ? "betItemDisabled" : ""}`} key={bet.id} data-personal-editor={bet.id}>
-          <div className="personalSetupHeading"><button type="button" aria-expanded={expanded} aria-controls={`personal-editor-${bet.id}`} onClick={() => setExpandedPersonalId(expanded ? null : bet.id)}><span>{owner?.name ?? "Base"} vs {displayRival}<small>{bet.enabled === false ? "Desactivada · no participa" : "Activa"}</small></span><i aria-hidden="true">{expanded ? "⌃" : "⌄"}</i></button><Toggle on={bet.enabled !== false} label={`${bet.enabled === false ? "Activar" : "Desactivar"} Personal contra ${displayRival}`} onClick={() => updatePersonalBet(bet.id, { enabled: bet.enabled === false })} /><button type="button" className="remove" aria-label={`Eliminar Personal contra ${displayRival}`} onClick={() => { setPersonalBets((items) => items.filter((item) => item.id !== bet.id)); if (expanded) setExpandedPersonalId(null); }}>×</button></div>
+          <div className="personalSetupHeading"><button type="button" aria-expanded={expanded} aria-controls={`personal-editor-${bet.id}`} onClick={() => setExpandedPersonalId(expanded ? null : bet.id)}><span>{owner?.name ?? "Base"} vs {displayRival}<small>{bet.enabled === false ? "Desactivada · no participa" : "Activa"}</small></span><i aria-hidden="true">{expanded ? "⌃" : "⌄"}</i></button><Toggle on={bet.enabled !== false} label={`${bet.enabled === false ? "Activar" : "Desactivar"} Nassau Individual contra ${displayRival}`} onClick={() => updatePersonalBet(bet.id, { enabled: bet.enabled === false })} /><button type="button" className="remove" aria-label={`Eliminar Nassau Individual contra ${displayRival}`} onClick={() => { setPersonalBets((items) => items.filter((item) => item.id !== bet.id)); if (expanded) setExpandedPersonalId(null); }}>×</button></div>
           {expanded && <div id={`personal-editor-${bet.id}`} className="personalSetupBody">
           <p className="muted">Ventaja y presión aplican solo a esta apuesta.</p>
           <div className="grid3">
@@ -1738,15 +1782,15 @@ function GolfBetsApp() {
   }
 
   function renderManualBetsEditor(embedded = false) {
-    return <section className={embedded ? "manualBetsEditor" : "card"}>
+    return <section ref={embedded ? manualSetupListRef : undefined} className={embedded ? "manualBetsEditor" : "card"}>
       {!embedded && <div className="sectionTitle"><div><h2>Apuestas manuales</h2><p>Para cualquier apuesta no contemplada. Captura ganancia (+) o pérdida (−); debe cerrar en $0.</p></div><button className="textButton" onClick={newManualBet}>+ Apuesta</button></div>}
       {embedded && <p className="muted">Para cualquier apuesta no contemplada. Captura ganancia (+) o pérdida (−); debe cerrar en $0.</p>}
       {!manualBets.length && <div className="empty">Sin apuestas manuales.</div>}
       {[...manualBets].sort((first, second) => Number(second.enabled !== false) - Number(first.enabled !== false)).map((bet) => {
         const total = manualBetTotal(bet);
         const valid = Math.abs(total) < 0.001;
-        return <div className={`manualBet ${bet.enabled === false ? "betItemDisabled" : ""}`} key={bet.id}>
-          <div className="row between"><input className="manualName" value={bet.name} onChange={(e) => updateManualBet(bet.id, { name: e.target.value })} /><span className="manualBetActions"><Toggle on={bet.enabled !== false} label={`${bet.enabled === false ? "Activar" : "Desactivar"} ${bet.name || "apuesta manual"}`} onClick={() => updateManualBet(bet.id, { enabled: bet.enabled === false })} /><button className="remove" aria-label={`Eliminar ${bet.name || "apuesta manual"}`} onClick={() => setManualBets((bs) => bs.filter((x) => x.id !== bet.id))}>×</button></span></div>
+        return <div data-manual-editor={bet.id} className={`manualBet ${bet.enabled === false ? "betItemDisabled" : ""}`} key={bet.id}>
+          <div className="row between"><input data-manual-first className="manualName" value={bet.name} onChange={(e) => updateManualBet(bet.id, { name: e.target.value })} /><span className="manualBetActions"><Toggle on={bet.enabled !== false} label={`${bet.enabled === false ? "Activar" : "Desactivar"} ${bet.name || "apuesta manual"}`} onClick={() => updateManualBet(bet.id, { enabled: bet.enabled === false })} /><button className="remove" aria-label={`Eliminar ${bet.name || "apuesta manual"}`} onClick={() => setManualBets((bs) => bs.filter((x) => x.id !== bet.id))}>×</button></span></div>
           <div className="manualGrid">{players.map((p) => <label key={p.id}><span>{p.name}</span><SignedMoneyInput label={`${bet.name || "apuesta manual"} · ${p.name}`} value={bet.amounts[p.id] ?? 0} onChange={(next) => setManualAmount(bet.id, p.id, next)} /></label>)}</div>
           <div className={`manualBalance ${valid ? "good" : "bad"}`}>{valid ? "✓ Cierra en $0 y se suma al resultado" : `Falta cuadrar ${money(-total)}`}</div>
         </div>;
@@ -2014,7 +2058,7 @@ function GolfBetsApp() {
     { id: "polla-total18", label: "Polla Nassau", visible: bets.polla.total18.enabled },
     { id: "mini-polla", label: "Mini Polla", visible: bets.miniPolla.enabled },
     ...supplemental.results.map((result) => ({ id: `supplemental-${result.betId}`, label: result.label, visible: true })),
-    { id: "personals", label: "Personales", visible: personals.results.length > 0 },
+    { id: "personals", label: "Nassau Individual", visible: personals.results.length > 0 },
     { id: "manuals", label: "Manuales", visible: manualBets.some((bet) => bet.enabled !== false) },
     { id: "vipers", label: "Víboras", visible: bets.vipers.enabled },
     { id: "camels", label: "Camellos", visible: bets.camels.enabled },
@@ -2203,23 +2247,23 @@ function GolfBetsApp() {
 
       <ResultAccordion
         id="setup-personals"
-        title="Apuestas personales actuales"
+        title={<SetupModeTitle icon="🏌️" title="Nassau Individual" description="Jugador vs jugador · ida, vuelta y total" />}
         open={personalSetupOpen}
         onOpenChange={setPersonalSetupOpen}
         className="setupBetsAccordion"
-        headerAction={<span className="resultHeaderActions"><BetHelpButton kind="personal" /><button type="button" className="textButton" onClick={(event) => { event.stopPropagation(); newPersonalBet(); }}>+ Personal</button></span>}
-      >{renderPersonalBetsEditor()}</ResultAccordion>
+        headerAction={<span className="resultHeaderActions"><BetHelpButton kind="personal" /><Toggle on={personalBets.some((bet) => bet.enabled !== false)} label={`${personalBets.some((bet) => bet.enabled !== false) ? "Desactivar" : "Activar"} Nassau Individual`} onClick={() => setPersonalModeEnabled(!personalBets.some((bet) => bet.enabled !== false))} /></span>}
+      ><div className="setupModeTools"><button type="button" className="textButton" onClick={newPersonalBet}>+ Nassau Individual</button></div>{renderPersonalBetsEditor()}</ResultAccordion>
 
       <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} />
 
       <ResultAccordion
         id="setup-manuals"
-        title="Apuestas manuales"
+        title={<SetupModeTitle icon="✍️" title="Apuestas Manuales" description="Importes directos por jugador · la suma debe cerrar en $0" />}
         open={manualSetupOpen}
         onOpenChange={setManualSetupOpen}
         className="setupBetsAccordion"
-        headerAction={<span className="resultHeaderActions"><BetHelpButton kind="manual" /><button type="button" className="textButton" onClick={(event) => { event.stopPropagation(); setManualSetupOpen(true); newManualBet(); }}>+ Apuesta</button></span>}
-      >{renderManualBetsEditor(true)}</ResultAccordion>
+        headerAction={<span className="resultHeaderActions"><BetHelpButton kind="manual" /><Toggle on={manualBets.some((bet) => bet.enabled !== false)} label={`${manualBets.some((bet) => bet.enabled !== false) ? "Desactivar" : "Activar"} Apuestas Manuales`} onClick={() => setManualModeEnabled(!manualBets.some((bet) => bet.enabled !== false))} /></span>}
+      ><div className="setupModeTools"><button type="button" className="textButton" onClick={newManualBet}>+ Apuesta</button></div>{renderManualBetsEditor(true)}</ResultAccordion>
 
       <button className="primary big" disabled={!players.length || players.some((player) => !player.name.trim())} onClick={() => { setBets(current => freezeRoundHandicapBases(current, players)); if (!editingRound) setCurrentIndex(0); setEditingRound(false); setTab("round"); }}>{editingRound ? "Guardar configuración y continuar →" : "Iniciar ronda →"}</button>
     </>}
@@ -2363,7 +2407,7 @@ function GolfBetsApp() {
         {bets.fish.enabled && <span><b>🐟 Peces</b>{money(bets.fish.value)} · H10–18 {bets.fish.secondNineMultiplier}x</span>}
         {bets.loba.enabled && <span><b>🐺 Loba</b>{money(bets.loba.value)} base · HCP {bets.loba.hcpPct ?? 100}%{bets.loba.unitsEnabled ? ` · 📏 ${money(bets.loba.unitValue)}` : ""}</span>}
         {supplementalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>{SUPPLEMENTAL_BET_LABELS[bet.type]}</b>{money(supplementalBetValue(bet))}</span>)}
-        {personalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>Personal {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{roundHoles === 18 && (bet.pressureMultiplier || 1) > 1 ? ` · 2ª jugada ${bet.pressureMultiplier}x` : ""} · Carry {bet.carryEnabled ? "Sí" : "No"}</span>)}
+        {personalBets.filter((bet) => bet.enabled !== false).map((bet) => <span key={bet.id}><b>Nassau Individual · {owner?.name} vs {bet.rivalMode === "group" ? playerName(bet.rivalPlayerId) : bet.rivalName}</b>{money(bet.baseValue)} base{roundHoles === 18 && (bet.pressureMultiplier || 1) > 1 ? ` · 2ª jugada ${bet.pressureMultiplier}x` : ""} · Carry {bet.carryEnabled ? "Sí" : "No"}</span>)}
       </div></ResultAccordion>
 
       <ResultAccordion id="general-summary" title={resultsView === "general" ? "Resumen General" : "Resumen por jugador"} className="playerSummary" {...resultAccordionProps("general-summary")}>
@@ -2395,7 +2439,7 @@ function GolfBetsApp() {
       {bets.units.enabled && <ResultAccordion id="units" title={`📏 Unidades · ${unitQuantitySummary.total > 0 ? "+" : ""}${unitQuantitySummary.total}`} {...resultAccordionProps("units")}><div className="resultBalanceList">{playersByIds(players, bets.units.participantIds).map(player => { const quantity = unitQuantitySummary.quantities[player.id] ?? 0; const amount = units.balances[player.id] ?? 0; return <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{quantity > 0 ? "+" : ""}{quantity} unidades netas</small></span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div></ResultAccordion>}
       {bets.ballFriend.enabled && <ResultAccordion id="ball-friend" title="⚪🤝 Bola Amiga" {...resultAccordionProps("ball-friend")}><div className="resultBalanceList">{playersByIds(players, bets.ballFriend.participantIds).map(player => { const amount = ballFriend.balances[player.id] ?? 0; const points = ballFriend.points[player.id] ?? 0; return <div className="transfer" key={player.id}><span><b>{player.name}</b><small>{points > 0 ? "+" : ""}{points} puntos</small></span><strong className={amount > 0 ? "good" : amount < 0 ? "bad" : ""}>{signedMoney(amount)}</strong></div>; })}</div></ResultAccordion>}
 
-      {personals.results.length > 0 && <ResultAccordion id="personals" title="Resultados de Apuestas Personales" {...resultAccordionProps("personals")}><PersonalCompact embedded results={personals.results} owner={owner?.name || "Jugador principal"} name={playerName} onOpen={id => { setPersonalDetailId(id); setTab("personalDetail"); }} /></ResultAccordion>}
+      {personals.results.length > 0 && <ResultAccordion id="personals" title="Resultados de Nassau Individual" {...resultAccordionProps("personals")}><PersonalCompact embedded results={personals.results} owner={owner?.name || "Jugador principal"} name={playerName} onOpen={id => { setPersonalDetailId(id); setTab("personalDetail"); }} /></ResultAccordion>}
 
       <ResultAccordion id="settlement" title="Liquidación final" className={`settlementCard ${Math.abs(settlementDifference) < 0.001 ? "" : "settlementError"}`} {...resultAccordionProps("settlement")}>
         <div className="row between"><p className="muted">Pagos mínimos sugeridos después de netear todas las apuestas.</p><b>{Math.abs(settlementDifference) < 0.001 ? "✓ Suma $0" : `Inconsistencia ${signedMoney(settlementDifference)}`}</b></div>

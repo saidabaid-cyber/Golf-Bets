@@ -216,7 +216,7 @@ test("OFF preserves Personal, Manual and supplemental data but excludes every re
   assert.equal((normalizeRoundDraft({ players: players.slice(0, 2), supplementalBets: [supplemental], manualBets: [manual], putts: { 1: { a: 2 } } })?.putts as PuttsByHole)[1].a, 2);
 });
 
-test("las siete modalidades conservan configuración completa en draft y reload sin romper históricos anteriores", () => {
+test("las modalidades conservan configuración y Nassau suplementario migra a la Personal canónica", () => {
   const types: SupplementalBet["type"][] = ["individual_nassau", "dollar_stroke", "individual_pressures", "team_pressures", "chicago", "vegas", "minimum_putts"];
   const configured = types.map((type, index) => ({ ...createSupplementalBet(type, players, `persist-${index}`), enabled: index % 2 === 0 })) as SupplementalBet[];
   const serialized = JSON.parse(JSON.stringify(configured));
@@ -225,11 +225,19 @@ test("las siete modalidades conservan configuración completa en draft y reload 
 
   const draft = normalizeRoundDraft({
     version: 5,
+    ownerId: "a",
     players,
     supplementalBets: configured,
     putts: { 1: { a: 2, b: 1, c: 3, d: 2 } },
   });
-  assert.deepEqual(draft?.supplementalBets, configured);
+  assert.deepEqual(draft?.supplementalBets, configured.filter((bet) => bet.type !== "individual_nassau"));
+  assert.equal(draft?.personalBets.length, 1);
+  assert.deepEqual(draft?.personalBets[0], {
+    id: "persist-0", enabled: true, rivalMode: "group", rivalPlayerId: "b", rivalName: "Jugador B", rivalHandicap: 8,
+    externalScores: {}, baseValue: 100, advantageReceiver: "rival", advantageStrokes: 0, back9Multiplier: 1,
+    pressureMultiplier: 1, pressureNine: "holes_10_18", nassauVersion: 2, carryEnabled: false,
+    components: { match1: true, medal1: true, match2: true, medal2: true, match18: true, medal18: true },
+  });
   assert.deepEqual(draft?.putts, { 1: { a: 2, b: 1, c: 3, d: 2 } });
   assert.deepEqual(normalizeRoundDraft({ version: 1, players })?.supplementalBets, []);
 });

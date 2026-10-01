@@ -49,7 +49,7 @@ test("acordeón de Resultados expone estado accesible y contenido asociado", () 
 });
 
 test("las secciones de detalle de Resultados inician cerradas sin perder su contenido", () => {
-  for (const [id, title] of [["rabbits", "🐇 Conejos"], ["skins", "⛳ Skins"], ["units", "📏 Unidades"], ["foursome", "Foursome"], ["ball-friend", "⚪🤝 Bola Amiga"], ["polla", "Polla"], ["mini-polla", "Mini Polla"], ["personals", "Resultados de Apuestas Personales"], ["manuals", "Manuales"]]) {
+  for (const [id, title] of [["rabbits", "🐇 Conejos"], ["skins", "⛳ Skins"], ["units", "📏 Unidades"], ["foursome", "Foursome"], ["ball-friend", "⚪🤝 Bola Amiga"], ["polla", "Polla"], ["mini-polla", "Mini Polla"], ["personals", "Resultados de Nassau Individual"], ["manuals", "Manuales"]]) {
     const markup = renderToStaticMarkup(createElement(ResultAccordion, {
       id,
       title,
