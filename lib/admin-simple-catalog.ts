@@ -1,4 +1,5 @@
 import type { AdminEntityType } from "./admin-control-center";
+import { CLUB_CATEGORIES } from "./golf-equipment";
 export type AdminRecord = { id: string; title: string; subtitle: string; active: boolean; kind: AdminEntityType; values: Record<string, unknown>; version?: number };
 export type AdminField = { key: string; label: string; type?: "text" | "number" | "textarea" | "checkbox" | "select" | "url" | "date" | "datetime-local"; required?: boolean; options?: readonly string[]; min?: number; max?: number };
 export function adminOptionLabel(value:string) {
@@ -16,7 +17,7 @@ export function catalogFields(kind:AdminEntityType):AdminField[]{
   if(kind==="COURSE")return COURSE_FIELDS;
   if(kind==="COMPETITION")return [{key:"name",label:"Nombre",required:true},{key:"description",label:"Descripción",type:"textarea"},{key:"type",label:"Tipo",type:"select",required:true,options:["POLLA","TOURNAMENT","LEAGUE","EVENT"]},{key:"visibility",label:"Visibilidad",type:"select",required:true,options:["PRIVATE","PUBLIC"]},{key:"startsAt",label:"Fecha de inicio",type:"datetime-local"},{key:"endsAt",label:"Fecha de fin",type:"datetime-local"},{key:"format",label:"Formato"},{key:"organizer",label:"Organizador"},{key:"handicapMaximum",label:"Handicap máximo",type:"number",min:0,max:54},{key:"handicapPercentage",label:"Porcentaje de handicap",type:"number",min:0,max:100},{key:"ruleBody",label:"Reglas informativas del evento",type:"textarea",required:true}];
   if(kind==="BALL")return [...EQUIPMENT_FIELDS,{key:"construction",label:"Construcción"},{key:"coverMaterial",label:"Material de cubierta"},...["flight","driverSpin","ironSpin","shortGameSpin","feel"].map((key,index):AdminField=>({key,label:["Vuelo","Spin de driver","Spin de hierros","Spin de juego corto","Sensación"][index],type:"select",options:["VERY_LOW","LOW","MID","HIGH","VERY_HIGH"]})),{key:"compression",label:"Compresión",type:"number",min:1,max:200},{key:"compressionSource",label:"Fuente de compresión"},{key:"compressionSourceUrl",label:"Referencia de compresión",type:"url"}];
-  return [...EQUIPMENT_FIELDS,...(kind==="SHAFT"?[{key:"usage",label:"Uso",type:"select" as const,required:true,options:["WOOD","FAIRWAY","HYBRID","UTILITY","IRON","WEDGE","PUTTER"]},{key:"weightsText",label:"Pesos en gramos (separados por coma)"},{key:"flexesText",label:"Flex (separados por coma)"},{key:"torqueText",label:"Torque (separados por coma)"},{key:"launch",label:"Lanzamiento"},{key:"spin",label:"Spin"}]:[{key:"category",label:"Categoría",type:"select" as const,required:true,options:["DRIVER","FAIRWAY_WOOD","HYBRID","IRON_SET","WEDGE","PUTTER"]},{key:"loftsText",label:"Lofts en grados (separados por coma)"},{key:"handsText",label:"Manos (RH, LH)"},{key:"standardLength",label:"Longitud estándar",type:"number" as const,min:1,max:60},{key:"lie",label:"Lie",type:"number" as const,min:0,max:90},{key:"setMakeup",label:"Composición del set"}])];
+  return [...EQUIPMENT_FIELDS,...(kind==="SHAFT"?[{key:"usage",label:"Uso",type:"select" as const,required:true,options:["WOOD","FAIRWAY","HYBRID","UTILITY","IRON","WEDGE","PUTTER"]},{key:"weightsText",label:"Pesos en gramos (separados por coma)"},{key:"flexesText",label:"Flex (separados por coma)"},{key:"torqueText",label:"Torque (separados por coma)"},{key:"launch",label:"Lanzamiento"},{key:"spin",label:"Spin"}]:[{key:"category",label:"Categoría",type:"select" as const,required:true,options:CLUB_CATEGORIES},{key:"loftsText",label:"Lofts en grados (separados por coma)"},{key:"handsText",label:"Manos (RH, LH)"},{key:"standardLength",label:"Longitud estándar",type:"number" as const,min:1,max:60},{key:"lie",label:"Lie",type:"number" as const,min:0,max:90},{key:"setMakeup",label:"Composición del set"}])];
 }
 export function buildCompetitionPayload(base:Record<string,unknown>,input:Record<string,unknown>):Record<string,unknown>{
   const values=safeFields(input,catalogFields("COMPETITION"));
@@ -44,9 +45,16 @@ export function safeFields(input: Record<string, unknown>, fields: readonly Admi
     const value = input[field.key];
     if (field.type === "checkbox") { if (typeof value !== "boolean") throw new Error(`Revisa ${field.label}.`); result[field.key] = value; }
     else if (field.type === "number") { const number = value === "" || value == null ? null : Number(value); if (number !== null && (!Number.isFinite(number) || field.min !== undefined && number < field.min || field.max !== undefined && number > field.max)) throw new Error(`Revisa ${field.label}.`); result[field.key] = number; }
-    else { if (value !== undefined && typeof value !== "string" && typeof value !== "number") throw new Error(`Revisa ${field.label}.`); const text = String(value ?? "").trim(); if (text.length > (field.type === "textarea" ? 20000 : 500) || field.required && !text || field.options && text && !field.options.includes(text)) throw new Error(`Revisa ${field.label}.`); if (field.type === "url" && text && !/^https:\/\//i.test(text)) throw new Error(`Revisa ${field.label}.`); result[field.key] = text || null; }
+    else { if (value != null && typeof value !== "string" && typeof value !== "number") throw new Error(`Revisa ${field.label}.`); const text = String(value ?? "").trim(); if (text.length > (field.type === "textarea" ? 20000 : 500) || field.required && !text || field.options && text && !field.options.includes(text)) throw new Error(`Revisa ${field.label}.`); if (field.type === "url" && text && !/^https:\/\//i.test(text)) throw new Error(`Revisa ${field.label}.`); result[field.key] = text || null; }
   }
   return result;
+}
+export function latestPublishedVisualVersions<T extends { target_key: string; version: number; status: string }>(rows: readonly T[]) {
+  const current = new Map<string, T>();
+  for (const row of rows) {
+    if (row.status === "PUBLISHED" && row.version > (current.get(row.target_key)?.version ?? -1)) current.set(row.target_key, row);
+  }
+  return current;
 }
 export function buildCoursePayload(base: Record<string, unknown>, input: Record<string, unknown>) {
   const values = safeFields(input, COURSE_FIELDS); const course = base.course as Record<string, unknown>; const club = base.club as Record<string, unknown>;

@@ -1,13 +1,13 @@
 import { NextRequest,NextResponse } from "next/server";
 import { requireAdminMode } from "../../../../lib/admin-mode.server";
 import { BET_REGISTRY } from "../../../../lib/bets/registry";
-import { humanChanges,safeFields,type AdminField } from "../../../../lib/admin-simple-catalog";
+import { humanChanges,safeFields,latestPublishedVisualVersions,type AdminField } from "../../../../lib/admin-simple-catalog";
 export const dynamic="force-dynamic";const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{"cache-control":"private, no-store"}});
 const content=[{id:"coach_ball_fit",title:"Ball Fit",body:"Encuentra tu bola con tus datos y preferencias."},{id:"coach_launch_monitor",title:"Launch Monitor",body:"Captura y analiza tus mediciones."},{id:"home_empty_feed",title:"Tu comunidad empieza aquí",body:"Tu actividad y la de tus amigos aparecerán aquí."}];
 export async function GET(request:NextRequest){
   const section=request.nextUrl.searchParams.get("module")==="content"?"content":"bets";const access=await requireAdminMode(request,section);if(!access.ok)return json({error:access.error},access.status);
   const result=await access.client.from("admin_visual_versions").select("id,target_key,version,status,values:payload").eq("target_kind",section==="bets"?"BET":"CONTENT").order("version",{ascending:false});if(result.error)return json({error:"Este módulo requiere activar su publicación en la base independiente."},503);
-  const current=new Map((result.data||[]).filter(r=>r.status==="PUBLISHED").map(r=>[r.target_key,r]));
+  const current=latestPublishedVisualVersions(result.data||[]);
   const records=section==="bets"?BET_REGISTRY.map((b,index)=>({id:b.id,title:b.label,description:b.description,instructions:"",icon:b.icon,order:index*10,active:true})):content.map(c=>({...c,active:true}));
   return json({items:records.map(r=>({id:r.id,version:current.get(r.id)?.version||0,values:{...r,...current.get(r.id)?.values}})),drafts:(result.data||[]).filter(r=>["DRAFT","VERIFIED"].includes(r.status))});
 }
