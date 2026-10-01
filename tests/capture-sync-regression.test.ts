@@ -369,7 +369,7 @@ test("scores siguen arriba y Personales queda fuera del Resumen General sin dupl
   assert.match(capture, /aria-label="Cambiar jugador" onClick=\{changePlayer\}/);
   assert.match(page, /generalBetBalances = useMemo\(\(\) => mergeBalances\(players,[^\n]+manual\.balances/);
   assert.doesNotMatch(page.match(/const generalBetBalances[^\n]+/)?.[0] || "", /personals\.balances/);
-  assert.match(page, /<RoundSetupStep step=\{4\}>[\s\S]*<WizardBetCatalog entries=\{wizardBets\.personal\}>/);
+  assert.match(page, /<RoundSetupStep step=\{4\}>[\s\S]*<WizardBetCatalog entries=\{wizardBets\.personal\} requestAccess=\{requestBettingConsent\}>/);
   assert.match(page, /<WizardReviewBlock step=\{4\} title="Personales y manuales"/);
   assert.match(page, /id="personals" title=\{betDisplayLabel\("personals"\)\}/);
   assert.match(readFileSync("app/components/personal-opponent-results.tsx", "utf8"), /<span>Contra<\/span>[\s\S]*Balance/);
