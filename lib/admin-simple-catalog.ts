@@ -20,15 +20,16 @@ export function catalogFields(kind:AdminEntityType):AdminField[]{
   if(kind==="BALL")return [...EQUIPMENT_FIELDS,{key:"construction",label:"Construcción"},{key:"coverMaterial",label:"Material de cubierta"},...["flight","driverSpin","ironSpin","shortGameSpin","feel"].map((key,index):AdminField=>({key,label:["Vuelo","Spin de driver","Spin de hierros","Spin de juego corto","Sensación"][index],type:"select",options:["VERY_LOW","LOW","MID","HIGH","VERY_HIGH"]})),{key:"compression",label:"Compresión",type:"number",min:1,max:200},{key:"compressionSource",label:"Fuente de compresión"},{key:"compressionSourceUrl",label:"Referencia de compresión",type:"url"}];
   return [...EQUIPMENT_FIELDS,...(kind==="SHAFT"?[{key:"usage",label:"Uso",type:"select" as const,required:true,options:["WOOD","FAIRWAY","HYBRID","UTILITY","IRON","WEDGE","PUTTER"]},{key:"weightsText",label:"Pesos en gramos (separados por coma)"},{key:"flexesText",label:"Flex (separados por coma)"},{key:"torqueText",label:"Torque (separados por coma)"},{key:"launch",label:"Lanzamiento"},{key:"spin",label:"Spin"}]:[{key:"category",label:"Categoría",type:"select" as const,required:true,options:CLUB_CATEGORIES},{key:"loftsText",label:"Lofts en grados (separados por coma)"},{key:"handsText",label:"Manos (RH, LH)"},{key:"standardLength",label:"Longitud estándar",type:"number" as const,min:1,max:60},{key:"lie",label:"Lie",type:"number" as const,min:0,max:90},{key:"setMakeup",label:"Composición del set"}])];
 }
-export function buildCompetitionPayload(base:Record<string,unknown>,input:Record<string,unknown>):Record<string,unknown>{
-  const values=safeFields(input,catalogFields("COMPETITION"));
+export function buildCompetitionPayload(base:Record<string,unknown>,input:Record<string,unknown>,draft=false):Record<string,unknown>{
+  const values=safeFields(input,catalogFields("COMPETITION").map(field=>draft?{...field,required:false}:field));
   for(const key of ["startsAt","endsAt"])if(values[key]){if(!Number.isFinite(Date.parse(String(values[key]))))throw new Error("Revisa las fechas.");values[key]=new Date(String(values[key])).toISOString();}
   const rules=Array.isArray(base.rules)?base.rules as Record<string,unknown>[]:[];
   const informational=rules.findIndex(r=>r.category==="OTHER"&&r.title==="Información del evento");
-  const next={category:"OTHER",title:"Información del evento",body:values.ruleBody,active:true};const newRules=[...rules];if(informational>=0)newRules[informational]={...newRules[informational],...next};else newRules.push(next);
+  const next={category:"OTHER",title:"Información del evento",body:values.ruleBody,active:true};const newRules=[...rules];if(informational>=0)newRules[informational]={...newRules[informational],...next};else if(values.ruleBody)newRules.push(next);
   delete values.ruleBody;
   return {...base,...values,id:base.id,courseId:input.courseId,sourceName:input.sourceName,sourceUrl:input.sourceUrl||null,verifiedAt:input.verifiedAt||null,rules:newRules};
 }
+export function competitionFormValues(payload:Record<string,unknown>){return {...payload,sourceName:payload.sourceName||"Verificación administrativa",ruleBody:(Array.isArray(payload.rules)?payload.rules as Record<string,unknown>[]:[]).find(rule=>rule.title==="Información del evento")?.body||""};}
 export function buildEquipmentPayload(base:Record<string,unknown>,input:Record<string,unknown>,kind:AdminEntityType):Record<string,unknown>{
   input={...input};
   for(const [key,min,max] of [["loftsText",0,90],["weightsText",1,300],["torqueText",0,30]] as const)if(Array.isArray(input[key]))input[key]=structuredNumbers(input[key] as unknown[],min,max).join(",");

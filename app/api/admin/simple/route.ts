@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminMode } from "../../../../lib/admin-mode.server";
 import { SIMPLE_ADMIN_MODULES, type SimpleAdminModule } from "../../../../lib/admin-mode";
 import { simpleCourses, simpleEquipment } from "../../../../lib/admin-simple-catalog.server";
-import { adminCatalogPage, buildCoursePayload, buildEquipmentPayload, buildCompetitionPayload, humanChanges } from "../../../../lib/admin-simple-catalog";
+import { adminCatalogPage, buildCoursePayload, buildEquipmentPayload, buildCompetitionPayload, competitionFormValues, humanChanges } from "../../../../lib/admin-simple-catalog";
 import { coursePayloadIssues, equipmentPayloadIssues, competitionPayloadIssues } from "../../../../lib/admin-payload-validation";
 import { getCourseCatalog } from "../../../../lib/course-catalog-provider.server";
 import { membershipAllows, type AdminEntityType } from "../../../../lib/admin-control-center";
@@ -20,8 +20,15 @@ export async function GET(request: NextRequest) {
   try{adminCatalogPage([],search,state,offset);}catch{return json({error:"Página no válida."},400);}
   if(section==="competitions"){
     const result=await access.client.from("admin_catalog_revisions").select("id,entity_id,status,payload,version").eq("entity_type","COMPETITION").in("status",["DRAFT","REVIEWED","VERIFIED","PUBLISHED"]).order("version",{ascending:false}).limit(1000);if(result.error)return json({error:"No pudimos cargar las competiciones."},503);
-    const seen=new Set<string>();const q=(request.nextUrl.searchParams.get("q")||"").toLowerCase();const items=(result.data||[]).filter(isOperationalAdminData).filter(r=>r.status==="PUBLISHED").flatMap(r=>{if(seen.has(r.entity_id))return [];seen.add(r.entity_id);const p=r.payload;return [{id:r.entity_id,title:p.name,subtitle:`${p.type} · Publicado`,active:true,kind:"COMPETITION" as const,values:{...p,ruleBody:(p.rules||[]).find((rule:Record<string,unknown>)=>rule.title==="Información del evento")?.body||""},version:r.version}];});
-    return json({...adminCatalogPage(items,q,state,offset),drafts:(result.data||[]).filter(isOperationalAdminData).filter(r=>r.status!=="PUBLISHED"),courses:(await getCourseCatalog(access.client)).courses.filter(c=>c.active&&isOperationalAdminData(c)).map(c=>({id:c.id,title:c.name}))});
+    const definitions=await access.client.from("competition_definitions").select("id,status").limit(1000);
+    if(definitions.error)return json({error:"No pudimos confirmar los estados."},503);
+    const states=new Map((definitions.data||[]).map(row=>[row.id,row.status]));
+    const seen=new Set<string>();const items=(result.data||[]).filter(isOperationalAdminData).filter(row=>row.status==="PUBLISHED").flatMap(row=>{
+      if(seen.has(row.entity_id))return [];seen.add(row.entity_id);const p=row.payload;const status=states.get(row.entity_id)||"PUBLISHED";
+      return [{id:row.entity_id,title:p.name,subtitle:status==="PUBLISHED"?"Publicado":status==="COMPLETED"?"Finalizado":status==="ARCHIVED"?"Archivado":"Sin publicar",active:status!=="ARCHIVED",kind:"COMPETITION" as const,values:{...competitionFormValues(p),competitionStatus:status},version:row.version}];
+    });
+    const id=request.nextUrl.searchParams.get("id");if(id)return json({item:items.find(item=>item.id===id)||null});
+    return json({...adminCatalogPage(items,search,state,offset),drafts:(result.data||[]).filter(isOperationalAdminData).filter(row=>row.status!=="PUBLISHED"),courses:(await getCourseCatalog(access.client)).courses.filter(course=>course.active&&isOperationalAdminData(course)).map(course=>({id:course.id,title:course.name}))});
   }
   if(section==="equipment"||section==="balls"){
     const items=await simpleEquipment(access.memberships,section==="balls");const q=(request.nextUrl.searchParams.get("q")||"").toLowerCase();
@@ -68,13 +75,23 @@ export async function POST(request: NextRequest) {
       if(result.error)throw new Error("No pudimos completar el cambio. El registro y sus históricos se conservan.");
       return json({item:result.data});
     }
+    if(body.operation==="competition-status"&&section==="competitions"){
+      if(body.confirmed!==true)throw new Error("Confirma el cambio.");
+      const result=await access.client.rpc("admin_competition_status_v3",{competition_key:body.id,expected_status:body.expectedStatus,next_status:body.status,change_reason:body.reason});
+      if(result.error)throw new Error("No se cambió el torneo. Recarga y comprueba su estado.");
+      return json({item:result.data});
+    }
     if(body.operation==="draft"&&section==="competitions"){
       const values=body.values as Record<string,unknown>;if(!values||typeof values!=="object"||Array.isArray(values))throw new Error("Revisa la competición.");
       const id=typeof body.id==="string"&&body.id?body.id:crypto.randomUUID();
       const existing=body.id?await access.client.from("admin_catalog_revisions").select("payload").eq("entity_type","COMPETITION").eq("entity_id",id).eq("status","PUBLISHED").order("version",{ascending:false}).limit(1).maybeSingle():null;
-      if(body.id&&!existing?.data)return json({error:"Competición no disponible."},403);
-      const payload=buildCompetitionPayload(existing?.data?.payload||{id},values);const issues=competitionPayloadIssues(payload,id);if(issues.length)throw new Error(issues.join(" "));
-      if(!(await getCourseCatalog(access.client)).courses.some(c=>c.id===payload.courseId&&c.active&&isOperationalAdminData(c)))throw new Error("Selecciona un campo publicado.");
+      const resume=typeof body.baseRevisionId==="string"?await access.client.from("admin_catalog_revisions").select("payload,entity_id").eq("id",body.baseRevisionId).eq("entity_type","COMPETITION").eq("status","DRAFT").single():null;
+      if(resume&&resume.data?.entity_id!==id)return json({error:"Borrador no disponible."},403);
+      if(body.id&&!existing?.data&&!resume?.data)return json({error:"Competición no disponible."},403);
+      const copy=typeof body.copyFromId==="string"?await access.client.from("admin_catalog_revisions").select("payload").eq("entity_type","COMPETITION").eq("entity_id",body.copyFromId).eq("status","PUBLISHED").order("version",{ascending:false}).limit(1).maybeSingle():null;
+      if(copy&&!copy.data)return json({error:"No puedes duplicar este torneo."},403);
+      const payload=buildCompetitionPayload({...copy?.data?.payload,...existing?.data?.payload,...resume?.data?.payload,id},values,true);
+      if(payload.courseId&&!(await getCourseCatalog(access.client)).courses.some(course=>course.id===payload.courseId&&course.active&&isOperationalAdminData(course)))throw new Error("Selecciona un campo publicado.");
       if(!values.sourceName)throw new Error("Indica la fuente de la información.");
       const result=await access.client.rpc("admin_create_revision_v1",{target_entity_type:"COMPETITION",target_entity_id:id,target_scope_type:"COMPETITION",target_scope_id:id,target_payload:{...payload,dataEnvironment:"PRODUCTION"},target_source_type:"ADMIN_RESEARCH",target_source_name:values.sourceName,target_source_url:values.sourceUrl||null,target_provenance_status:values.verifiedAt?"VERIFIED":"REPORTED",target_verified_at:values.verifiedAt||null,target_confidence:null,target_notes:null});if(result.error)throw new Error("No se guardó la competición.");return json({item:result.data},201);
     }
@@ -110,6 +127,7 @@ export async function POST(request: NextRequest) {
       const types: Record<string,string[]>={courses:["COURSE","LOCAL_RULE_SET"],equipment:["CLUB_EQUIPMENT","SHAFT"],balls:["BALL"],competitions:["COMPETITION"]};
       if (!row || !types[section]?.includes(row.entity_type) || !isOperationalAdminData(row) || !access.memberships.some(m=>membershipAllows(m,{entityType:row.entity_type as AdminEntityType,scopeType:row.scope_type,scopeId:row.scope_id},body.operation==="publish"?"PUBLISH":"READ"))) return json({error:"No tienes permiso sobre este borrador."},403);
       if (body.operation==="preview") {
+        if(row.entity_type==="COMPETITION"){const issues=competitionPayloadIssues(row.payload,row.entity_id);if(issues.length)throw new Error("Completa el borrador antes de publicar: "+issues.join(" "));}
         const prior=await access.client.from("admin_catalog_revisions").select("payload").eq("entity_type",row.entity_type).eq("entity_id",row.entity_id).eq("status","PUBLISHED").order("version",{ascending:false}).limit(1).maybeSingle();
         if(prior.error)throw new Error("No pudimos confirmar la versión actual.");
         let previous:unknown=prior.data?.payload;
