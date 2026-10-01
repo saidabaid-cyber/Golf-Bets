@@ -1,0 +1,22 @@
+begin;
+select set_config('request.jwt.claim.sub','9aaec38b-7a84-4c72-bf2c-5f7da8f45782',true);
+set local role authenticated;
+do $$ declare draft jsonb;preview jsonb;result jsonb;variant uuid;values_json jsonb:='{"engine":"skins","title":"Transient variant QA","description":"Transaction rollback","active":true,"order":0,"minPlayers":2,"maxPlayers":5,"config":{"value":50,"hcpPct":100,"mode":"carry"}}';begin
+ draft:=public.admin_bet_variant_operation_v3(null,'draft',values_json);variant:=(draft->>'variantId')::uuid;
+ preview:=public.admin_bet_variant_operation_v3(null,'preview',revision_id:=(draft->>'id')::uuid);
+ result:=public.admin_bet_variant_operation_v3(null,'publish',revision_id:=(draft->>'id')::uuid,expected_hash:=preview->>'previewHash',change_reason:='Transient QA publication');
+ if result->>'status'<>'PUBLISHED' then raise exception 'PUBLICATION_FAILED';end if;
+ if not exists(select 1 from public.player_bet_variants_v3() where id=variant and config->>'value'='50') then raise exception 'PLAYER_READ_BACK_FAILED';end if;
+ begin perform public.admin_bet_variant_operation_v3(variant,'draft',values_json,0);raise exception 'STALE_VERSION_ACCEPTED';exception when serialization_failure then null;end;
+ begin perform public.admin_bet_variant_operation_v3(null,'draft',values_json||'{"engine":"unsupported"}');raise exception 'UNKNOWN_ENGINE_ACCEPTED';exception when raise_exception then if SQLERRM='UNKNOWN_ENGINE_ACCEPTED' then raise;end if;end;
+ begin perform public.admin_bet_variant_operation_v3(null,'draft',values_json||'{"config":{"value":50,"hcpPct":100,"mode":"carry","code":"arbitrary"}}');raise exception 'CODE_ACCEPTED';exception when raise_exception then if SQLERRM='CODE_ACCEPTED' then raise;end if;end;
+ draft:=public.admin_bet_variant_operation_v3(variant,'draft',jsonb_set(values_json,'{config,value}','500'),1);
+ preview:=public.admin_bet_variant_operation_v3(null,'preview',revision_id:=(draft->>'id')::uuid);
+ perform public.admin_bet_variant_operation_v3(null,'publish',revision_id:=(draft->>'id')::uuid,expected_hash:=preview->>'previewHash',change_reason:='Transient QA update');
+ if not exists(select 1 from public.player_bet_variants_v3() where id=variant and config->>'value'='500' and version=2) then raise exception 'UPDATE_READBACK_FAILED';end if;
+ perform public.admin_bet_variant_operation_v3(null,'archive',revision_id:=(draft->>'id')::uuid,change_reason:='Transient QA archive');
+ if exists(select 1 from public.player_bet_variants_v3() where id=variant) then raise exception 'ARCHIVE_READBACK_FAILED';end if;
+end $$;
+select set_config('request.jwt.claim.sub','84583e0a-499d-452e-abff-24fd9ff2aa65',true);
+do $$ begin begin perform public.admin_bet_variant_operation_v3(null,'draft','{}');raise exception 'PLAYER_ALLOWED';exception when insufficient_privilege then null;end;end $$;
+rollback;

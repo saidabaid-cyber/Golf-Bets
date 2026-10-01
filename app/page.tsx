@@ -17,6 +17,8 @@ import { freezeRoundHandicapBases, missingHandicapsForActiveBets, normalizeRound
 import { HandicapBaseControl } from "./components/handicap-base-control";
 import { RoundHandicapBasisControl } from "./components/round-handicap-basis-control";
 import { SetupBetCard } from "./components/setup-bet-card";
+import { BetVariantPicker } from "./components/bet-variant-picker";
+import { applyBetVariant } from "../lib/admin-bet-variants";
 import { BET_PRESENTATION, betDisplayLabel, historicalBetDisplayLabel, SUPPLEMENTAL_BET_PRESENTATION, supplementalBetDisplayLabel } from "../lib/bet-catalog";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -3997,6 +3999,13 @@ function GolfBetsApp() {
       </RoundSetupStep>
 
       <RoundSetupStep step={3}>
+      <BetVariantPicker players={players} ownerId={ownerId} apply={(variant,rivalId)=>{
+        const next=applyBetVariant(bets,players,ownerId,variant,roundHoles,startHole,rivalId);
+        runAfterBettingConsent(()=>{
+          const update=()=>{setBets(next.bets);if(next.personal){const rival=players.find(player=>player.id===next.personal!.rivalPlayerId);setPersonalBets(current=>[...current,configureCurrentIndexPersonal(next.personal!,players.find(player=>player.id===ownerId),rival,roundDate)]);setPersonalSetupOpen(true);setNassauSetupOpen(true);}};
+          if(order.some(hole=>Object.values(scores[hole]||{}).some(score=>typeof score==="number")))confirmRoundChange("Aplicar esta variante puede recalcular apuestas con scores existentes. Revisa los montos antes de guardar.",update);else update();
+        });
+      }}/>
       <section className="card">
         <div className="sectionTitle"><div><h2>3. Apuestas grupales</h2><p>Todas las modalidades del grupo, con su porcentaje y participantes.</p></div></div>
         {!bettingConsentGranted && <div className="notice compactConsentNotice" role="status">Para activar o registrar apuestas, completa el consentimiento específico desde <button type="button" className="textButton" onClick={() => setTab("account")}>Mi Cuenta</button>. Tus datos anteriores se conservan.</div>}

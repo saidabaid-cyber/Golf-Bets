@@ -11,6 +11,7 @@ const Catalog = dynamic(() => import("./admin-visual-catalog").then(m=>m.AdminVi
 const Presentation=dynamic(()=>import("./admin-presentation-editor").then(m=>m.AdminPresentationEditor));
 const Audit=dynamic(()=>import("./admin-audit").then(m=>m.AdminAudit));
 const Requests=dynamic(()=>import("./admin-requests").then(m=>m.AdminRequests));
+const BetVariants=dynamic(()=>import("./admin-bet-variants").then(m=>m.AdminBetVariants));
 
 const LABELS: Record<SimpleAdminModule, [string, string]> = {
   courses: ["Campos", "Información, tees y tarjetas"], equipment: ["Equipment", "Marcas, modelos y varillas"], balls: ["Bolas / Ball Fit", "Catálogo y configuración segura"], bets: ["Apuestas", "Motores y variantes"], competitions: ["Torneos", "Organiza y publica"], requests: ["Solicitudes", "Resuelve lo que pide tu comunidad"], users: ["Usuarios", "Perfiles y estado"], content: ["Contenido", "Textos de la app"], administrators: ["Administradores", "Asigna o retira permisos"], audit: ["Auditoría", "Cambios registrados"], advanced: ["Administración avanzada", "Importaciones y operaciones técnicas"],
@@ -39,7 +40,8 @@ export function AdminSimpleHome() {
     {selected==="balls"&&<div className="adminV2Tabs"><button className={ballSection==="catalog"?"primary":"secondary"} onClick={()=>setBallSection("catalog")}>Bolas · catálogo</button><button className={ballSection==="fit"?"primary":"secondary"} onClick={()=>setBallSection("fit")}>Ball Fit</button></div>}
     {(selected === "courses"||selected==="equipment"||selected==="balls"&&ballSection==="catalog"||selected==="competitions") && <Catalog key={selected} token={token} module={selected} />}
     {selected==="balls"&&ballSection==="fit"&&<><p className="notice">Administra el contenido seguro de Ball Fit. Los algoritmos y fórmulas permanecen en desarrollo / administración avanzada.</p>{modules.includes("content")?<Presentation token={token} module="content" onlyKey="coach_ball_fit"/>:<p>Tu permiso permite administrar el catálogo. La configuración de contenido requiere permisos adicionales.</p>}</>}
-    {(selected==="bets"||selected==="content")&&<Presentation key={selected} token={token} module={selected}/>}
+    {selected==="bets"&&<><BetVariants token={token}/><details><summary>Presentación de motores existentes</summary><Presentation token={token} module="bets"/></details></>}
+    {selected==="content"&&<Presentation token={token} module="content"/>}
     {selected==="requests"&&<Requests token={token} onCreate={(module,title)=>{if(modules.includes(module)){setRequestTitle(title);setSelected(module);}}}/>}
     {selected==="audit"&&<Audit token={token}/>}
     {requestTitle&&selected!=="requests"&&<p className="notice">Alta solicitada: {requestTitle}. Revisa los datos y agrega la información verificada antes de guardar.</p>}
