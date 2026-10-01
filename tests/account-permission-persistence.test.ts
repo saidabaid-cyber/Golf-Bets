@@ -393,7 +393,7 @@ test("focus refresh preserves enabled location on unsupported APIs and only an O
 test("account permission endpoint uses the owner-bound canonical consent RPC", () => {
   const route = readFileSync("app/api/account/device-permission-preferences/route.ts", "utf8");
   assert.match(route, /authenticatedRequest\(request\)/);
-  assert.match(route, /get_optional_authorization_state_v1/);
+  assert.match(route, /get_optional_authorization_state_v2/);
   assert.match(route, /set_optional_authorization_scope_v1/);
   assert.match(route, /"LOCATION_INTERNAL" : "NOTIFICATION_INTERNAL"/);
   assert.match(route, /stableIdempotencyKey\(account\.userId, input\.preference, input\.record\)/);

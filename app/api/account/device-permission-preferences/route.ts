@@ -15,6 +15,7 @@ import {
   readJsonBodyWithLimit,
 } from "../../../../lib/backyard-ai/server/http-security";
 import { authenticatedRequest } from "../../../../lib/server-auth";
+import { resolveCanonicalDataEnvironment } from "../../../../lib/runtime-environment";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -49,7 +50,9 @@ function inputRecord(value: unknown) {
 }
 
 async function state(client: SupabaseClient) {
-  const { data, error } = await client.rpc("get_optional_authorization_state_v1");
+  const { data, error } = await client.rpc("get_optional_authorization_state_v2", {
+    requested_environment: resolveCanonicalDataEnvironment(),
+  });
   return { data: parseOptionalAuthorizationState(data), error };
 }
 
@@ -85,14 +88,14 @@ export async function PATCH(request: NextRequest) {
     if (currentState.error || !currentState.data) return json({ error: "No pudimos consultar tu preferencia de permisos." }, 503);
     // A client clock is not an authority for ordering explicit user actions.
     // The server ledger serializes and timestamps this tap canonically.
-    const { data, error } = await account.client.rpc("set_optional_authorization_scope_v1", {
+    const { error } = await account.client.rpc("set_optional_authorization_scope_v1", {
       requested_scope: input.preference === "location" ? "LOCATION_INTERNAL" : "NOTIFICATION_INTERNAL",
       requested_enabled: input.record.value === "enabled",
       requested_idempotency_key: await stableIdempotencyKey(account.userId, input.preference, input.record),
     });
-    const savedState = parseOptionalAuthorizationState(data);
-    if (error || !savedState) return json({ error: "No pudimos guardar tu preferencia de permisos." }, 503);
-    const confirmed = response(savedState);
+    const savedState = error ? null : await state(account.client);
+    if (error || savedState?.error || !savedState?.data) return json({ error: "No pudimos guardar tu preferencia de permisos." }, 503);
+    const confirmed = response(savedState.data);
     const savedRecord = confirmed[input.preference];
     if (!savedRecord || savedRecord.value !== input.record.value) {
       return json({ error: "No pudimos confirmar tu preferencia de permisos." }, 503);

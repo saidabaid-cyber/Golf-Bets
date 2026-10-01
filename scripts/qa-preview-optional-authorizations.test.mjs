@@ -55,7 +55,7 @@ test("cleanup guard accepts only the exact run-owned example.invalid identity", 
   const user = {
     id: USER_ID,
     email: account.email,
-    app_metadata: { qa_run_id: RUN_ID, qa_fixture: "optional-authorizations-v1" },
+    app_metadata: { qa_run_id: RUN_ID, qa_fixture: "optional-authorizations-v2" },
   };
   assert.equal(isExactRunOwnedQaUser(user, account, RUN_ID), true);
   assert.equal(isExactRunOwnedQaUser({ ...user, id: "33333333-3333-4333-8333-333333333333" }, account, RUN_ID), false);

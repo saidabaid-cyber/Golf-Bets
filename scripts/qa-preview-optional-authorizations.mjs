@@ -13,8 +13,9 @@ import {
   verifyPreviewDeploymentIdentity,
 } from "./qa-preview-statistics.mjs";
 
-const BUNDLE_VERSION = "optional-features-2026-09-30-v1";
-const FIXTURE_KIND = "optional-authorizations-v1";
+const BUNDLE_VERSION = "optional-features-2026-10-01-v2";
+const DEVICE_POLICY_VERSION = "optional-features-2026-09-30-v1";
+const FIXTURE_KIND = "optional-authorizations-v2";
 const SCOPES = [
   "AI_PROVIDER_PROCESSING_CONSENT",
   "AI_IMAGE_PROCESSING_CONSENT",
@@ -31,8 +32,8 @@ const POLICY_VERSIONS = Object.freeze({
   AI_LAUNCH_MONITOR_PROCESSING_CONSENT: "2026-09-08-v2",
   PERSONAL_MEMORY: "ai-first-phase1-v1",
   GLOBAL_LEARNING: "ai-first-phase1-v1",
-  LOCATION_INTERNAL: BUNDLE_VERSION,
-  NOTIFICATION_INTERNAL: BUNDLE_VERSION,
+  LOCATION_INTERNAL: DEVICE_POLICY_VERSION,
+  NOTIFICATION_INTERNAL: DEVICE_POLICY_VERSION,
 });
 
 export function optionalAuthorizationQaConfig(env = process.env) {
@@ -74,9 +75,11 @@ function assertInitialState(state) {
     assert.equal(state.scopes[scope]?.source, null);
     assert.equal(state.scopes[scope]?.decidedAt, null);
   }
-  assert.equal(state.profileVisibility, "private");
+  assert.equal(state.profileVisibility, "public");
   assert.equal(state.socialPrivacy, "PRIVATE");
-  assert.equal(state.socialProfilePrivacy, "PRIVATE");
+  assert.equal(state.socialProfilePrivacy, "PUBLIC");
+  assert.equal(state.legal?.financial_data?.status, "missing");
+  assert.equal(state.legal?.marketing?.status, "missing");
   assert.ok(everyBoolean(state.sharing, false));
   assert.ok(everyBoolean(state.notifications, false));
 }
@@ -98,9 +101,11 @@ function assertResolvedState(state, action, idempotencyKey) {
       enabled ? "onboarding_authorize_all" : "onboarding_decline_all");
     assert.ok(Number.isFinite(Date.parse(state.scopes[scope]?.decidedAt)), `${scope} has a decision timestamp`);
   }
-  assert.equal(state.profileVisibility, enabled ? "public" : "private");
+  assert.equal(state.profileVisibility, "public");
   assert.equal(state.socialPrivacy, enabled ? "FRIENDS" : "PRIVATE");
-  assert.equal(state.socialProfilePrivacy, enabled ? "PUBLIC" : "PRIVATE");
+  assert.equal(state.socialProfilePrivacy, "PUBLIC");
+  assert.equal(state.legal?.financial_data?.status, enabled ? "accepted" : "rejected");
+  assert.equal(state.legal?.marketing?.status, enabled ? "accepted" : "rejected");
   assert.ok(everyBoolean(state.sharing, enabled));
   assert.ok(everyBoolean(state.notifications, enabled));
 }
@@ -246,6 +251,18 @@ export async function runPreviewOptionalAuthorizationsQA(
       assert.equal(decision.decision_status, enabled ? "accepted" : "declined");
       assert.equal(decision.policy_version, POLICY_VERSIONS[decision.scope]);
       assert.equal(decision.source, "onboarding");
+    }
+
+    const legal = checked(await admin.from("legal_evidence_events")
+      .select("purpose_key,action,origin,environment")
+      .eq("user_id", account.id)
+      .in("purpose_key", ["financial_data", "marketing"]), "Read separate legal consent evidence");
+    assert.equal(legal.length, 2, "one separate legal event per optional legal purpose");
+    assert.deepEqual(legal.map((event) => event.purpose_key).sort(), ["financial_data", "marketing"]);
+    for (const decision of legal) {
+      assert.equal(decision.action, enabled ? "accepted" : "rejected");
+      assert.equal(decision.origin, "onboarding");
+      assert.equal(decision.environment, "preview");
     }
   }
 
