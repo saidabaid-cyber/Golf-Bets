@@ -32,6 +32,7 @@ export function isolatedPreviewDatabaseEnabled(
 export function previewDatabaseFeaturesAvailable(
   env: Record<string, string | undefined> = process.env,
 ) {
+  if (/^feature\/admin-mode-v2(?:-|$)/.test(env.VERCEL_GIT_COMMIT_REF || "")) return adminModeDatabaseIsolated(env);
   if (adminModeDatabaseIsolated(env)) return true;
   if (
     vercelDeploymentMarkerPresent(env)
