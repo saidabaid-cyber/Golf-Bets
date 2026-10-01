@@ -295,12 +295,38 @@ export function RulesPanel({
     </section>
   </>;
 
-  return <>
-    <header className="rulesPageHeader">
-      <button className="rulesBackButton" onClick={onBack}>← Regresar</button>
-      <div><span>THE BACKYARD</span><h1>Reglas de Golf</h1></div>
-    </header>
+  return <div className="rulesHome">
+<section className="rulesSearchHero" id="buscar-regla">
+      <label className="srOnly" htmlFor="rules-search">Buscar en las Reglas</label>
+      <div className="rulesSearchField">
+        <span className="rulesSearchIcon" aria-hidden="true">⌕</span>
+        <input id="rules-search" type="search" autoComplete="off" value={query} placeholder="Buscar una regla, situación o palabra clave…" onChange={(event) => setQuery(event.target.value)} />
+        <button type="button" className={`rulesMicButton ${listeningTarget === "search" ? "listening" : ""}`} aria-pressed={listeningTarget === "search"} aria-label={listeningTarget === "search" ? "Detener dictado de búsqueda" : "Dictar búsqueda"} onClick={() => toggleDictation("search")}>{listeningTarget === "search" ? <><span aria-hidden="true">🔴</span><b>Detener</b></> : <span aria-hidden="true">🎙</span>}</button>
+      </div>
+      {dictationSupported === false && <div className="rulesSearchStatus">{DICTATION_FALLBACK}</div>}
+      {dictationMessage && dictationSupported !== false && <div className="rulesSearchStatus" role="status">{dictationMessage}</div>}
+    </section>
+{query && <section className="card rulesSearchResults" aria-live="polite">
+      <div className="sectionTitle"><div><h2>Resultados</h2><p>Búsqueda local en Reglas, Procedimientos del Comité y Aclaraciones 2026.</p></div>{searching && <span className="statusPill">Buscando…</span>}</div>
+      {!searching && !results.length && <div className="empty">No hay una coincidencia suficiente para “{query}”. <button className="textButton" onClick={() => prepareAi(query)}>Preguntar a IA</button></div>}
+      <div className="rulesResults">{results.slice(0, visibleResults).map((entry) => <article className="ruleResult" key={entry.id}>
+        <button className="ruleResultOpen" onClick={() => openRuleReference(entry.rule, entry.sourceId, entry.page)}>
+          <span className={`rulesSourceBadge ${entry.documentType}`}>{resultLabel(entry.documentType)}</span>
+          <b>{entry.rule === "Fuente oficial" ? entry.rule : `Regla ${entry.rule}`}</b>
+          <h3>{entry.title}</h3>
+          <p>{entry.explanation}</p>
+          <small>{entry.source}{entry.page ? ` · p. ${entry.page}` : ""}</small>
+          <span className="ruleOpenLabel">Abrir referencia →</span>
+        </button>
+      </article>)}</div>
+      {results.length > visibleResults && <button className="secondary big" onClick={() => setVisibleResults(count => count + 20)}>Mostrar más · {visibleResults} de {results.length} coincidencias</button>}
+      {!searching && <p className="muted">{results.length} coincidencias · ninguna se descarta por límite</p>}
+      {!searching && <div className="rulesAiFallback"><span>¿No encontraste lo que buscabas?</span><button className="textButton" onClick={() => prepareAi(query)}>Preguntar a IA</button></div>}
+    </section>}
 
+    <section className="rulesTopics" aria-labelledby="rules-topics-title"><div className="rulesHomeSectionTitle"><h2 id="rules-topics-title">Temas principales</h2><button type="button" onClick={() => { setOpenSections(current => ({ ...current, directory: true })); document.getElementById("reglamento-navegable")?.scrollIntoView({ block: "start" }); }}>Ver todos ›</button></div><div className="rulesTopicGrid">{[{ label: "Bolas", icon: "ball" }, { label: "Alivio", icon: "approach" }, { label: "Búnker", icon: "bunker" }, { label: "Fuera de límites", icon: "strategy" }, { label: "Penalidades", icon: "score" }].map(topic => <button type="button" key={topic.label} onClick={() => setQuery(topic.label)}><span><BackyardIcon name={topic.icon as "ball" | "approach" | "bunker" | "strategy" | "score"} /></span><b>{topic.label}</b></button>)}</div></section>
+    <section className="rulesCommon" aria-labelledby="rules-common-title"><h2 id="rules-common-title">Situaciones comunes</h2>{[{ label: "Bola en búnker", reference: "12.2", icon: "bunker" }, { label: "Bola fuera de límites", reference: "18.2", icon: "strategy" }, { label: "Bola perdida", reference: "18.2", icon: "ball" }, { label: "Alivio sin penalidad", reference: "16.1", icon: "approach" }, { label: "Zona de penalidad", reference: "17.1", icon: "flag" }, { label: "Obstrucciones", reference: "16.1", icon: "club" }, { label: "Procedimiento de drop", reference: "14.3", icon: "score" }].map(situation => <button type="button" key={situation.label} onClick={() => openRuleReference(situation.reference)}><span className="rulesSituationIcon"><BackyardIcon name={situation.icon as "bunker" | "strategy" | "ball" | "approach" | "flag" | "club" | "score"} /></span><span><b>{situation.label}</b><small>Regla {situation.reference} · Ver referencia</small></span><span aria-hidden="true">›</span></button>)}</section>
+    <aside className="rulesPromise"><BackyardIcon name="score" /><p><b>Reglas explicadas, juego más simple.</b><br />Consulta las fuentes y juega con confianza.</p></aside>
     <RulesDisclosure id="preguntar-ia" title="Preguntar a la IA" icon="spark" open={Boolean(openSections.ai)} onToggle={() => toggleSection("ai")}>
 <section className="card">
       <div className="sectionTitle"><div><h2>Preguntar a la IA</h2><p>{localRulesApply ? "Consulta fuentes oficiales y las Reglas Locales aplicables." : "Consulta Guía Oficial, Procedimientos y Aclaraciones sin asumir Reglas Locales."}</p></div><span className={`statusPill ${aiState === "ready" ? "ready" : ""}`}>{aiState === "checking" ? "Verificando…" : aiState === "ready" ? "IA activa" : aiState === "disabled" ? "IA no activada" : aiState === "unavailable" ? "Estado no disponible" : "Falta configuración"}</span></div>
@@ -336,33 +362,6 @@ export function RulesPanel({
     </RulesDisclosure>
 
     <RulesDisclosure id="reglamento-navegable" title="Reglamento navegable" open={Boolean(openSections.directory)} onToggle={() => toggleSection("directory")}>
-<section className="rulesSearchHero" id="buscar-regla">
-      <label className="srOnly" htmlFor="rules-search">Buscar en las Reglas</label>
-      <div className="rulesSearchField">
-        <span className="rulesSearchIcon" aria-hidden="true">⌕</span>
-        <input id="rules-search" type="search" autoComplete="off" value={query} placeholder="Buscar en las Reglas" onChange={(event) => setQuery(event.target.value)} />
-        <button type="button" className={`rulesMicButton ${listeningTarget === "search" ? "listening" : ""}`} aria-pressed={listeningTarget === "search"} aria-label={listeningTarget === "search" ? "Detener dictado de búsqueda" : "Dictar búsqueda"} onClick={() => toggleDictation("search")}>{listeningTarget === "search" ? <><span aria-hidden="true">🔴</span><b>Detener</b></> : <span aria-hidden="true">🎙</span>}</button>
-      </div>
-      {dictationSupported === false && <div className="rulesSearchStatus">{DICTATION_FALLBACK}</div>}
-      {dictationMessage && dictationSupported !== false && <div className="rulesSearchStatus" role="status">{dictationMessage}</div>}
-    </section>
-{query && <section className="card rulesSearchResults" aria-live="polite">
-      <div className="sectionTitle"><div><h2>Resultados</h2><p>Búsqueda local en Reglas, Procedimientos del Comité y Aclaraciones 2026.</p></div>{searching && <span className="statusPill">Buscando…</span>}</div>
-      {!searching && !results.length && <div className="empty">No hay una coincidencia suficiente para “{query}”. <button className="textButton" onClick={() => prepareAi(query)}>Preguntar a IA</button></div>}
-      <div className="rulesResults">{results.slice(0, visibleResults).map((entry) => <article className="ruleResult" key={entry.id}>
-        <button className="ruleResultOpen" onClick={() => openRuleReference(entry.rule, entry.sourceId, entry.page)}>
-          <span className={`rulesSourceBadge ${entry.documentType}`}>{resultLabel(entry.documentType)}</span>
-          <b>{entry.rule === "Fuente oficial" ? entry.rule : `Regla ${entry.rule}`}</b>
-          <h3>{entry.title}</h3>
-          <p>{entry.explanation}</p>
-          <small>{entry.source}{entry.page ? ` · p. ${entry.page}` : ""}</small>
-          <span className="ruleOpenLabel">Abrir referencia →</span>
-        </button>
-      </article>)}</div>
-      {results.length > visibleResults && <button className="secondary big" onClick={() => setVisibleResults(count => count + 20)}>Mostrar más · {visibleResults} de {results.length} coincidencias</button>}
-      {!searching && <p className="muted">{results.length} coincidencias · ninguna se descarta por límite</p>}
-      {!searching && <div className="rulesAiFallback"><span>¿No encontraste lo que buscabas?</span><button className="textButton" onClick={() => prepareAi(query)}>Preguntar a IA</button></div>}
-    </section>}
 <section className="card rulesDirectory" id="reglas-de-golf">
       <div className="sectionTitle"><div><div className="eyebrow">REGLAS DE GOLF</div><h2>Reglamento navegable</h2><p>25 reglas · toca una para ver sus subreglas.</p></div></div>
       <div className="rulesAccordion">{NAVIGABLE_GOLF_RULES.map((entry) => {
@@ -428,5 +427,5 @@ export function RulesPanel({
     <BottomBackAction label="← Regresar" onBack={onBack} />
 
     {selectedDocument && <InternalPdfViewer document={selectedDocument} initialPage={documentPage} onBack={() => { setSelectedDocument(null); setDocumentPage(1); }} />}
-  </>;
+  </div>;
 }
