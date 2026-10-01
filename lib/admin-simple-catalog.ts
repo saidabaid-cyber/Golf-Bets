@@ -20,6 +20,7 @@ export function catalogFields(kind:AdminEntityType):AdminField[]{
   if(kind==="BALL")return [...EQUIPMENT_FIELDS,{key:"construction",label:"Construcción"},{key:"coverMaterial",label:"Material de cubierta"},...["flight","driverSpin","ironSpin","shortGameSpin","feel"].map((key,index):AdminField=>({key,label:["Vuelo","Spin de driver","Spin de hierros","Spin de juego corto","Sensación"][index],type:"select",options:["VERY_LOW","LOW","MID","HIGH","VERY_HIGH"]})),{key:"compression",label:"Compresión",type:"number",min:1,max:200},{key:"compressionSource",label:"Fuente de compresión"},{key:"compressionSourceUrl",label:"Referencia de compresión",type:"url"}];
   return [...EQUIPMENT_FIELDS,...(kind==="SHAFT"?[{key:"usage",label:"Uso",type:"select" as const,required:true,options:["WOOD","FAIRWAY","HYBRID","UTILITY","IRON","WEDGE","PUTTER"]},{key:"weightsText",label:"Pesos en gramos (separados por coma)"},{key:"flexesText",label:"Flex (separados por coma)"},{key:"torqueText",label:"Torque (separados por coma)"},{key:"launch",label:"Lanzamiento"},{key:"spin",label:"Spin"}]:[{key:"category",label:"Categoría",type:"select" as const,required:true,options:CLUB_CATEGORIES},{key:"loftsText",label:"Lofts en grados (separados por coma)"},{key:"handsText",label:"Manos (RH, LH)"},{key:"standardLength",label:"Longitud estándar",type:"number" as const,min:1,max:60},{key:"lie",label:"Lie",type:"number" as const,min:0,max:90},{key:"setMakeup",label:"Composición del set"}])];
 }
+export function preserveVerificationTime(previous:unknown,selected:unknown){return selected&&String(previous||"").slice(0,10)===String(selected)?previous:selected||null;}
 export function buildCompetitionPayload(base:Record<string,unknown>,input:Record<string,unknown>,draft=false):Record<string,unknown>{
   const values=safeFields(input,catalogFields("COMPETITION").map(field=>draft?{...field,required:false}:field));
   for(const key of ["startsAt","endsAt"])if(values[key]){if(!Number.isFinite(Date.parse(String(values[key]))))throw new Error("Revisa las fechas.");values[key]=new Date(String(values[key])).toISOString();}
@@ -27,7 +28,7 @@ export function buildCompetitionPayload(base:Record<string,unknown>,input:Record
   const informational=rules.findIndex(r=>r.category==="OTHER"&&r.title==="Información del evento");
   const next={category:"OTHER",title:"Información del evento",body:values.ruleBody,active:true};const newRules=[...rules];if(informational>=0)newRules[informational]={...newRules[informational],...next};else if(values.ruleBody)newRules.push(next);
   delete values.ruleBody;
-  return {...base,...values,id:base.id,courseId:input.courseId,sourceName:input.sourceName,sourceUrl:input.sourceUrl||null,verifiedAt:input.verifiedAt||null,rules:newRules};
+  return {...base,...values,id:base.id,courseId:input.courseId,sourceName:input.sourceName,sourceUrl:input.sourceUrl||null,verifiedAt:preserveVerificationTime(base.verifiedAt,input.verifiedAt),rules:newRules};
 }
 export function competitionFormValues(payload:Record<string,unknown>){return {...payload,sourceName:payload.sourceName||"Verificación administrativa",ruleBody:(Array.isArray(payload.rules)?payload.rules as Record<string,unknown>[]:[]).find(rule=>rule.title==="Información del evento")?.body||""};}
 export function buildEquipmentPayload(base:Record<string,unknown>,input:Record<string,unknown>,kind:AdminEntityType):Record<string,unknown>{
@@ -40,7 +41,7 @@ export function buildEquipmentPayload(base:Record<string,unknown>,input:Record<s
   const values=safeFields(input,catalogFields(kind));
   const list=(key:string)=>String(values[key]||"").split(",").map(v=>v.trim()).filter(Boolean);
   const numbers=(key:string,min:number,max:number)=>{const result=list(key).map(Number);if(result.some(n=>!Number.isFinite(n)||n<min||n>max))throw new Error("Revisa las especificaciones numéricas.");return result;};
-  const payload:Record<string,unknown>={...base,...values,aliases:list("aliasesText"),id:base.id,sourceName:input.sourceName,sourceUrl:input.sourceUrl||null,verifiedAt:input.verifiedAt||null};
+  const payload:Record<string,unknown>={...base,...values,aliases:list("aliasesText"),id:base.id,sourceName:input.sourceName,sourceUrl:input.sourceUrl||null,verifiedAt:preserveVerificationTime(base.verifiedAt,input.verifiedAt)};
   for(const key of ["aliasesText","loftsText","handsText","weightsText","flexesText","torqueText"])delete payload[key];
   if(kind==="BALL")return {...payload,colors:Array.isArray(base.colors)?base.colors:[],targetProfile:Array.isArray(base.targetProfile)?base.targetProfile:[]};
   if(kind==="SHAFT")return {...payload,weightOptions:numbers("weightsText",1,300),flexOptions:list("flexesText"),torqueRange:numbers("torqueText",0,30)};
@@ -66,6 +67,7 @@ export function latestPublishedVisualVersions<T extends { target_key: string; ve
 }
 export function buildCoursePayload(base: Record<string, unknown>, input: Record<string, unknown>) {
   const values = safeFields(input, COURSE_FIELDS); const course = base.course as Record<string, unknown>; const club = base.club as Record<string, unknown>;
+  const canonicalBase={...base};for(const field of COURSE_FIELDS)delete canonicalBase[field.key];
   const oldTees = Array.isArray(base.tees) ? base.tees as Record<string, unknown>[] : [];
   const tees = Array.isArray(input.tees) ? input.tees.map((raw: unknown) => {
     if (!raw || typeof raw !== "object") throw new Error("Revisa los tees."); const tee = raw as Record<string, unknown>;
@@ -97,14 +99,15 @@ export function buildCoursePayload(base: Record<string, unknown>, input: Record<
     }
     yardages=[...updated.values()];
   }
-  return { ...base, course: { ...course, id: course.id, clubId:club.id, name: values.name, holes: Number(values.holeCount), active: values.active }, club: { ...club, name: values.clubName, city: values.city, stateRegion: values.stateRegion, country: values.country, address: values.address, latitude: values.latitude, longitude: values.longitude }, tees,holes,teeHoleYardages:yardages };
+  return { ...canonicalBase, course: { ...course, id: course.id, clubId:club.id, name: values.name, holes: Number(values.holeCount), active: values.active }, club: { ...club, name: values.clubName, city: values.city, stateRegion: values.stateRegion, country: values.country, address: values.address, latitude: values.latitude, longitude: values.longitude }, tees,holes,teeHoleYardages:yardages };
 }
 const LABELS: Record<string,string> = {name:"Nombre",clubName:"Club",city:"Ciudad",stateRegion:"Región",active:"Activo",rating:"Rating",slope:"Slope",par:"Par",totalYards:"Yardas",brand:"Marca",model:"Modelo",year:"Año",generation:"Generación",description:"Descripción",visibility:"Visibilidad",fitEligible:"Visible en Ball Fit",bagEligible:"Visible en Mi Bolsa",sourceName:"Fuente",sourceUrl:"Referencia",verifiedAt:"Fecha verificada",startsAt:"Inicio",endsAt:"Fin",handicapMaximum:"Handicap máximo",handicapPercentage:"Porcentaje de handicap",body:"Texto",title:"Título",color:"Color",holes:"Hoyos"};
 export type HumanChange = { label: string; before: string; after: string };
 export function humanChanges(before: unknown, after: unknown, prefix = ""): HumanChange[] {
   if (JSON.stringify(before) === JSON.stringify(after)) return [];
   if (after && typeof after === "object" || before && typeof before === "object") {
-    const a = (after || {}) as Record<string,unknown>, b = (before || {}) as Record<string,unknown>;
+    const a = {...(after || {}) as Record<string,unknown>}, b = {...(before || {}) as Record<string,unknown>};
+    if(!prefix&&(a.course||b.course)){for(const key of [...COURSE_FIELDS.map(field=>field.key),"family","yardages"]){delete a[key];delete b[key];}}
     return [...new Set([...Object.keys(a),...Object.keys(b)])].filter(k => !/(^id$|Id$|_id$|provider|schema|revision|legacy|catalogVersion|dataEnvironment|data_environment|engineContract)/i.test(k)).flatMap(k => humanChanges(b[k],a[k],`${prefix}${LABELS[k] || ({club:"Club",course:"Campo",tees:"Tees",rules:"Reglas",payload:"Cambio",role:"Rol",status:"Estado",shortSummary:"Resumen",holeNumber:"Hoyo",strokeIndex:"Stroke Index",totalMeters:"Metros",category:"Categoría",handedness:"Mano",aliases:"Otros nombres",sourceType:"Fuente",country:"País",address:"Dirección",latitude:"Latitud",longitude:"Longitud",construction:"Construcción",coverMaterial:"Cubierta",flight:"Vuelo",feel:"Sensación",driverSpin:"Spin de driver",ironSpin:"Spin de hierros",shortGameSpin:"Spin de juego corto",order:"Orden",icon:"Icono",instructions:"Instrucciones",format:"Formato",organizer:"Organizador",changedAt:"Fecha",effectiveFrom:"Inicio",effectiveUntil:"Fin",description:"Descripción"} as Record<string,string>)[k] || (Array.isArray(after) ? `Elemento ${Number(k)+1}` : "Información")} · `));
   }
   const display = (value: unknown) => value == null || value === "" ? "—" : typeof value === "boolean" ? value ? "Sí" : "No" : typeof value === "object" ? "Información agregada" : String(value);
