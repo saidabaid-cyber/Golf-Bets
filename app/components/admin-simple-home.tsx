@@ -22,6 +22,7 @@ export function AdminSimpleHome() {
   const { identity, adminAccess } = useBackyardAccount(); const token = identity.accessToken || "";
   const [modules, setModules] = useState<SimpleAdminModule[]>([]); const [error, setError] = useState(""); const [selected, setSelected] = useState<SimpleAdminModule | null>(null);
   const [requestTitle,setRequestTitle]=useState("");
+  const [ballSection,setBallSection]=useState("catalog");
   useEffect(() => {
     if (!token) return; const controller = new AbortController();
     void fetch("/api/admin/simple", { headers: { authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal }).then(async r => { const body = await r.json(); if (!r.ok) throw new Error(body.error); setModules(body.modules); }).catch(e => { if (!controller.signal.aborted) setError(e.message); });
@@ -35,7 +36,9 @@ export function AdminSimpleHome() {
     {!selected && <div className="adminV2Stack">{[PRIMARY, SECONDARY].map((group, index) => <section key={index} aria-label={index ? "Catálogos y comunidad" : "Operación principal"} className={index ? "adminV2Secondary" : "adminV2Grid"}>{group.filter(module => modules.includes(module)).map(module => <button className="adminV2Module" key={module} onClick={() => setSelected(module)}><div><h2>{LABELS[module][0]}</h2><p>{LABELS[module][1]}</p></div><span aria-hidden="true">→</span></button>)}</section>)}<details className="adminV2Advanced"><summary>Más / Avanzado</summary><div className="adminV2Secondary">{ADVANCED.filter(module => modules.includes(module)).map(module => module === "advanced" ? <Link className="adminV2Module" key={module} href="/admin"><h2>{LABELS[module][0]}</h2><span aria-hidden="true">→</span></Link> : <button className="adminV2Module" key={module} onClick={() => setSelected(module)}><h2>{LABELS[module][0]}</h2><span aria-hidden="true">→</span></button>)}</div></details></div>}
     {selected === "administrators" && <Administrators token={token} />}
     {selected === "users" && <Administrators token={token} readOnly />}
-    {(selected === "courses"||selected==="equipment"||selected==="balls"||selected==="competitions") && <Catalog key={selected} token={token} module={selected} />}
+    {selected==="balls"&&<div className="adminV2Tabs"><button className={ballSection==="catalog"?"primary":"secondary"} onClick={()=>setBallSection("catalog")}>Bolas · catálogo</button><button className={ballSection==="fit"?"primary":"secondary"} onClick={()=>setBallSection("fit")}>Ball Fit</button></div>}
+    {(selected === "courses"||selected==="equipment"||selected==="balls"&&ballSection==="catalog"||selected==="competitions") && <Catalog key={selected} token={token} module={selected} />}
+    {selected==="balls"&&ballSection==="fit"&&<><p className="notice">Administra el contenido seguro de Ball Fit. Los algoritmos y fórmulas permanecen en desarrollo / administración avanzada.</p>{modules.includes("content")?<Presentation token={token} module="content" onlyKey="coach_ball_fit"/>:<p>Tu permiso permite administrar el catálogo. La configuración de contenido requiere permisos adicionales.</p>}</>}
     {(selected==="bets"||selected==="content")&&<Presentation key={selected} token={token} module={selected}/>}
     {selected==="requests"&&<Requests token={token} onCreate={(module,title)=>{if(modules.includes(module)){setRequestTitle(title);setSelected(module);}}}/>}
     {selected==="audit"&&<Audit token={token}/>}

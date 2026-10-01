@@ -1,5 +1,6 @@
 import type { AdminEntityType } from "./admin-control-center";
 import { CLUB_CATEGORIES } from "./golf-equipment";
+import { structuredNumbers } from "./admin-operations";
 export type AdminRecord = { id: string; title: string; subtitle: string; active: boolean; kind: AdminEntityType; values: Record<string, unknown>; version?: number };
 export type AdminField = { key: string; label: string; type?: "text" | "number" | "textarea" | "checkbox" | "select" | "url" | "date" | "datetime-local"; required?: boolean; options?: readonly string[]; min?: number; max?: number };
 export function adminOptionLabel(value:string) {
@@ -29,6 +30,12 @@ export function buildCompetitionPayload(base:Record<string,unknown>,input:Record
   return {...base,...values,id:base.id,courseId:input.courseId,sourceName:input.sourceName,sourceUrl:input.sourceUrl||null,verifiedAt:input.verifiedAt||null,rules:newRules};
 }
 export function buildEquipmentPayload(base:Record<string,unknown>,input:Record<string,unknown>,kind:AdminEntityType):Record<string,unknown>{
+  input={...input};
+  for(const [key,min,max] of [["loftsText",0,90],["weightsText",1,300],["torqueText",0,30]] as const)if(Array.isArray(input[key]))input[key]=structuredNumbers(input[key] as unknown[],min,max).join(",");
+  if(Array.isArray(input.handsText)){
+    if(input.handsText.some(value=>value!=="RH"&&value!=="LH"))throw new Error("Selecciona una mano válida.");
+    input.handsText=[...new Set(input.handsText)].join(",");
+  }
   const values=safeFields(input,catalogFields(kind));
   const list=(key:string)=>String(values[key]||"").split(",").map(v=>v.trim()).filter(Boolean);
   const numbers=(key:string,min:number,max:number)=>{const result=list(key).map(Number);if(result.some(n=>!Number.isFinite(n)||n<min||n>max))throw new Error("Revisa las especificaciones numéricas.");return result;};

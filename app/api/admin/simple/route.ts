@@ -83,7 +83,9 @@ export async function POST(request: NextRequest) {
       const id=typeof body.id==="string"&&body.id?body.id:`equipment-${crypto.randomUUID()}`;
       const existing=(await simpleEquipment(access.memberships,section==="balls")).find(i=>i.id===id&&i.kind===kind);
       if(body.id&&!existing)return json({error:"Este equipo no está disponible para tu cuenta."},403);
-      const payload=buildEquipmentPayload(existing?.values||{id},body.values as Record<string,unknown>,kind);const issues=equipmentPayloadIssues(payload,kind,id);if(issues.length)throw new Error(issues.join(" "));
+      const copy=typeof body.copyFromId==="string"?(await simpleEquipment(access.memberships,section==="balls")).find(i=>i.id===body.copyFromId&&i.kind===kind):null;
+      if(body.copyFromId&&!copy)return json({error:"No puedes duplicar este registro."},403);
+      const payload=buildEquipmentPayload(existing?.values||{...copy?.values,id},body.values as Record<string,unknown>,kind);const issues=equipmentPayloadIssues(payload,kind,id);if(issues.length)throw new Error(issues.join(" "));
       const result=await access.client.rpc("admin_create_revision_v1",{target_entity_type:kind,target_entity_id:id,target_scope_type:"CATALOG",target_scope_id:"equipment",target_payload:{...payload,dataEnvironment:"PRODUCTION"},target_source_type:payload.sourceType,target_source_name:payload.sourceName,target_source_url:payload.sourceUrl,target_provenance_status:payload.verifiedAt?"VERIFIED":"REPORTED",target_verified_at:payload.verifiedAt,target_confidence:null,target_notes:null});
       if(result.error)throw new Error("No se guardó el borrador de equipo.");return json({item:result.data},201);
     }
