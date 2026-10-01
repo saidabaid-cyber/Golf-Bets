@@ -25,6 +25,8 @@ function hub(props: Record<string, unknown>) {
     if (id === "react/jsx-runtime") return jsxRuntime;
     if (id.endsWith(".module.css")) return { default: new Proxy({}, { get: (_, key) => String(key) }) };
     if (id === "./backyard-icon") return { BackyardIcon: () => null };
+    if (id === "./app-bottom-nav") return { OfficialPlaySymbol: () => null };
+    if (id === "./clubhouse") return { Clubhouse: () => null };
     throw Error(`Unexpected dependency ${id}`);
   } });
   return children(exports.PlayHub!(props));
@@ -43,7 +45,7 @@ for (const [label, callback] of [["Configurar ronda completa", "onNewRound"], ["
 test("V3 active round continues through the same callback without creating a new round", () => {
   let continued = 0, created = 0;
   const nodes = hub({ activeRound: { status: "live", totalHoles: 18, playerCount: 2, currentHole: 10, playedHoles: 9, courseName: "Synthetic QA" }, onContinueRound: () => { continued++; }, onNewRound: () => { created++; } });
-  const button = nodes.find(node => node.type === "button" && text(node.props?.children) === "Volver al hoyo");
+  const button = nodes.find(node => node.type === "button" && text(node.props?.children).includes("CONTINUAR RONDA"));
   assert.ok(button); button.props!.onClick!();
   assert.equal(continued, 1); assert.equal(created, 0);
 });

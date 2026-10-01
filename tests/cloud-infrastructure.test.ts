@@ -87,9 +87,9 @@ test("link de ronda privada proyecta exclusivamente scores", () => {
 test("Polla Live conserva backend y enlaces, pero el acceso principal queda visible e inhabilitado", () => {
   assert.match(read("app/polla/[code]/page.tsx"), /redirect\(`\/\?polla=/);
   assert.doesNotMatch(appPage, /entry\.has\("polla"\).*setTab\("pollaLive"\)/);
-  assert.match(playHub, /className="betaPlayFuture" aria-disabled="true"/);
-  assert.match(playHub, /<b>Polla Live<\/b>/);
-  assert.match(playHub, /<strong>Próximamente<\/strong>/);
+  assert.match(playHub, /aria-disabled="true">Polla Live · Próximamente/);
+  assert.match(playHub, /Polla Live/);
+  assert.match(playHub, /Próximamente/);
   assert.match(pollaPanel, /requestPollaInvite\(invitedId\)/);
   assert.match(pollaPanel, /\/polla\/\$\{created\.short_code\}/);
   assert.match(pollaPanel, /resolveBrowserAppOrigin\(window\.location\.origin, process\.env\.NEXT_PUBLIC_APP_ORIGIN\)/);

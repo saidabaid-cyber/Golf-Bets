@@ -465,6 +465,8 @@ function GolfBetsApp() {
   const [profileCompletionTarget, setProfileCompletionTarget] = useState<CompletionSection | null>(null);
   const [profileRootRevision, setProfileRootRevision] = useState(0);
   const [careerView, setCareerView] = useState<"summary" | "trophy">("summary");
+  const [roundGpsIntent, setRoundGpsIntent] = useState(false);
+  useEffect(() => { if (tab !== "round") setRoundGpsIntent(false); }, [tab]);
   const [openAiPrivacySettings, setOpenAiPrivacySettings] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSettingsSection>("account");
   const openAccountSettings = (section: AccountSettingsSection = "account") => { setAccountSection(section); setTab("account"); };
@@ -3767,6 +3769,9 @@ function GolfBetsApp() {
     {tab === "coach" && <section className="navigationEmpty"><h2>Mejora cada día</h2><p>Tu práctica y fitting, con los módulos de The Backyard.</p><button type="button" className="secondary" onClick={() => { setProfileCompletionTarget("fitting"); setProfileFocus("equipment"); setTab("profile"); }}>Ball Fit</button></section>}
 
     {tab === "play" && <PlayHub
+      clubhouseConfig={identity.homeClubId ? { clubId: identity.homeClubId, label: identity.homeClub || "", enabled: [] } : null}
+      onOpenGps={() => { setRoundGpsIntent(true); continueActiveRound(); }}
+      onCancelRound={() => { setNewRoundBackupError(""); setShowDeleteRoundConfirm(true); }}
       activeRound={activeRoundSummary}
       onContinueRound={continueActiveRound}
       onEditRound={activeRoundSummary ? editActiveRound : undefined}
@@ -4167,6 +4172,7 @@ function GolfBetsApp() {
         <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={requestNewRound}>Nueva ronda</button>
       </nav>
       <RoundCaptureV2
+        initialGpsOpen={roundGpsIntent}
         captureContext={captureContext}
         onCaptureContextChange={(context) => {
           const next = { ...context, roundId, currentIndex };

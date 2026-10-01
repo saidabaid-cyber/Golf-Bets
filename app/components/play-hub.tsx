@@ -2,72 +2,38 @@
 
 import type { ActiveRoundSummary } from "./home-dashboard";
 import { BackyardIcon } from "./backyard-icon";
+import { OfficialPlaySymbol } from "./app-bottom-nav";
+import { Clubhouse } from "./clubhouse";
+import type { ClubhouseConfig } from "../../lib/clubhouse-capabilities";
 import styles from "./play-hub.module.css";
 
 export type PlayHubProps = {
-  coursePicker?: React.ReactNode;
-  activeRound?: ActiveRoundSummary | null;
-  onContinueRound: () => void;
-  onEditRound?: () => void;
-  onAiRound: () => void;
-  onNewRound: () => void;
-  onScoreOnly?: () => void;
-  onTotalScore?: () => void;
-  onOpenHistory: () => void;
-  onOpenBalances: () => void;
-  onOpenPersonalHistory: () => void;
-  onOpenStats: () => void;
-  onOpenCourses: () => void;
-  onOpenGroups: () => void;
-  onOpenRules: () => void;
-  onOpenStandings: () => void;
-  onOpenResults: () => void;
+  coursePicker?: React.ReactNode; activeRound?: ActiveRoundSummary | null;
+  onContinueRound: () => void; onEditRound?: () => void; onCancelRound?: () => void;
+  onAiRound: () => void; onNewRound: () => void; onScoreOnly?: () => void; onTotalScore?: () => void;
+  onOpenHistory: () => void; onOpenBalances: () => void; onOpenPersonalHistory: () => void;
+  onOpenStats: () => void; onOpenCourses: () => void; onOpenGroups: () => void;
+  onOpenRules: () => void; onOpenStandings: () => void; onOpenResults: () => void;
+  onOpenGps?: () => void; clubhouseConfig?: ClubhouseConfig | null;
 };
 
 function roundProgress(round: ActiveRoundSummary) {
   if (round.status === "review") return "Captura terminada · falta revisar y guardar";
   if (round.status === "setup") return `Configura ${round.totalHoles} hoyos y ${round.playerCount || "los"} jugadores`;
-  const current = round.currentHole ? `Hoyo ${round.currentHole}` : "En juego";
-  const progress = typeof round.playedHoles === "number" ? ` · ${round.playedHoles}/${round.totalHoles} capturados` : "";
-  return `${current}${progress}`;
+  return `Hoyo ${round.currentHole || "en juego"}${typeof round.playedHoles === "number" ? ` · ${round.playedHoles}/${round.totalHoles} capturados` : ""}`;
 }
 
-export function PlayHub({ coursePicker, activeRound, onContinueRound, onEditRound, onAiRound, onNewRound, onScoreOnly, onTotalScore, onOpenHistory, onOpenBalances, onOpenPersonalHistory, onOpenStats, onOpenCourses, onOpenGroups, onOpenRules, onOpenStandings, onOpenResults }: PlayHubProps) {
-  return <section className="betaPlayHub" aria-labelledby="beta-play-title">
-    <section className="hero betaPlayHero">
-      <div><span className="eyebrow">THE BACKYARD · JUGAR</span><h1 id="beta-play-title">Tu próxima salida.</h1><p>Empieza rápido o regresa exactamente a la ronda que dejaste abierta.</p></div>
-      <div className={`betaPlayHeroActions ${styles.modes}`}>
-        <button type="button" className={styles.mode} onClick={onNewRound}><span className={styles.icon}><BackyardIcon name="players" /></span><span><b>Configurar ronda completa</b><small>Tu campo, tu grupo y tus juegos.</small></span><BackyardIcon name="arrow" size={18} /></button>
-        <button type="button" className={styles.mode} onClick={onScoreOnly}><span className={styles.icon}><BackyardIcon name="flag" /></span><span><b>Ronda sin apuestas</b><small>Sólo golf. Registra cada hoyo.</small></span><BackyardIcon name="arrow" size={18} /></button>
-        <button type="button" className={styles.mode} onClick={onTotalScore}><span className={styles.icon}><BackyardIcon name="score" /></span><span><b>Subir score total</b><small>Guarda una ronda que ya jugaste.</small></span><BackyardIcon name="arrow" size={18} /></button>
-        <details className={styles.assistant}><summary>Asistente de configuración</summary><button type="button" className="secondary" onClick={onAiRound}>Configurar con Backyard AI</button></details>
-      </div>
+export function PlayHub({ coursePicker, activeRound, onContinueRound, onEditRound, onCancelRound, onAiRound, onNewRound, onScoreOnly, onTotalScore, onOpenBalances, onOpenPersonalHistory, onOpenCourses, onOpenGroups, onOpenStandings, onOpenResults, onOpenGps, clubhouseConfig }: PlayHubProps) {
+  return <section className={styles.screen} aria-label="Play">
+    <section className={styles.hero} aria-labelledby="play-title"><div className={styles.heroCopy}><h2 id="play-title">A jugar</h2><p>Golf es más que un juego.<br />Es donde las buenas historias<br />siempre encuentran un hoyo más.</p></div>
+      <button type="button" className={styles.playAction} onClick={activeRound ? onContinueRound : onNewRound}><span className={styles.symbol}><OfficialPlaySymbol priority /></span><b>{activeRound ? "CONTINUAR RONDA" : "INICIAR RONDA"}</b></button>
+      <nav className={styles.contextTools} aria-label="Herramientas de ronda"><button type="button" onClick={activeRound ? onContinueRound : onScoreOnly}><BackyardIcon name="score" /><span>Score</span></button><button type="button" onClick={activeRound ? onEditRound || onContinueRound : onNewRound}><BackyardIcon name="handicap" /><span>Apuestas</span></button><button type="button" onClick={onOpenGroups}><BackyardIcon name="players" /><span>Grupos</span></button><button type="button" disabled={activeRound?.status !== "live"} onClick={onOpenGps} title="GPS y Hole Map durante una ronda activa"><BackyardIcon name="strategy" /><span>GPS / Hole Map</span></button></nav>
     </section>
-
-    {coursePicker && <section className="card">{coursePicker}</section>}
-    {activeRound ? <section className="card betaOpenRoundCard">
-      <div className="betaOpenRoundHead"><span className={`betaRoundStatus ${activeRound.status}`}>{activeRound.status === "review" ? "POR REVISAR" : activeRound.status === "setup" ? "CONFIGURANDO" : "EN JUEGO"}</span><time dateTime={activeRound.roundDate}>{activeRound.roundDate}</time></div>
-      <h2>{activeRound.courseName}</h2>
-      <p>{roundProgress(activeRound)}</p>
-      <div className="betaOpenRoundMeta"><span>{activeRound.totalHoles} hoyos</span><span>{activeRound.playerCount} jugador{activeRound.playerCount === 1 ? "" : "es"}</span></div>
-      <div className="betaOpenRoundActions"><button type="button" className="primary big" onClick={onContinueRound}>{activeRound.status === "review" ? "Revisar resultados" : activeRound.status === "setup" ? "Continuar configuración" : "Volver al hoyo"}</button>{onEditRound && activeRound.status !== "setup" && <button type="button" className="secondary big" onClick={onEditRound}>Editar configuración</button>}</div>
-      {activeRound.status === "live" && <nav className="betaRoundShortcuts" aria-label="Atajos de la ronda activa"><button type="button" onClick={onContinueRound}>Tarjeta</button><button type="button" onClick={onOpenStandings}>Cómo vamos</button><button type="button" onClick={onOpenResults}>Resultados</button><button type="button" onClick={onOpenRules}>Reglas</button></nav>}
-    </section> : null}
-
-    <section className="betaPlayTools" aria-labelledby="beta-play-tools-title">
-      <div className="sectionTitle"><div><h2 id="beta-play-tools-title">Antes y después de jugar</h2><p>Herramientas conectadas a tus datos actuales.</p></div></div>
-      <div className="betaPlayToolGrid">
-        <button type="button" onClick={onOpenCourses}><span aria-hidden="true">⌖</span><div><b>Campos</b><small>Buscar, elegir y editar</small></div><strong aria-hidden="true">›</strong></button>
-        <button type="button" onClick={onOpenGroups}><span aria-hidden="true">◎</span><div><b>Armar grupos</b><small>Jugadores frecuentes y sorteo</small></div><strong aria-hidden="true">›</strong></button>
-        <button type="button" onClick={onOpenHistory}><span aria-hidden="true">↺</span><div><b>Histórico</b><small>Tarjetas y resultados guardados</small></div><strong aria-hidden="true">›</strong></button>
-        <button type="button" onClick={onOpenBalances}><span aria-hidden="true">$</span><div><b>Balances</b><small>Ledger y cuentas sugeridas</small></div><strong aria-hidden="true">›</strong></button>
-        <button type="button" onClick={onOpenPersonalHistory}><span aria-hidden="true">↔</span><div><b>Personales</b><small>Histórico contra tus rivales</small></div><strong aria-hidden="true">›</strong></button>
-        <button type="button" onClick={onOpenStats}><span aria-hidden="true">↗</span><div><b>Mis stats</b><small>Sólo rondas con datos completos</small></div><strong aria-hidden="true">›</strong></button>
-        <button type="button" onClick={onOpenRules}><span aria-hidden="true">?</span><div><b>Reglas de golf</b><small>Consulta el árbitro y las fuentes</small></div><strong aria-hidden="true">›</strong></button>
-        <div className="betaPlayFuture" aria-disabled="true"><span aria-hidden="true">🏆</span><div><b>Polla Live</b><small>Torneos y seguimiento grupal</small></div><strong>Próximamente</strong></div>
-      </div>
-    </section>
-
-    <aside className="betaPlayPromise"><b>Tu score se guarda primero en este dispositivo.</b><span>Si pierdes señal, puedes seguir capturando y la sincronización se reintentará al volver la conexión.</span></aside>
+    {activeRound && <section className={styles.activeRound}><div className={styles.sectionTitle}><h2>{activeRound.courseName}</h2><small>{activeRound.roundDate}</small></div><p>{roundProgress(activeRound)}</p><div className={styles.roundActions}>{onEditRound && <button type="button" onClick={onEditRound}>Editar configuración</button>}{onCancelRound && <button type="button" onClick={onCancelRound}>Cerrar / cancelar</button>}{activeRound.status === "live" && <><button type="button" onClick={onOpenStandings}>Cómo vamos</button><button type="button" onClick={onOpenResults}>Resultados</button></>}</div></section>}
+    <Clubhouse config={clubhouseConfig} />
+    {coursePicker}
+    <details className={styles.roundOptions}><summary>{activeRound ? "Iniciar una nueva ronda" : "Opciones de ronda"}</summary><div className={styles.roundActions}><button type="button" onClick={onNewRound}>Configurar ronda completa</button><button type="button" onClick={onScoreOnly}>Ronda sin apuestas</button><button type="button" onClick={onTotalScore}>Subir score total</button><button type="button" onClick={onAiRound}>Configurar con Backyard AI</button></div></details>
+    <div className={styles.utilityLinks}><button type="button" onClick={onOpenCourses}>Campos</button><button type="button" onClick={onOpenBalances}>Balances</button><button type="button" onClick={onOpenPersonalHistory}>Apuestas personales</button><span aria-disabled="true">Polla Live · Próximamente</span></div>
+    <p className={styles.saveNotice}>Tu score se guarda primero en este dispositivo. La sincronización se reintenta cuando vuelve la conexión.</p>
   </section>;
 }

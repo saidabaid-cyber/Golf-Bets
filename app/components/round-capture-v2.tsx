@@ -29,6 +29,7 @@ import type { RoundCaptureStage } from "../../lib/active-round-navigation";
 type CounterQuantities = Record<CounterBetKind, Record<string, number | undefined>>;
 
 export type RoundCaptureV2Props = {
+  initialGpsOpen?: boolean;
   course: Pick<Course, "name" | "teeName" | "latitude" | "longitude" | "playerHoleCards">;
   hole: Hole;
   order: number[];
@@ -148,7 +149,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   } = props;
   const [gpsState, setGpsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [gpsMessage, setGpsMessage] = useState("");
-  const [gpsOpen, setGpsOpen] = useState(false);
+  const [gpsOpen, setGpsOpen] = useState(Boolean(props.initialGpsOpen));
   const [shotBusy, setShotBusy] = useState(false);
   const [shotMessage, setShotMessage] = useState("");
   const [shotClub, setShotClub] = useState("");
