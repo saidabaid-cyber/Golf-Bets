@@ -20,6 +20,8 @@ async function database() {
   await db.exec(migration("20261001060612_admin_mode_v2_roles.sql"));
   await db.exec(migration("20261001061219_admin_mode_v2_administrators.sql"));
   await db.exec(migration("20261001063622_admin_mode_v2_visual_publication.sql"));
+  await db.exec("create table public.feedback_requests(id uuid primary key,request_status text not null default 'NEW' check(request_status in ('NEW','IN_REVIEW','RESOLVED','REJECTED')),data_environment text default 'PRODUCTION',updated_at timestamptz default now(),resolved_at timestamptz)");
+  await db.exec(migration("20261001064607_admin_mode_v2_requests_security.sql"));
   await db.query("insert into auth.users(id,email) values($1,'owner@backyard.test'),($2,'admin@backyard.test'),($3,'player@backyard.test')", [superId, adminId, playerId]);
   await db.query("insert into admin_memberships(user_id,role,scope_type) values($1,'SUPER_ADMIN','GLOBAL'),($2,'ADMIN','GLOBAL')", [superId, adminId]);
   return db;
@@ -39,6 +41,7 @@ test("real Postgres role permissions deny direct writes, PLAYER, ADMIN escalatio
     await assert.rejects(db.query("select admin_change_role_v2($1,'ADMIN','PLAYER','Test',gen_random_uuid())", [superId]), /SUPER_ADMIN_PROTECTED/);
   } finally { await db.close(); }
 });
+test("request review is persisted and audited; PLAYER, fixture changes and stale states fail closed",async()=>{const db=await database();const id="30000000-0000-4000-8000-000000000001",qa="30000000-0000-4000-8000-000000000002";try{await db.query("insert into feedback_requests(id,data_environment) values($1,'PRODUCTION'),($2,'SYNTHETIC')",[id,qa]);await act(db,playerId);await assert.rejects(db.query("select admin_review_request_v2($1,'NEW','APPROVED','Revisado')",[id]),/ADMIN_REQUIRED/);await act(db,adminId);await assert.rejects(db.query("select admin_review_request_v2($1,'NEW','APPROVED','Revisado')",[qa]),/REQUEST_NOT_AVAILABLE/);await db.query("select admin_review_request_v2($1,'NEW','APPROVED','Revisado')",[id]);await assert.rejects(db.query("select admin_review_request_v2($1,'NEW','RESOLVED','Revisado')",[id]),/STALE_REQUEST/);await db.exec("reset role");assert.equal((await db.query<{request_status:string}>("select request_status from feedback_requests where id=$1",[id])).rows[0].request_status,"APPROVED");assert.equal((await db.query<{count:number}>("select count(*)::int as count from admin_audit_log where action='REVIEW_REQUEST'")).rows[0].count,1);}finally{await db.close();}});
 test("published visual metadata persists across sessions; draft, critical payload, stale version and PLAYER publish are rejected",async()=>{
   const db=await database();
   try{

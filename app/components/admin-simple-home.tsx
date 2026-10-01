@@ -9,12 +9,15 @@ import type { SimpleAdminModule } from "../../lib/admin-mode";
 const Administrators = dynamic(() => import("./admin-administrators").then(m => m.AdminAdministrators));
 const Catalog = dynamic(() => import("./admin-visual-catalog").then(m=>m.AdminVisualCatalog));
 const Presentation=dynamic(()=>import("./admin-presentation-editor").then(m=>m.AdminPresentationEditor));
+const Requests=dynamic(()=>import("./admin-requests").then(m=>m.AdminRequests));
+
 const LABELS: Record<SimpleAdminModule, [string, string]> = {
   courses: ["Campos", "Información, tees, tarjetas y reglas locales"], equipment: ["Equipment", "Marcas, modelos y varillas"], balls: ["Bolas / Ball Fit", "Catálogo y opciones seguras"], bets: ["Apuestas", "Presentación y disponibilidad"], competitions: ["Torneos y competiciones", "Organiza y publica"], requests: ["Solicitudes", "Revisa lo que pide tu comunidad"], users: ["Usuarios", "Consulta perfiles y estado"], content: ["Contenido", "Textos de la app"], administrators: ["Administradores", "Asigna o retira permisos"], audit: ["Auditoría", "Consulta cambios registrados"], advanced: ["Administración avanzada", "Importaciones y operaciones técnicas"],
 };
 export function AdminSimpleHome() {
   const { identity, adminAccess } = useBackyardAccount(); const token = identity.accessToken || "";
   const [modules, setModules] = useState<SimpleAdminModule[]>([]); const [error, setError] = useState(""); const [selected, setSelected] = useState<SimpleAdminModule | null>(null);
+  const [requestTitle,setRequestTitle]=useState("");
   useEffect(() => {
     if (!token) return; const controller = new AbortController();
     void fetch("/api/admin/simple", { headers: { authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal }).then(async r => { const body = await r.json(); if (!r.ok) throw new Error(body.error); setModules(body.modules); }).catch(e => { if (!controller.signal.aborted) setError(e.message); });
@@ -30,7 +33,9 @@ export function AdminSimpleHome() {
     {selected === "users" && <Administrators token={token} readOnly />}
     {(selected === "courses"||selected==="equipment"||selected==="balls"||selected==="competitions") && <Catalog key={selected} token={token} module={selected} />}
     {(selected==="bets"||selected==="content")&&<Presentation key={selected} token={token} module={selected}/>}
-    {selected && !["administrators", "users", "courses", "equipment", "balls", "bets", "content", "competitions"].includes(selected) && <p className="notice">Cargando módulo…</p>}
+    {selected==="requests"&&<Requests token={token} onCreate={(module,title)=>{if(modules.includes(module)){setRequestTitle(title);setSelected(module);}}}/>}
+    {requestTitle&&selected!=="requests"&&<p className="notice">Alta solicitada: {requestTitle}. Revisa los datos y agrega la información verificada antes de guardar.</p>}
+    
     {selected && <button type="button" className="textButton" onClick={() => setSelected(null)}>← Volver a administración</button>}
   </main>;
 }
