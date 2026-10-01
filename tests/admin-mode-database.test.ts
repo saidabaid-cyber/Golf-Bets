@@ -19,6 +19,7 @@ async function database() {
   await db.exec(migration("20260922132140_admin_publication_workflows_v1.sql").split("create or replace function private.guard_admin_revision_v1")[0] + "commit;");
   await db.exec(migration("20261001060612_admin_mode_v2_roles.sql"));
   await db.exec(migration("20261001061219_admin_mode_v2_administrators.sql"));
+  await db.exec(migration("20261001063622_admin_mode_v2_visual_publication.sql"));
   await db.query("insert into auth.users(id,email) values($1,'owner@backyard.test'),($2,'admin@backyard.test'),($3,'player@backyard.test')", [superId, adminId, playerId]);
   await db.query("insert into admin_memberships(user_id,role,scope_type) values($1,'SUPER_ADMIN','GLOBAL'),($2,'ADMIN','GLOBAL')", [superId, adminId]);
   return db;
@@ -37,6 +38,22 @@ test("real Postgres role permissions deny direct writes, PLAYER, ADMIN escalatio
     await act(db, superId);
     await assert.rejects(db.query("select admin_change_role_v2($1,'ADMIN','PLAYER','Test',gen_random_uuid())", [superId]), /SUPER_ADMIN_PROTECTED/);
   } finally { await db.close(); }
+});
+test("published visual metadata persists across sessions; draft, critical payload, stale version and PLAYER publish are rejected",async()=>{
+  const db=await database();
+  try{
+    await act(db,adminId);
+    await assert.rejects(db.query("select admin_save_visual_draft_v2('BET','skins',$1,0)",[JSON.stringify({title:"Skins",active:true,order:1,icon:"⛳",engineAdapter:"fake"})]),/PROTECTED_FIELD/);
+    const saved=await db.query<{draft:{id:string}}>("select admin_save_visual_draft_v2('BET','skins',$1,0) as draft",[JSON.stringify({title:"Skins del club",description:"Reglas informativas",instructions:"Texto revisado",active:true,order:1,icon:"⛳"})]);const id=saved.rows[0].draft.id;
+    await db.exec("reset role;set role anon");assert.equal((await db.query("select * from player_visual_content_v2()")).rows.length,0);
+    await act(db,adminId);const preview=(await db.query<{preview:{previewHash:string}}>("select admin_preview_visual_v2($1) as preview",[id])).rows[0].preview;
+    await act(db,playerId);await assert.rejects(db.query("select admin_publish_visual_v2($1,$2,'Revisado')",[id,preview.previewHash]),/ADMIN_REQUIRED/);
+    await act(db,adminId);await assert.rejects(db.query("select admin_publish_visual_v2($1,'wrong','Revisado')",[id]),/STALE_PREVIEW/);
+    await db.query("select admin_publish_visual_v2($1,$2,'Revisado')",[id,preview.previewHash]);
+    await db.exec("reset role;set role anon");const published=await db.query<{values:{title:string}}>("select * from player_visual_content_v2()");assert.equal(published.rows[0].values.title,"Skins del club");
+    await assert.rejects(db.query("update admin_visual_versions set payload='{}'"),/permission denied/);
+    await act(db,adminId);await assert.rejects(db.query("select admin_save_visual_draft_v2('BET','skins',$1,0)",[JSON.stringify({title:"Stale",active:true,order:1,icon:"⛳"})]),/STALE_CONTENT/);
+  }finally{await db.close();}
 });
 test("real Postgres role changes persist for another session, audit once and reject stale/reused payloads", async () => {
   const db = await database(); const operation = "20000000-0000-4000-8000-000000000001";

@@ -8,6 +8,7 @@ import { AdminModeMenu } from "./admin-mode-menu";
 import type { SimpleAdminModule } from "../../lib/admin-mode";
 const Administrators = dynamic(() => import("./admin-administrators").then(m => m.AdminAdministrators));
 const Catalog = dynamic(() => import("./admin-visual-catalog").then(m=>m.AdminVisualCatalog));
+const Presentation=dynamic(()=>import("./admin-presentation-editor").then(m=>m.AdminPresentationEditor));
 const LABELS: Record<SimpleAdminModule, [string, string]> = {
   courses: ["Campos", "Información, tees, tarjetas y reglas locales"], equipment: ["Equipment", "Marcas, modelos y varillas"], balls: ["Bolas / Ball Fit", "Catálogo y opciones seguras"], bets: ["Apuestas", "Presentación y disponibilidad"], competitions: ["Torneos y competiciones", "Organiza y publica"], requests: ["Solicitudes", "Revisa lo que pide tu comunidad"], users: ["Usuarios", "Consulta perfiles y estado"], content: ["Contenido", "Textos de la app"], administrators: ["Administradores", "Asigna o retira permisos"], audit: ["Auditoría", "Consulta cambios registrados"], advanced: ["Administración avanzada", "Importaciones y operaciones técnicas"],
 };
@@ -28,7 +29,8 @@ export function AdminSimpleHome() {
     {selected === "administrators" && <Administrators token={token} />}
     {selected === "users" && <Administrators token={token} readOnly />}
     {(selected === "courses"||selected==="equipment"||selected==="balls") && <Catalog key={selected} token={token} module={selected} />}
-    {selected && !["administrators", "users", "courses", "equipment", "balls"].includes(selected) && <p className="notice">Cargando módulo…</p>}
+    {(selected==="bets"||selected==="content")&&<Presentation key={selected} token={token} module={selected}/>}
+    {selected && !["administrators", "users", "courses", "equipment", "balls", "bets", "content"].includes(selected) && <p className="notice">Cargando módulo…</p>}
     {selected && <button type="button" className="textButton" onClick={() => setSelected(null)}>← Volver a administración</button>}
   </main>;
 }
