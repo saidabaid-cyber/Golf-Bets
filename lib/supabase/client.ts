@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { CANONICAL_QA_BRANCH_APP_ORIGIN } from "../app-origin";
 import { fetchWithTimeout } from "../network-timeout";
+import {adminPreviewBinding,isAdminPreviewOrigin,validAdminPreviewRef} from "../admin-preview-binding";
 
 let browserClient: SupabaseClient | null | undefined;
 export const AUTH_SESSION_PERSISTENCE_KEY = "the-backyard:auth-session-persistence:v1";
@@ -25,6 +26,8 @@ export function resolveBrowserSupabaseOrigin(rawUrl: string | undefined, locatio
   const origin = exactSupabaseOrigin(rawUrl);
   if (!origin) return null;
   const hostname = location.hostname.toLowerCase();
+  const binding=adminPreviewBinding();
+  if(isAdminPreviewOrigin(location.origin||`${location.protocol}//${hostname}`,binding))return origin===`https://${binding.ref}.supabase.co`?origin:null;
   if (hostname === "dev.thebackyard.com.mx") {
     return location.protocol === "https:" && origin === CANONICAL_PREVIEW_SUPABASE_ORIGIN ? origin : null;
   }
@@ -38,6 +41,7 @@ export function resolveBrowserSupabaseOrigin(rawUrl: string | undefined, locatio
     return location.protocol === "https:" && origin === CANONICAL_PRODUCTION_SUPABASE_ORIGIN ? origin : null;
   }
   if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]") {
+    if(validAdminPreviewRef(binding.ref)&&origin===`https://${binding.ref}.supabase.co`)return origin;
     if (origin === CANONICAL_PREVIEW_SUPABASE_ORIGIN) return origin;
     const target = new URL(origin);
     return (target.hostname === "localhost" || target.hostname === "127.0.0.1" || target.hostname === "[::1]")

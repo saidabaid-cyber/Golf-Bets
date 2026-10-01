@@ -193,10 +193,11 @@ test('Vercel blocks backup branches, keeps the canonical Preview branch enabled,
   const configuration = JSON.parse(await readRepo('vercel.json'));
   assert.equal(configuration.git?.deploymentEnabled?.['*'], false);
   assert.equal(configuration.git?.deploymentEnabled?.['integration/backyard-current'], true);
+  assert.equal(configuration.git?.deploymentEnabled?.['feature/admin-mode-v2'], true);
   assert.equal(configuration.git?.deploymentEnabled?.['infra/backup-automation'], false);
   assert.equal(configuration.git?.deploymentEnabled?.['hotfix/cloud-backup-*'], false);
   assert.ok(Object.entries(configuration.git.deploymentEnabled)
-    .filter(([branch]) => branch !== 'integration/backyard-current')
+    .filter(([branch]) => !['integration/backyard-current','feature/admin-mode-v2'].includes(branch))
     .every(([, enabled]) => enabled === false));
   assert.equal(configuration.ignoreCommand, 'node scripts/backup/skip-vercel-deploy.mjs');
 

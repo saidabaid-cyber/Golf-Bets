@@ -7,7 +7,8 @@ export async function GET(request: NextRequest) {
   if (!access.ok) return json({ error: access.error, code: access.code }, access.status);
   const query = request.nextUrl.searchParams.get("q") || "";
   if (query.length > 160) return json({ error: "La búsqueda es demasiado larga." }, 400);
-  const result = await access.client.rpc("admin_user_directory_v2", { search_text: query, page_offset: 0 });
+  const offset=Number(request.nextUrl.searchParams.get("offset")||0);if(!Number.isInteger(offset)||offset<0||offset>100000)return json({error:"Página no válida."},400);
+  const result = await access.client.rpc("admin_user_directory_v2", { search_text: query, page_offset: offset });
   return result.error ? json({ error: "No pudimos consultar los usuarios.", code: "ADMIN_SCHEMA_PENDING" }, 503) : json({ items: result.data });
 }
 export async function POST(request: NextRequest) {

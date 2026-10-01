@@ -19,5 +19,5 @@ test("My Coach opens the same fitting and launch monitor through the existing eq
 });
 test("unimplemented coaching engines stay disabled and admin remains accessible from Profile settings", () => {
   assert.deepEqual(COACH_CAPABILITIES, { swingAnalysis: false, drills: false, trainingRecommendations: false });
-  assert.match(readFileSync("app/components/profile-account-panel.tsx", "utf8"), /adminAccess.hasAccess && <a[^>]*href="\/admin"/);
+  assert.match(readFileSync("app/components/profile-account-panel.tsx", "utf8"), /adminAccess.hasAccess && <a[^>]*href="\/manage"/);
 });
