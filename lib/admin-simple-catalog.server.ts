@@ -4,6 +4,17 @@ import { getCourseCatalog } from "./course-catalog-provider.server";
 import { isOperationalAdminData } from "./admin-data-environment";
 import { membershipAllows, type AdminMembership } from "./admin-control-center";
 import type { AdminRecord } from "./admin-simple-catalog";
+import { loadLayeredEquipmentCatalogs } from "./equipment-catalog-provider.server";
+export async function simpleEquipment(memberships:AdminMembership[],balls=false){
+  const catalogs=await loadLayeredEquipmentCatalogs();
+  const rows=balls?catalogs.balls: [...catalogs.clubs,...catalogs.shafts];
+  return rows.filter(isOperationalAdminData).flatMap((entry):AdminRecord[]=>{
+    const row=entry as unknown as Record<string,unknown>;const kind=balls?"BALL":"usage" in row?"SHAFT":"CLUB_EQUIPMENT";
+    if(!memberships.some(m=>membershipAllows(m,{entityType:kind,scopeType:"CATALOG",scopeId:"equipment"},"READ")))return [];
+    const csv=(key:string)=>Array.isArray(row[key])?(row[key] as unknown[]).join(", "):"";
+    return [{id:entry.id,title:`${entry.brand} ${entry.model}`,subtitle:[row.generation,row.year,kind==="SHAFT"?"Varilla":row.category].filter(Boolean).join(" · "),active:entry.active,kind,values:{...row,bagEligible:row.bagEligible!==false,fitEligible:row.fitEligible===true,sourceType:row.sourceType||"ADMIN_RESEARCH",aliasesText:csv("aliases"),loftsText:csv("lofts"),handsText:csv("handedness"),weightsText:csv("weightOptions"),flexesText:csv("flexOptions"),torqueText:csv("torqueRange")}}];
+  });
+}
 export async function simpleCourses(client: SupabaseClient, memberships: AdminMembership[]) {
   const catalog = await getCourseCatalog(client, { forceFresh: true });
   const items: AdminRecord[] = catalog.courses.filter(course => isOperationalAdminData(course) && memberships.some(m => membershipAllows(m,{entityType:"COURSE",scopeType:"COURSE",scopeId:course.id},"READ"))).map(course => {

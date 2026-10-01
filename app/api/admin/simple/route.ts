@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminMode } from "../../../../lib/admin-mode.server";
 import { SIMPLE_ADMIN_MODULES, type SimpleAdminModule } from "../../../../lib/admin-mode";
-import { simpleCourses } from "../../../../lib/admin-simple-catalog.server";
-import { buildCoursePayload, humanChanges } from "../../../../lib/admin-simple-catalog";
-import { coursePayloadIssues } from "../../../../lib/admin-payload-validation";
+import { simpleCourses, simpleEquipment } from "../../../../lib/admin-simple-catalog.server";
+import { buildCoursePayload, buildEquipmentPayload, humanChanges } from "../../../../lib/admin-simple-catalog";
+import { coursePayloadIssues, equipmentPayloadIssues } from "../../../../lib/admin-payload-validation";
 import { membershipAllows, type AdminEntityType } from "../../../../lib/admin-control-center";
 import { isOperationalAdminData } from "../../../../lib/admin-data-environment";
 export const dynamic = "force-dynamic";
@@ -14,6 +14,12 @@ export async function GET(request: NextRequest) {
   const access = await requireAdminMode(request, module as SimpleAdminModule | undefined);
   if (!access.ok) return json({ error: access.error, code: access.code }, access.status);
   if (!module) return json({ role: access.role, modules: access.modules });
+  if(module==="equipment"){
+    const items=await simpleEquipment(access.memberships);const q=(request.nextUrl.searchParams.get("q")||"").toLowerCase();
+    const drafts=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload").in("entity_type",["CLUB_EQUIPMENT","SHAFT"]).in("status",["DRAFT","REVIEWED","VERIFIED"]).order("created_at",{ascending:false}).limit(40);
+    if(drafts.error)return json({error:"No pudimos cargar los borradores."},503);
+    return json({items:items.filter(i=>`${i.title} ${i.subtitle}`.toLowerCase().includes(q)),drafts:(drafts.data||[]).filter(isOperationalAdminData)});
+  }
   if (module === "courses") {
     const items = await simpleCourses(access.client, access.memberships);
     const id = request.nextUrl.searchParams.get("id"); const query=(request.nextUrl.searchParams.get("q") || "").toLowerCase();
@@ -33,6 +39,15 @@ export async function POST(request: NextRequest) {
   const access=await requireAdminMode(request,module as SimpleAdminModule);
   if (!access.ok) return json({error:access.error,code:access.code},access.status);
   try {
+    if(body.operation==="draft"&&module==="equipment"){
+      const kind=body.kind as AdminEntityType;if(!["CLUB_EQUIPMENT","SHAFT"].includes(kind)||!body.values||typeof body.values!=="object"||Array.isArray(body.values))throw new Error("Revisa el equipo seleccionado.");
+      const id=typeof body.id==="string"&&body.id?body.id:`equipment-${crypto.randomUUID()}`;
+      const existing=(await simpleEquipment(access.memberships)).find(i=>i.id===id&&i.kind===kind);
+      if(body.id&&!existing)return json({error:"Este equipo no está disponible para tu cuenta."},403);
+      const payload=buildEquipmentPayload(existing?.values||{id},body.values as Record<string,unknown>,kind);const issues=equipmentPayloadIssues(payload,kind,id);if(issues.length)throw new Error(issues.join(" "));
+      const result=await access.client.rpc("admin_create_revision_v1",{target_entity_type:kind,target_entity_id:id,target_scope_type:"CATALOG",target_scope_id:"equipment",target_payload:{...payload,dataEnvironment:"PRODUCTION"},target_source_type:payload.sourceType,target_source_name:payload.sourceName,target_source_url:payload.sourceUrl,target_provenance_status:payload.verifiedAt?"VERIFIED":"REPORTED",target_verified_at:payload.verifiedAt,target_confidence:null,target_notes:null});
+      if(result.error)throw new Error("No se guardó el borrador de equipo.");return json({item:result.data},201);
+    }
     if (body.operation==="draft" && module==="courses") {
       if (!body.values || typeof body.values!=="object" || Array.isArray(body.values)) throw new Error("Revisa el formulario.");
       const id = typeof body.id==="string" && body.id ? body.id : `course-${crypto.randomUUID()}`;

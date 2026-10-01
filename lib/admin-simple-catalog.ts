@@ -1,6 +1,20 @@
 import type { AdminEntityType } from "./admin-control-center";
 export type AdminRecord = { id: string; title: string; subtitle: string; active: boolean; kind: AdminEntityType; values: Record<string, unknown>; version?: number };
 export type AdminField = { key: string; label: string; type?: "text" | "number" | "textarea" | "checkbox" | "select" | "url" | "date" | "datetime-local"; required?: boolean; options?: readonly string[]; min?: number; max?: number };
+export const EQUIPMENT_FIELDS: AdminField[]=[{key:"brand",label:"Marca",required:true},{key:"model",label:"Modelo",required:true},{key:"generation",label:"Generación"},{key:"year",label:"Año",type:"number",min:1900,max:2200},{key:"active",label:"Actual / activo",type:"checkbox"},{key:"bagEligible",label:"Visible en Mi Bolsa",type:"checkbox"},{key:"fitEligible",label:"Visible en fitting (requiere datos verificables)",type:"checkbox"},{key:"aliasesText",label:"Otros nombres (separados por coma)"},{key:"sourceType",label:"Tipo de fuente",type:"select",required:true,options:["OEM_OFFICIAL","DISTRIBUTOR","SECONDARY_ARCHIVE","USER_SUBMITTED","ADMIN_RESEARCH","OTHER"]}];
+export function catalogFields(kind:AdminEntityType):AdminField[]{
+  if(kind==="COURSE")return COURSE_FIELDS;
+  return [...EQUIPMENT_FIELDS,...(kind==="SHAFT"?[{key:"usage",label:"Uso",type:"select" as const,required:true,options:["WOOD","FAIRWAY","HYBRID","UTILITY","IRON","WEDGE","PUTTER"]},{key:"weightsText",label:"Pesos en gramos (separados por coma)"},{key:"flexesText",label:"Flex (separados por coma)"},{key:"torqueText",label:"Torque (separados por coma)"},{key:"launch",label:"Lanzamiento"},{key:"spin",label:"Spin"}]:[{key:"category",label:"Categoría",type:"select" as const,required:true,options:["DRIVER","FAIRWAY_WOOD","HYBRID","IRON_SET","WEDGE","PUTTER"]},{key:"loftsText",label:"Lofts en grados (separados por coma)"},{key:"handsText",label:"Manos (RH, LH)"},{key:"standardLength",label:"Longitud estándar",type:"number" as const,min:1,max:60},{key:"lie",label:"Lie",type:"number" as const,min:0,max:90},{key:"setMakeup",label:"Composición del set"}])];
+}
+export function buildEquipmentPayload(base:Record<string,unknown>,input:Record<string,unknown>,kind:AdminEntityType):Record<string,unknown>{
+  const values=safeFields(input,catalogFields(kind));
+  const list=(key:string)=>String(values[key]||"").split(",").map(v=>v.trim()).filter(Boolean);
+  const numbers=(key:string,min:number,max:number)=>{const result=list(key).map(Number);if(result.some(n=>!Number.isFinite(n)||n<min||n>max))throw new Error("Revisa las especificaciones numéricas.");return result;};
+  const payload:Record<string,unknown>={...base,...values,aliases:list("aliasesText"),id:base.id,sourceName:input.sourceName,sourceUrl:input.sourceUrl||null,verifiedAt:input.verifiedAt||null};
+  for(const key of ["aliasesText","loftsText","handsText","weightsText","flexesText","torqueText"])delete payload[key];
+  if(kind==="SHAFT")return {...payload,weightOptions:numbers("weightsText",1,300),flexOptions:list("flexesText"),torqueRange:numbers("torqueText",0,30)};
+  return {...payload,lofts:numbers("loftsText",0,90),handedness:list("handsText"),variants:Array.isArray(base.variants)?base.variants:[]};
+}
 export const COURSE_FIELDS: AdminField[] = [{ key: "name", label: "Nombre del recorrido", required: true },{key:"clubName",label:"Nombre del club",required:true},{key:"city",label:"Ciudad"},{key:"stateRegion",label:"Estado / región"},{key:"country",label:"País"},{key:"address",label:"Dirección"},{key:"latitude",label:"Latitud",type:"number",min:-90,max:90},{key:"longitude",label:"Longitud",type:"number",min:-180,max:180},{key:"holeCount",label:"Hoyos",type:"select",options:["9","18"],required:true},{key:"active",label:"Activo",type:"checkbox"}];
 export function safeFields(input: Record<string, unknown>, fields: readonly AdminField[]) {
   const result: Record<string, unknown> = {};
