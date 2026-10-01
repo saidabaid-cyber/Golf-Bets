@@ -15,7 +15,8 @@ import {
   playerVisibleTeeRating,
 } from "./golf-course-directory";
 import { haversineDistanceKm } from "./course-distance";
-import { invalidateReviewedCourseCatalogCache, loadReviewedCourseCatalog, reviewCatalogQaEnabled } from "./review-course-catalog.server";
+import { invalidateReviewedCourseCatalogCache, loadReviewedCourseCatalog } from "./review-course-catalog.server";
+import { reviewedCourseDatabaseEnabled } from "./preview-database";
 import { reviewedTeeRatingIsAuthorized, type ReviewedCatalogCourse } from "./review-course-catalog";
 import { getSupabaseAdmin } from "./supabase/server";
 import { readPublishedCatalog } from "./admin-published-catalog.server";
@@ -174,8 +175,8 @@ function mergeCatalog(base: GolfCourseCatalog, overlays: readonly GolfCourseCata
 
 export async function getCourseCatalog(database: SupabaseClient | null = getSupabaseAdmin("cloud"), options: { requireQaReviewedCatalog?: boolean; forceFresh?: boolean } = {}) {
   let base = INTERNAL_GOLF_COURSE_CATALOG;
-  if (options.requireQaReviewedCatalog && !reviewCatalogQaEnabled()) throw Error("CATALOG_QA_ONLY");
-  if (reviewCatalogQaEnabled()) {
+  if (options.requireQaReviewedCatalog && !reviewedCourseDatabaseEnabled()) throw Error("CATALOG_QA_ONLY");
+  if (reviewedCourseDatabaseEnabled()) {
     if (!database && options.requireQaReviewedCatalog) throw Error("CATALOG_AUTH_REQUIRED");
     if (database) {
       try {

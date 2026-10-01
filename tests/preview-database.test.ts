@@ -1,12 +1,46 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isolatedPreviewDatabaseEnabled, previewDatabaseFeaturesAvailable } from "../lib/preview-database";
+import { isolatedPreviewDatabaseEnabled, previewDatabaseFeaturesAvailable, reviewedCourseDatabaseEnabled } from "../lib/preview-database";
 
 const preview = {
   PREVIEW_DB_REF: "bymeopxkxapfizeeqeyb",
   NEXT_PUBLIC_SUPABASE_URL: "https://bymeopxkxapfizeeqeyb.supabase.co",
   VERCEL_ENV: "preview",
 };
+
+const adminPreview = {
+  VERCEL: "1", VERCEL_ENV: "preview", NODE_ENV: "production",
+  VERCEL_GIT_COMMIT_REF: "feature/admin-mode-v2",
+  ADMIN_MODE_V2_ENABLED: "true",
+  ADMIN_MODE_ISOLATED_DB_REF: "gvzeymebltssgjkvksxt",
+  NEXT_PUBLIC_SUPABASE_URL: "https://gvzeymebltssgjkvksxt.supabase.co",
+};
+
+test("read-only courses accept Admin V2 isolation without enabling destructive QA", () => {
+  assert.equal(reviewedCourseDatabaseEnabled(adminPreview), true);
+  assert.equal(isolatedPreviewDatabaseEnabled(adminPreview), false);
+  assert.equal(reviewedCourseDatabaseEnabled(preview), true);
+  assert.equal(reviewedCourseDatabaseEnabled({}), false);
+});
+
+test("Admin V2 course reads reject DEV fallback, wrong branches and invalid bindings", () => {
+  for (const overrides of [
+    { ADMIN_MODE_V2_ENABLED: "false" },
+    { ADMIN_MODE_ISOLATED_DB_REF: undefined },
+    { VERCEL_ENV: "production" },
+    { VERCEL_GIT_COMMIT_REF: "main" },
+    { VERCEL_GIT_COMMIT_REF: "beta" },
+    { VERCEL_GIT_COMMIT_REF: "integration/backyard-current" },
+    { NEXT_PUBLIC_SUPABASE_URL: "https://gvzeymebltssgjkvksxt.supabase.co.attacker.test" },
+    { NEXT_PUBLIC_SUPABASE_URL: "http://gvzeymebltssgjkvksxt.supabase.co" },
+    { NEXT_PUBLIC_SUPABASE_URL: "https://gvzeymebltssgjkvksxt.supabase.co/path" },
+    { NEXT_PUBLIC_SUPABASE_URL: "https://user:secret@gvzeymebltssgjkvksxt.supabase.co" },
+    { NEXT_PUBLIC_SUPABASE_URL: "https://gvzeymebltssgjkvksxt.supabase.co?project=shared" },
+    { PREVIEW_DB_REF: preview.PREVIEW_DB_REF, NEXT_PUBLIC_SUPABASE_URL: preview.NEXT_PUBLIC_SUPABASE_URL },
+    { ADMIN_MODE_ISOLATED_DB_REF: "bymeopxkxapfizeeqeyb", NEXT_PUBLIC_SUPABASE_URL: preview.NEXT_PUBLIC_SUPABASE_URL },
+    { ADMIN_MODE_ISOLATED_DB_REF: "zhqmlpljloumldaczcfp", NEXT_PUBLIC_SUPABASE_URL: "https://zhqmlpljloumldaczcfp.supabase.co" },
+  ]) assert.equal(reviewedCourseDatabaseEnabled({ ...adminPreview, ...overrides }), false, JSON.stringify(overrides));
+});
 
 test("isolated Preview requires an explicit matching project binding", () => {
   assert.equal(isolatedPreviewDatabaseEnabled(preview), true);
