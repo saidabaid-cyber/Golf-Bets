@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useBackyardAccount } from "./account-provider";
 import { BackyardWordmark } from "./primary-header";
 import { AdminModeMenu } from "./admin-mode-menu";
+import type {AdminRequestSeed} from "../../lib/admin-request-operations";
 import type { SimpleAdminModule } from "../../lib/admin-mode";
 const Administrators = dynamic(() => import("./admin-administrators").then(m => m.AdminAdministrators));
 const Catalog = dynamic(() => import("./admin-visual-catalog").then(m=>m.AdminVisualCatalog));
@@ -22,7 +23,7 @@ const ADVANCED: SimpleAdminModule[] = ["content", "administrators", "audit", "ad
 export function AdminSimpleHome() {
   const { identity, adminAccess } = useBackyardAccount(); const token = identity.accessToken || "";
   const [modules, setModules] = useState<SimpleAdminModule[]>([]); const [error, setError] = useState(""); const [selected, setSelected] = useState<SimpleAdminModule | null>(null);
-  const [requestTitle,setRequestTitle]=useState("");
+  const [requestSeed,setRequestSeed]=useState<AdminRequestSeed|null>(null);
   const [ballSection,setBallSection]=useState("catalog");
   useEffect(() => {
     if (!token) return; const controller = new AbortController();
@@ -38,13 +39,13 @@ export function AdminSimpleHome() {
     {selected === "administrators" && <Administrators token={token} />}
     {selected === "users" && <Administrators token={token} readOnly />}
     {selected==="balls"&&<div className="adminV2Tabs"><button className={ballSection==="catalog"?"primary":"secondary"} onClick={()=>setBallSection("catalog")}>Bolas · catálogo</button><button className={ballSection==="fit"?"primary":"secondary"} onClick={()=>setBallSection("fit")}>Ball Fit</button></div>}
-    {(selected === "courses"||selected==="equipment"||selected==="balls"&&ballSection==="catalog"||selected==="competitions") && <Catalog key={selected} token={token} module={selected} />}
+    {(selected === "courses"||selected==="equipment"||selected==="balls"&&ballSection==="catalog"||selected==="competitions") && <Catalog key={selected} token={token} module={selected} requestSeed={requestSeed} onRequestConsumed={()=>setRequestSeed(null)} />}
     {selected==="balls"&&ballSection==="fit"&&<><p className="notice">Administra el contenido seguro de Ball Fit. Los algoritmos y fórmulas permanecen en desarrollo / administración avanzada.</p>{modules.includes("content")?<Presentation token={token} module="content" onlyKey="coach_ball_fit"/>:<p>Tu permiso permite administrar el catálogo. La configuración de contenido requiere permisos adicionales.</p>}</>}
     {selected==="bets"&&<><BetVariants token={token}/><details><summary>Presentación de motores existentes</summary><Presentation token={token} module="bets"/></details></>}
     {selected==="content"&&<Presentation token={token} module="content"/>}
-    {selected==="requests"&&<Requests token={token} onCreate={(module,title)=>{if(modules.includes(module)){setRequestTitle(title);setSelected(module);}}}/>}
+    {selected==="requests"&&<Requests token={token} onCreate={(module,request)=>{if(modules.includes(module)){setRequestSeed(request);setSelected(module);}}}/>}
     {selected==="audit"&&<Audit token={token}/>}
-    {requestTitle&&selected!=="requests"&&<p className="notice">Alta solicitada: {requestTitle}. Revisa los datos y agrega la información verificada antes de guardar.</p>}
+
     
     {selected && <button type="button" className="textButton" onClick={() => setSelected(null)}>← Volver a administración</button>}
   </main>;

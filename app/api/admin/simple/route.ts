@@ -104,7 +104,9 @@ export async function POST(request: NextRequest) {
       if(body.copyFromId&&!copy)return json({error:"No puedes duplicar este registro."},403);
       const payload=buildEquipmentPayload(existing?.values||{...copy?.values,id},body.values as Record<string,unknown>,kind);const issues=equipmentPayloadIssues(payload,kind,id);if(issues.length)throw new Error(issues.join(" "));
       const result=await access.client.rpc("admin_create_revision_v1",{target_entity_type:kind,target_entity_id:id,target_scope_type:"CATALOG",target_scope_id:"equipment",target_payload:{...payload,dataEnvironment:"PRODUCTION"},target_source_type:payload.sourceType,target_source_name:payload.sourceName,target_source_url:payload.sourceUrl,target_provenance_status:payload.verifiedAt?"VERIFIED":"REPORTED",target_verified_at:payload.verifiedAt,target_confidence:null,target_notes:null});
-      if(result.error)throw new Error("No se guardó el borrador de equipo.");return json({item:result.data},201);
+      if(result.error)throw new Error("No se guardó el borrador de equipo.");
+      if(body.requestId){const link=await access.client.rpc("admin_link_request_revision_v3",{feedback_id:body.requestId,revision_key:result.data.id});if(link.error)return json({error:"El borrador se guardó, pero no se vinculó. Revisa la solicitud y vuelve a intentarlo."},409);}
+      return json({item:result.data},201);
     }
     if (body.operation==="draft" && section==="courses") {
       if (!body.values || typeof body.values!=="object" || Array.isArray(body.values)) throw new Error("Revisa el formulario.");
@@ -119,6 +121,7 @@ export async function POST(request: NextRequest) {
       if (!sourceName || sourceName.length>240 || sourceUrl && !/^https:\/\//.test(sourceUrl) || verifiedAt && !Number.isFinite(Date.parse(verifiedAt))) throw new Error("Revisa la fuente y la fecha de verificación.");
       const result=await access.client.rpc("admin_create_revision_v1",{target_entity_type:"COURSE",target_entity_id:id,target_scope_type:"COURSE",target_scope_id:id,target_payload:{...payload,sourceName,sourceUrl,verifiedAt,dataEnvironment:"PRODUCTION"},target_source_type:"ADMIN_RESEARCH",target_source_name:sourceName,target_source_url:sourceUrl,target_provenance_status:verifiedAt?"VERIFIED":"REPORTED",target_verified_at:verifiedAt,target_confidence:null,target_notes:null});
       if (result.error) throw new Error("No se guardó el borrador. Comprueba la disponibilidad del sistema.");
+      if(body.requestId){const link=await access.client.rpc("admin_link_request_revision_v3",{feedback_id:body.requestId,revision_key:result.data.id});if(link.error)return json({error:"El borrador se guardó, pero no se vinculó. Revisa la solicitud."},409);}
       return json({item:result.data,changes:humanChanges(base,payload)},201);
     }
     if (["preview","publish","archive"].includes(String(body.operation))) {
