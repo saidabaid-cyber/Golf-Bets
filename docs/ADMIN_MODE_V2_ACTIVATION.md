@@ -1,5 +1,57 @@
 # Activación controlada de Admin Mode V2
 
+## Activación QA ejecutada el 1 de octubre de 2026
+
+El proyecto independiente `gvzeymebltssgjkvksxt` está activo en `us-east-1`, dentro
+de `saidabaid-cyber's Org` (`wrogzsycxchwakaglbpm`). Tiene las 79 migraciones
+equivalentes del repositorio, incluidas las cinco de Admin V2, más
+`20261001141820_admin_mode_v2_isolated_qa_requests.sql`: 80 entradas remotas.
+Las tres sustituciones aprobadas están versionadas en `supabase/qa-install-only`;
+no se ejecutaron sus reconciliaciones, backfills ni limpiezas omitidas.
+
+Las 134 tablas públicas tienen RLS. Account lifecycle mantiene cero estados y
+cero jobs; sus funciones destructivas no son ejecutables por anon/authenticated.
+La habilitación de solicitudes QA sólo está activada en esta DB independiente,
+con auditoría y configuración de operador. TEST/SYNTHETIC siguen excluidos.
+
+El propietario verificado `contacto@thebackyard.com.mx` tiene SUPER_ADMIN real
+mediante bootstrap de operador único y auditado. `saidabaid@gmail.com` tiene ADMIN
+persistido: se verificaron asignación, revocación inmediata y restauración con la
+misma sesión. Son nuevas cuentas Auth en QA, provisionadas con credenciales
+nuevas y mínimos datos de identidad verificados por lectura. No se copiaron
+credenciales, sesiones ni preferencias/consentimientos de DEV. La autorización
+depende exclusivamente de membresías persistidas por UUID.
+
+Preview para revisión: https://golf-bets-git-feature-admin-mode-v2-saha8.vercel.app/manage
+
+Auth/nube están habilitados sólo en esa branch. Login por contraseña de las tres
+identidades QA pasó; el flujo visual de código de Said verificó un OTP real de
+Auth QA. El proveedor aceptó solicitudes de envío de código para Said y el
+propietario; la recepción en sus buzones requiere comprobación humana. Las URLs
+de Auth QA incluyen el origen estable de esta branch, sin redirects comodín.
+
+Campos, equipment, bolas, presentación de apuestas, contenido seguro de Ball Fit,
+competiciones y solicitudes pasaron writes reales, publicación cuando aplica,
+lectura desde otra sesión y auditoría. PLAYER recibió 403; ADMIN no accede a
+roles, auditoría ni Advanced Admin. Una sesión PLAYER con `user_metadata.role`
+manipulado y JWT actualizado también recibió 403. El estado obsoleto de una
+solicitud fue rechazado con 409. No se enviaron notificaciones de soporte.
+
+La prueba visual completa sigue pendiente de aceptación humana de los términos
+requeridos en el onboarding de Said. No se fabricó aceptación legal ni se saltó
+el gate. El acceso/onboarding a 390 × 844 no tuvo overflow; la revisión completa
+de módulos y Safari físico siguen pendientes. Usuarios y auditoría son lecturas
+por diseño; motores, fórmulas e importaciones conservan sus límites avanzados.
+
+Verificación local: 4013 unit/integration tests, 4009 PASS y los cuatro
+BASELINE_EXISTING_FAILURE ya documentados; 117/117 tests de scripts; lint,
+typecheck y build PASS. No se reinstalaron dependencias. Las 146 variables
+protegidas de Vercel conservan exactamente sus hashes. DEV sigue en su deployment
+y SHA congelados; no se hizo merge, promoción ni reasignación manual de alias.
+
+El runbook histórico siguiente describe el procedimiento original. Sus estados
+pendientes de bootstrap/roles quedaron resueltos por la activación descrita arriba.
+
 El código de `feature/admin-mode-v2` exige una DB independiente. No aplicar estas migraciones en `bymeopxkxapfizeeqeyb` (DEV congelado) ni en `zhqmlpljloumldaczcfp` (proyecto padre compartido).
 
 ## Orden de activación
