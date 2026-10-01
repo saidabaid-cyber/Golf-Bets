@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminMode } from "../../../../lib/admin-mode.server";
 import { SIMPLE_ADMIN_MODULES, type SimpleAdminModule } from "../../../../lib/admin-mode";
 import { simpleCourses, simpleEquipment } from "../../../../lib/admin-simple-catalog.server";
-import { buildCoursePayload, buildEquipmentPayload, humanChanges } from "../../../../lib/admin-simple-catalog";
-import { coursePayloadIssues, equipmentPayloadIssues } from "../../../../lib/admin-payload-validation";
+import { buildCoursePayload, buildEquipmentPayload, buildCompetitionPayload, humanChanges } from "../../../../lib/admin-simple-catalog";
+import { coursePayloadIssues, equipmentPayloadIssues, competitionPayloadIssues } from "../../../../lib/admin-payload-validation";
+import { getCourseCatalog } from "../../../../lib/course-catalog-provider.server";
 import { membershipAllows, type AdminEntityType } from "../../../../lib/admin-control-center";
 import { isOperationalAdminData } from "../../../../lib/admin-data-environment";
 export const dynamic = "force-dynamic";
@@ -14,6 +15,11 @@ export async function GET(request: NextRequest) {
   const access = await requireAdminMode(request, module as SimpleAdminModule | undefined);
   if (!access.ok) return json({ error: access.error, code: access.code }, access.status);
   if (!module) return json({ role: access.role, modules: access.modules });
+  if(module==="competitions"){
+    const result=await access.client.from("admin_catalog_revisions").select("id,entity_id,status,payload,version").eq("entity_type","COMPETITION").in("status",["DRAFT","REVIEWED","VERIFIED","PUBLISHED"]).order("version",{ascending:false}).limit(1000);if(result.error)return json({error:"No pudimos cargar las competiciones."},503);
+    const seen=new Set<string>();const q=(request.nextUrl.searchParams.get("q")||"").toLowerCase();const items=(result.data||[]).filter(isOperationalAdminData).filter(r=>r.status==="PUBLISHED").flatMap(r=>{if(seen.has(r.entity_id))return [];seen.add(r.entity_id);const p=r.payload;return [{id:r.entity_id,title:p.name,subtitle:`${p.type} · Publicado`,active:true,kind:"COMPETITION",values:{...p,ruleBody:(p.rules||[]).find((rule:Record<string,unknown>)=>rule.title==="Información del evento")?.body||""},version:r.version}];});
+    return json({items:items.filter(i=>String(i.title).toLowerCase().includes(q)),drafts:(result.data||[]).filter(r=>r.status!=="PUBLISHED"),courses:(await getCourseCatalog(access.client)).courses.filter(c=>c.active&&isOperationalAdminData(c)).map(c=>({id:c.id,title:c.name}))});
+  }
   if(module==="equipment"||module==="balls"){
     const items=await simpleEquipment(access.memberships,module==="balls");const q=(request.nextUrl.searchParams.get("q")||"").toLowerCase();
     const drafts=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload").in("entity_type",module==="balls"?["BALL"]:["CLUB_EQUIPMENT","SHAFT"]).in("status",["DRAFT","REVIEWED","VERIFIED"]).order("created_at",{ascending:false}).limit(40);
@@ -39,6 +45,16 @@ export async function POST(request: NextRequest) {
   const access=await requireAdminMode(request,module as SimpleAdminModule);
   if (!access.ok) return json({error:access.error,code:access.code},access.status);
   try {
+    if(body.operation==="draft"&&module==="competitions"){
+      const values=body.values as Record<string,unknown>;if(!values||typeof values!=="object"||Array.isArray(values))throw new Error("Revisa la competición.");
+      const id=typeof body.id==="string"&&body.id?body.id:crypto.randomUUID();
+      const existing=body.id?await access.client.from("admin_catalog_revisions").select("payload").eq("entity_type","COMPETITION").eq("entity_id",id).eq("status","PUBLISHED").order("version",{ascending:false}).limit(1).maybeSingle():null;
+      if(body.id&&!existing?.data)return json({error:"Competición no disponible."},403);
+      const payload=buildCompetitionPayload(existing?.data?.payload||{id},values);const issues=competitionPayloadIssues(payload,id);if(issues.length)throw new Error(issues.join(" "));
+      if(!(await getCourseCatalog(access.client)).courses.some(c=>c.id===payload.courseId&&c.active&&isOperationalAdminData(c)))throw new Error("Selecciona un campo publicado.");
+      if(!values.sourceName)throw new Error("Indica la fuente de la información.");
+      const result=await access.client.rpc("admin_create_revision_v1",{target_entity_type:"COMPETITION",target_entity_id:id,target_scope_type:"COMPETITION",target_scope_id:id,target_payload:{...payload,dataEnvironment:"PRODUCTION"},target_source_type:"ADMIN_RESEARCH",target_source_name:values.sourceName,target_source_url:values.sourceUrl||null,target_provenance_status:values.verifiedAt?"VERIFIED":"REPORTED",target_verified_at:values.verifiedAt||null,target_confidence:null,target_notes:null});if(result.error)throw new Error("No se guardó la competición.");return json({item:result.data},201);
+    }
     if(body.operation==="draft"&&(module==="equipment"||module==="balls")){
       const kind=body.kind as AdminEntityType;if(!(module==="balls"?["BALL"]:["CLUB_EQUIPMENT","SHAFT"]).includes(kind)||!body.values||typeof body.values!=="object"||Array.isArray(body.values))throw new Error("Revisa el equipo seleccionado.");
       const id=typeof body.id==="string"&&body.id?body.id:`equipment-${crypto.randomUUID()}`;

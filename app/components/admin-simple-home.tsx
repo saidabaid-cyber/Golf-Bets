@@ -28,9 +28,9 @@ export function AdminSimpleHome() {
     {!selected && <div className="adminV2Grid">{modules.map(module => module === "advanced" ? <Link className="card adminV2Module" key={module} href="/admin"><h2>{LABELS[module][0]}</h2><p>{LABELS[module][1]}</p><span>Abrir →</span></Link> : <button className="card adminV2Module" key={module} onClick={() => setSelected(module)}><h2>{LABELS[module][0]}</h2><p>{LABELS[module][1]}</p><span>Administrar →</span></button>)}</div>}
     {selected === "administrators" && <Administrators token={token} />}
     {selected === "users" && <Administrators token={token} readOnly />}
-    {(selected === "courses"||selected==="equipment"||selected==="balls") && <Catalog key={selected} token={token} module={selected} />}
+    {(selected === "courses"||selected==="equipment"||selected==="balls"||selected==="competitions") && <Catalog key={selected} token={token} module={selected} />}
     {(selected==="bets"||selected==="content")&&<Presentation key={selected} token={token} module={selected}/>}
-    {selected && !["administrators", "users", "courses", "equipment", "balls", "bets", "content"].includes(selected) && <p className="notice">Cargando módulo…</p>}
+    {selected && !["administrators", "users", "courses", "equipment", "balls", "bets", "content", "competitions"].includes(selected) && <p className="notice">Cargando módulo…</p>}
     {selected && <button type="button" className="textButton" onClick={() => setSelected(null)}>← Volver a administración</button>}
   </main>;
 }
