@@ -56,14 +56,16 @@ test("actual Home and Más markup has no settings control; remaining profile/not
   assert.match(readFileSync("app/components/profile-account-panel.tsx", "utf8"), /<b>Configuración<\/b><small>Preferencias, cuenta, notificaciones, privacidad y permisos/);
 });
 
-test("actual bottom navigation retains Continuar Ronda only with the existing resume callback", () => {
-  const nav = load("app/components/app-bottom-nav.tsx", { react: { Fragment: "fragment" }, "../../lib/app-navigation": navigation });
+test("actual bottom navigation has five tabs and Play is always the central destination", () => {
+  const nav = load("app/components/app-bottom-nav.tsx", { "next/image": { __esModule: true, default: "img" }, "../../lib/app-navigation": navigation });
   let resumed = 0;
   const inactive = nodes(nav.AppBottomNav({ activeTab: "profile", onNavigate: () => {} })).filter((node) => node.type === "button");
-  assert.equal(inactive.length, 4); assert.ok(inactive.every((node) => !/CONTINUAR/.test(text(node))));
-  const active = nodes(nav.AppBottomNav({ activeTab: "profile", onNavigate: () => {}, onResumeRound: () => { resumed++; } })).filter((node) => node.type === "button");
-  assert.equal(active.length, 5); assert.match(text(active[2]), /CONTINUAR RONDA/);
-  (active[2].props.onClick as () => void)(); assert.equal(resumed, 1);
+  assert.equal(inactive.length, 5); assert.ok(inactive.every((node) => !/CONTINUAR/.test(text(node))));
+  const visited: string[] = [];
+  const active = nodes(nav.AppBottomNav({ activeTab: "play", onNavigate: (tab: string) => visited.push(tab), onResumeRound: () => { resumed++; } })).filter((node) => node.type === "button");
+  assert.deepEqual(active.map((node) => text(node).trim()), ["Inicio", "Carrera", "Play", "My Coach", "Reglas"]);
+  assert.equal(active[2].props["aria-current"], "page");
+  (active[2].props.onClick as () => void)(); assert.deepEqual(visited, ["play"]); assert.equal(resumed, 0);
 });
 
 function privacyHarness(initial: audience.PersistedProfileAudience = "private", failSave = false) {

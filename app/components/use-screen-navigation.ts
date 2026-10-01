@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AppTab } from "../../lib/app-navigation";
+import { screenFromSearch, screenHref, type AppTab } from "../../lib/app-navigation";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 
 type NavigationGuard = (next: AppTab) => AppTab;
@@ -15,15 +15,17 @@ export function useScreenNavigation() {
   useEffect(() => {
     const pop = () => {
       const requested = window.history.state?.backyardTab as AppTab | undefined;
-      if (!requested) return;
-      const target = guard.current(requested);
-      if (target !== requested) window.history.replaceState({ ...window.history.state, backyardTab: target }, "");
+      const target = guard.current(requested || screenFromSearch(window.location.search));
+      if (target !== requested) window.history.replaceState({ ...window.history.state, backyardTab: target }, "", screenHref(target, window.location.search));
       trail.current.pop();
       if (target === current.current) return;
       current.current = target;
       showTab(target);
     };
-    window.history.replaceState({ ...window.history.state, backyardTab: current.current }, "");
+    const initial = guard.current(screenFromSearch(window.location.search));
+    current.current = initial;
+    showTab(initial);
+    window.history.replaceState({ ...window.history.state, backyardTab: initial }, "", screenHref(initial, window.location.search));
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
   }, []);
@@ -31,7 +33,7 @@ export function useScreenNavigation() {
     const target = guard.current(next);
     if (target === current.current) return;
     trail.current.push({ tab: current.current, scroll: window.scrollY });
-    window.history.pushState({ ...window.history.state, backyardTab: target }, "");
+    window.history.pushState({ ...window.history.state, backyardTab: target }, "", screenHref(target, window.location.search));
     current.current = target;
     showTab(target);
   }, []);

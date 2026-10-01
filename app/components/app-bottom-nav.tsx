@@ -1,59 +1,34 @@
 "use client";
 
-import { Fragment, type ReactNode } from "react";
+import Image from "next/image";
+import { type ReactNode } from "react";
 import styles from "./app-bottom-nav.module.css";
-import {
-  BOTTOM_NAV_TARGETS,
-  primarySectionForTab,
-  type AppTab,
-  type PrimaryAppSection,
-} from "../../lib/app-navigation";
+import { BOTTOM_NAV_TARGETS, primarySectionForTab, type AppTab, type PrimaryAppSection } from "../../lib/app-navigation";
 
-export type AppBottomNavProps = {
-  activeTab: AppTab;
-  onNavigate: (tab: AppTab) => void;
-  onResumeRound?: () => void;
-};
-
+export type AppBottomNavProps = { activeTab: AppTab; onNavigate: (tab: AppTab) => void; onResumeRound?: () => void };
 const NAV_ITEMS = Object.entries(BOTTOM_NAV_TARGETS) as Array<[PrimaryAppSection, AppTab]>;
 
 function IconFrame({ children }: { children: ReactNode }) {
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{children}</svg>;
 }
 
-function NavIcon({ section }: { section: PrimaryAppSection }): ReactNode {
-  if (section === "Inicio") {
-    return <IconFrame><path d="m3.5 10.5 8.5-7 8.5 7v9a1 1 0 0 1-1 1h-5v-6h-5v6h-5a1 1 0 0 1-1-1z" /></IconFrame>;
-  }
-  if (section === "Social") {
-    return <IconFrame><path d="M4 5.5h16v11H9l-5 4z" /><path d="M8 10h8M8 13h5" /></IconFrame>;
-  }
-  if (section === "Más") {
-    return <IconFrame>{[6, 12, 18].flatMap((y) => [6, 12, 18].map((x) => <circle cx={x} cy={y} r="1.55" fill="currentColor" stroke="none" key={`${x}-${y}`} />))}</IconFrame>;
-  }
-  return <IconFrame><circle cx="12" cy="8" r="4" /><path d="M4.5 21c.5-5 3-7.5 7.5-7.5s7 2.5 7.5 7.5" /></IconFrame>;
+function NavIcon({ section }: { section: PrimaryAppSection }) {
+  if (section === "Inicio") return <IconFrame><path d="m3 11 9-8 9 8M5 10v11h5v-7h4v7h5V10" /></IconFrame>;
+  if (section === "Carrera") return <IconFrame><path d="M7 3h10v6a5 5 0 0 1-10 0zM7 5H3v3a4 4 0 0 0 4 4m10-7h4v3a4 4 0 0 1-4 4M12 14v6M8 21h8" /></IconFrame>;
+  if (section === "My Coach") return <IconFrame><path d="M5 20v-7M12 20V8M19 20V3" /></IconFrame>;
+  return <IconFrame><path d="M12 5c-3-2-7-2-10-1v16c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1zM12 5v16" /></IconFrame>;
 }
 
-export function AppBottomNav({ activeTab, onNavigate, onResumeRound }: AppBottomNavProps) {
+export function OfficialPlaySymbol({ className = "", priority = false }: { className?: string; priority?: boolean }) {
+  return <Image className={className} src="/brand/play-symbol-official.jpg" alt="Símbolo oficial de Play de The Backyard" width={869} height={1072} priority={priority} />;
+}
+
+export function AppBottomNav({ activeTab, onNavigate }: AppBottomNavProps) {
   const activeSection = primarySectionForTab(activeTab);
-  const isHome = activeTab === "welcome";
-
-  return <nav className={`bottomNav betaBottomNav ${isHome ? "homeBottomNav" : ""} ${onResumeRound ? styles.withRound : ""}`} aria-label="Navegación principal">
-    {NAV_ITEMS.map(([label, target]) => {
-      const active = activeSection === label;
-      return <Fragment key={label}><button
-        type="button"
-        className={active ? "active" : ""}
-        aria-current={active ? "page" : undefined}
-        aria-label={label}
-        onClick={() => onNavigate(target)}
-      >
-        <span className="betaNavIcon"><NavIcon section={label} /></span>
-        <span className="betaNavLabel">{label}</span>
-      </button>{label === "Social" && onResumeRound && <button type="button" className={styles.resume} onClick={onResumeRound} aria-label="Continuar la ronda activa">
-        <span className="betaNavIcon"><IconFrame><path d="M7 21V3m0 1c4-3 6 3 11 0v9c-5 3-7-3-11 0" /></IconFrame></span>
-        <span className={`betaNavLabel ${styles.resumeLabel}`}><span>CONTINUAR</span><span>RONDA</span></span>
-      </button>}</Fragment>;
-    })}
+  return <nav className={styles.nav} aria-label="Navegación principal">
+    {NAV_ITEMS.map(([label, target]) => <button key={label} type="button" className={[styles.item, label === "Play" ? styles.play : "", activeSection === label ? styles.active : ""].join(" ")} aria-current={activeSection === label ? "page" : undefined} aria-label={label} onClick={() => onNavigate(target)}>
+      {label === "Play" ? <span className={styles.playCircle}><OfficialPlaySymbol className={styles.playSymbol} priority /></span> : <span className={styles.icon}><NavIcon section={label} /></span>}
+      <span className={styles.label}>{label}</span>
+    </button>)}
   </nav>;
 }

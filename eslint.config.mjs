@@ -12,5 +12,5 @@ export default defineConfig([
       "react-hooks/set-state-in-effect": "off"
     }
   },
-  globalIgnores([".next/**", ".test-dist/**", ".vercel/**", "node_modules/**"]),
+  globalIgnores([".next/**", ".test-dist/**", ".vercel/**", "node_modules/**", "tmp/**", "backups/**", "restore-private/**", "rules-source/**", "rules-sources/**", "brand-source/**", ".qa-artifacts/**"]),
 ]);

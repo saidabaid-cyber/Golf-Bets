@@ -6,7 +6,7 @@ const source = readFileSync("app/components/home-dashboard.tsx", "utf8");
 const bottomNav = readFileSync("lib/app-navigation.ts", "utf8");
 const bottomNavComponent = readFileSync("app/components/app-bottom-nav.tsx", "utf8");
 const homeStyles = readFileSync("app/components/home-dashboard-clean.module.css", "utf8");
-const globalStyles = readFileSync("app/globals.css", "utf8");
+
 const moreHub = readFileSync("app/components/more-hub.tsx", "utf8");
 
 test("approved Home uses one ball action and offers manual or AI setup in a closable choice dialog", () => {
@@ -101,21 +101,15 @@ test("header keeps Profile and notifications, with settings only inside Perfil",
   assert.match(source, /ProfileAvatarMedia/);
 });
 
-test("bottom navigation is exactly Inicio, Social, Más and Perfil", () => {
+test("bottom navigation has five approved tabs with safe-area spacing", () => {
   const block = bottomNav.match(/export const BOTTOM_NAV_TARGETS = \{[\s\S]*?\} as const/)?.[0] || "";
-  for (const label of ["Inicio", "Social", "Más", "Perfil"]) assert.match(block, new RegExp(label));
-  for (const removed of ["Jugar", "Grupos"]) assert.doesNotMatch(block, new RegExp(removed));
-  assert.equal((block.match(/:\s*"/g) || []).length, 4);
+  for (const label of ["Inicio", "Carrera", "Play", "My Coach", "Reglas"]) assert.match(block, new RegExp(label));
+  for (const removed of ["Social", "Más", "Perfil"]) assert.doesNotMatch(block, new RegExp(removed));
+  assert.equal((block.match(/:\s*"/g) || []).length, 5);
   assert.match(bottomNavComponent, /aria-label=\{label\}/);
-  assert.match(bottomNavComponent, /betaNavLabel">\{label\}/);
-  assert.doesNotMatch(bottomNavComponent, /label === "Perfil" \? "Cuenta"/);
-  assert.match(globalStyles, /\.bottomNav\.homeBottomNav\{[^}]*bottom:0[^}]*left:0/);
-  assert.match(globalStyles, /\.bottomNav\.homeBottomNav\{[^}]*safe-area-inset-bottom/);
-  // Home must grow beyond the viewport when an active round adds its controls.
-  assert.match(homeStyles, /\.home \{[^}]*height: auto[^}]*min-height: 100dvh[^}]*grid-template-rows:/);
-  assert.match(homeStyles, /\.content \{[^}]*padding:[^}]*safe-area-inset-bottom/);
+  assert.match(readFileSync("app/components/app-bottom-nav.module.css", "utf8"), /safe-area-inset-bottom/);
+  assert.match(readFileSync("app/navigation-redesign.css", "utf8"), /padding:[^;]*safe-area-inset-bottom/);
 });
-
 test("Más is a real scalable tool container", () => {
   for (const label of ["Campos", "Mi Bolsa", "Handicap / GHIN", "Fitting", "GPS / Hole Map"]) assert.match(moreHub, new RegExp(label.replace("/", "\\/")));
   assert.match(moreHub, /consulta GHIN read-only cuando está autorizada/);

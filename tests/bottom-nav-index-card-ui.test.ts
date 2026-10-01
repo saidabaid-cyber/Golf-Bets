@@ -7,17 +7,13 @@ const navStyles = readFileSync("app/components/app-bottom-nav.module.css", "utf8
 const card = readFileSync("app/components/backyard-index-card.tsx", "utf8");
 const cardStyles = readFileSync("app/components/backyard-index-card.module.css", "utf8");
 
-test("round-resume navigation keeps its conditional route and uses an accessible two-line label", () => {
-  assert.match(nav, /label === "Social" && onResumeRound && <button/);
-  assert.match(nav, /onClick=\{onResumeRound\} aria-label="Continuar la ronda activa"/);
-  assert.match(nav, /<span className=\{`betaNavLabel \$\{styles\.resumeLabel\}`\}><span>CONTINUAR<\/span><span>RONDA<\/span><\/span>/);
-  assert.doesNotMatch(nav, /betaNavLabel">JUGAR<\/span>/);
-  assert.match(navStyles, /grid-template-columns: repeat\(5, minmax\(0, 1fr\)\)/);
-  assert.match(navStyles, /\.resume \{[^}]*min-height: 52px/);
-  assert.match(navStyles, /\.resume svg \{ width: 24px; height: 24px;/);
-  assert.match(navStyles, /\.resume \.resumeLabel \{ display: grid;/);
+test("central Play uses the official asset and safe-area navigation", () => {
+  assert.match(nav, /src="\/brand\/play-symbol-official\.jpg"/);
+  assert.match(nav, /<OfficialPlaySymbol/);
+  assert.match(navStyles, /grid-template-columns:\s*repeat\(5,\s*minmax\(0,\s*1fr\)\)/);
+  assert.match(navStyles, /safe-area-inset-bottom/);
+  assert.match(navStyles, /margin-top:\s*-27px/);
 });
-
 test("Backyard Index card shows actual eligible-record and differential counts without estimating missing rounds", () => {
   assert.match(card, /summary\?\.value === null \? "—"/);
   assert.match(card, /Se necesitan 3 rondas elegibles para empezar\./);

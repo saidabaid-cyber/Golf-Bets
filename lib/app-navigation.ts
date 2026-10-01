@@ -1,10 +1,11 @@
-export type AppTab = "welcome" | "more" | "play" | "totalScore" | "aiSetup" | "setup" | "round" | "scorecardScan" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "balances" | "stats" | "courseLibrary" | "courses" | "rules" | "pollaLive" | "account" | "profile" | "groups" | "social";
+export type AppTab = "welcome" | "career" | "coach" | "play" | "totalScore" | "aiSetup" | "setup" | "round" | "scorecardScan" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "balances" | "stats" | "courseLibrary" | "courses" | "rules" | "pollaLive" | "account" | "profile" | "groups" | "social";
 
 export const BOTTOM_NAV_TARGETS = {
   Inicio: "welcome",
-  Social: "social",
-  Más: "more",
-  Perfil: "profile",
+  Carrera: "career",
+  Play: "play",
+  "My Coach": "coach",
+  Reglas: "rules",
 } as const satisfies Record<string, AppTab>;
 
 export type PrimaryAppSection = keyof typeof BOTTOM_NAV_TARGETS;
@@ -12,15 +13,34 @@ export type ActiveRoundStatus = "setup" | "live" | "review";
 
 const PLAY_TABS = new Set<AppTab>([
   "play", "aiSetup", "setup", "round", "scorecardScan", "standings", "personals", "personalDetail",
-  "historyDetail", "results", "history", "balances", "courseLibrary", "courses", "rules", "pollaLive",
+  "results", "balances", "courseLibrary", "courses", "pollaLive", "groups", "totalScore",
 ]);
 
 export function primarySectionForTab(tab: AppTab): PrimaryAppSection {
-  if (tab === "social" || tab === "groups") return "Social";
-  if (tab === "more" || tab === "courseLibrary" || tab === "courses") return "Más";
-  if (tab === "profile" || tab === "account" || tab === "stats") return "Perfil";
-  if (PLAY_TABS.has(tab)) return "Inicio";
+  if (tab === "career" || tab === "stats" || tab === "history" || tab === "historyDetail" || tab === "personals") return "Carrera";
+  if (tab === "coach") return "My Coach";
+  if (tab === "rules") return "Reglas";
+  if (PLAY_TABS.has(tab)) return "Play";
   return "Inicio";
+}
+
+export function isPrimaryTab(tab: AppTab) {
+  return Object.values(BOTTOM_NAV_TARGETS).some((target) => target === tab);
+}
+
+const SCREEN_TABS = new Set<string>([...Object.values(BOTTOM_NAV_TARGETS), ...PLAY_TABS, "stats", "history", "historyDetail", "personals", "profile", "account", "social"]);
+
+/** One URL per view, retaining the existing app instance and round state. */
+export function screenHref(tab: AppTab, search = "") {
+  const params = new URLSearchParams(search);
+  params.delete("screen");
+  if (tab !== "welcome") params.set("screen", tab);
+  return `/${params.size ? `?${params.toString()}` : ""}`;
+}
+
+export function screenFromSearch(search: string): AppTab {
+  const screen = new URLSearchParams(search).get("screen");
+  return screen && SCREEN_TABS.has(screen) ? screen as AppTab : "welcome";
 }
 
 export function resolveActiveRoundStatus(input: { reviewPending: boolean; courseSelected: boolean; playerCount: number; scoreStarted: boolean }): ActiveRoundStatus {

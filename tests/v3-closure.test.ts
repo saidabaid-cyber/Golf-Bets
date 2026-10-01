@@ -13,9 +13,10 @@ import type { Course } from "../lib/types";
 test("bottom navigation maps Inicio to the real Home and every tab to its section", () => {
   assert.deepEqual(BOTTOM_NAV_TARGETS, {
     Inicio: "welcome",
-    Social: "social",
-    Más: "more",
-    Perfil: "profile",
+    Carrera: "career",
+    Play: "play",
+    "My Coach": "coach",
+    Reglas: "rules",
   });
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /function navigateFromBottomBar\(target: AppTab\) \{\s+setFeedback\(""\);/);

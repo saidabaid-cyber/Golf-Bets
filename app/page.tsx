@@ -1,6 +1,7 @@
 "use client";
 import "./functional-ux.css";
 import "./profile-account.css";
+import "./navigation-redesign.css";
 import { initialBets, restoreBetConfig } from "../lib/new-round-bets";
 import { collectBetConfigurationIssues } from "../lib/bet-config-validation";
 import { groupTemplateConfigurationIssues } from "../lib/group-template-editor";
@@ -55,7 +56,7 @@ import {
   PuttsByHole,
   UnitEvent,
 } from "../lib/types";
-import { activeBetSafeDestination, activeRoundContinueTarget, contrastToggleLabel, resolveActiveRoundStatus, rulesContextForRound, type AppTab } from "../lib/app-navigation";
+import { activeBetSafeDestination, activeRoundContinueTarget, contrastToggleLabel, isPrimaryTab, resolveActiveRoundStatus, rulesContextForRound, type AppTab } from "../lib/app-navigation";
 import {
   calculateBallFriend,
   calculateFoursomes,
@@ -101,7 +102,7 @@ import { CourseOperationsNotice } from "./components/course-operations-notice";
 import { RoundTeePicker } from "./components/round-tee-picker";
 import { StartHoleSelector } from "./components/start-hole-selector";
 import { beginRoundCourseSelection, changeRoundCourseSelection, completeRoundTeeSelection, preferredTeeForCourse, usableRoundCourseCards } from "../lib/round-course-selection";
-import { BrandLockup } from "./components/brand-lockup";
+import { BackyardWordmark, PrimaryHeader } from "./components/primary-header";
 import { ModalCloseButton } from "./components/modal-shell";
 import { GroupBuilder } from "./components/group-builder";
 import { GroupBetTemplateEditor } from "./components/group-bet-template-editor";
@@ -120,7 +121,6 @@ import { ProfileCompletionRing } from './components/profile-completion-ring';
 import { ModalShell } from './components/modal-shell';
 import { roundBetResult } from '../lib/round-betting-boundary';
 import { PlayHub } from "./components/play-hub";
-import { MoreHub } from "./components/more-hub";
 import type { AiRoundSetupTelemetry } from "./components/backyard-ai/ai-round-setup";
 import { RoundFinalResult } from "./components/backyard-ai/round-final-result";
 import { SocialFeed, type SocialView } from "./components/social-feed";
@@ -3712,7 +3712,7 @@ function GolfBetsApp() {
     }
     goBack();
   };
-  const showPageBack = !(["welcome", "more", "play", "groups", "social", "profile", "account", "round"] as AppTab[]).includes(tab) && tab !== "rules";
+  const showPageBack = !isPrimaryTab(tab) && !(["groups", "social", "account", "round"] as AppTab[]).includes(tab);
   const availableHistoryYears = useMemo(() => historyYears(history), [history]);
   const filteredHistory = useMemo(() => filterHistory(history, historyYear, historyMonth), [history, historyYear, historyMonth]);
   const personalModesActive = personalBets.some((bet) => bet.enabled !== false)
@@ -3741,10 +3741,11 @@ function GolfBetsApp() {
     { id: "expenses", label: "Gastos", visible: true },
   ].filter((item) => item.visible);
 
-  return <main className={`app ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""} ${tab === "welcome" ? "homeApp" : ""}`}>
+  return <main className={`app backyardApp ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
     <FeedbackDialog key={`feedback:${identity.userId}`} token={identity.accessToken} email={identity.email} screen={tab} />
-    {tab !== "rules" && tab !== "welcome" && tab !== "round" && <header className="topbar">
-      <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BrandLockup compact /></button>
+    {isPrimaryTab(tab) && <PrimaryHeader tab={tab} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => setTab("welcome")} onNotifications={() => { setSocialInitialView("notifications"); setTab("social"); }} />}
+    {!isPrimaryTab(tab) && tab !== "round" && <header className="topbar">
+      <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BackyardWordmark /></button>
       <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><ProfileNavigationButton avatarUrl={identity.avatarUrl} displayName={identity.displayName} onClick={openProfileRoot} /></div>
     </header>}
 
@@ -3773,19 +3774,8 @@ function GolfBetsApp() {
 
     {showPageBack && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
-    {tab === "more" && <MoreHub
-      adminAccess={adminAccess}
-      hasActiveRound={Boolean(activeRoundSummary)}
-      onOpenCourses={() => setTab("courseLibrary")}
-      onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }}
-      onOpenHandicap={() => { setProfileFocus("profile"); setTab("profile"); }}
-      onOpenFitting={() => { setProfileFocus("equipment"); setTab("profile"); }}
-      onOpenGps={() => activeRoundSummary ? continueActiveRound() : setTab("courseLibrary")}
-      onOpenRules={openRulesForRound}
-      onOpenHelp={() => requestFeedback()}
-      onOpenSocial={view => { setSocialInitialView(view); setTab("social"); }}
-      onOpenPrivacy={() => openAccountSettings("privacy")}
-    />}
+    {tab === "career" && <section className="navigationEmpty"><h2>Tu historia como jugador</h2><p>Progreso, estadísticas y rondas guardadas.</p><button type="button" className="secondary" onClick={() => setTab("stats")}>Estadísticas</button><button type="button" className="textButton" onClick={() => setTab("history")}>Historial</button></section>}
+    {tab === "coach" && <section className="navigationEmpty"><h2>Mejora cada día</h2><p>Tu práctica y fitting, con los módulos de The Backyard.</p><button type="button" className="secondary" onClick={() => { setProfileCompletionTarget("fitting"); setProfileFocus("equipment"); setTab("profile"); }}>Ball Fit</button></section>}
 
     {tab === "play" && <PlayHub
       activeRound={activeRoundSummary}

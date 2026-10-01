@@ -42,30 +42,32 @@ function round(overrides: Partial<RoundSnapshot> = {}): RoundSnapshot {
   };
 }
 
-test("the approved primary mobile navigation has four stable product areas", () => {
+test("the approved primary mobile navigation has five stable product areas", () => {
   assert.deepEqual(BOTTOM_NAV_TARGETS, {
     Inicio: "welcome",
-    Social: "social",
-    Más: "more",
-    Perfil: "profile",
+    Carrera: "career",
+    Play: "play",
+    "My Coach": "coach",
+    Reglas: "rules",
   });
 
   const expectations: Array<[AppTab, ReturnType<typeof primarySectionForTab>]> = [
     ["welcome", "Inicio"],
-    ["play", "Inicio"],
-    ["setup", "Inicio"],
-    ["round", "Inicio"],
-    ["results", "Inicio"],
-    ["history", "Inicio"],
-    ["balances", "Inicio"],
-    ["courseLibrary", "Más"],
-    ["rules", "Inicio"],
-    ["groups", "Social"],
-    ["social", "Social"],
-    ["more", "Más"],
-    ["profile", "Perfil"],
-    ["account", "Perfil"],
-    ["stats", "Perfil"],
+    ["play", "Play"],
+    ["setup", "Play"],
+    ["round", "Play"],
+    ["results", "Play"],
+    ["history", "Carrera"],
+    ["balances", "Play"],
+    ["courseLibrary", "Play"],
+    ["rules", "Reglas"],
+    ["groups", "Play"],
+    ["social", "Inicio"],
+    ["career", "Carrera"],
+    ["coach", "My Coach"],
+    ["profile", "Inicio"],
+    ["account", "Inicio"],
+    ["stats", "Carrera"],
   ];
   for (const [tab, section] of expectations) assert.equal(primarySectionForTab(tab), section);
 });
@@ -86,7 +88,7 @@ test("an invalid active bet draft can only be opened in setup, without blocking 
     assert.equal(activeBetSafeDestination(tab, true), "setup");
     assert.equal(activeBetSafeDestination(tab, false), tab);
   }
-  for (const tab of ["welcome", "more", "play", "personals", "history", "historyDetail", "balances", "stats", "groups", "social", "profile"] as AppTab[]) {
+  for (const tab of ["welcome", "career", "coach", "play", "personals", "history", "historyDetail", "balances", "stats", "groups", "social", "profile"] as AppTab[]) {
     assert.equal(activeBetSafeDestination(tab, true), tab);
   }
 });
