@@ -11,12 +11,16 @@ export function EmailLinkConfirmation(){
   const [state,setState]=useState<'loading'|'ready'|'busy'|'error'>('loading');
   const [error,setError]=useState('');
   useEffect(()=>{
-    if(initialized.current)return;
-    initialized.current=true;
-    token.current=emailLinkHash(window.location.hash);
-    window.history.replaceState(window.history.state,'',window.location.pathname);
-    if(token.current)setState('ready');
-    else{setError('Abre el enlace más reciente que recibiste por correo.');setState('error');}
+    function readLink(){
+      if(inFlight.current)return;
+      token.current=emailLinkHash(window.location.hash);
+      window.history.replaceState(window.history.state,'',window.location.pathname);
+      if(token.current){setError('');setState('ready');}
+      else{setError('Abre el enlace más reciente que recibiste por correo.');setState('error');}
+    }
+    if(!initialized.current){initialized.current=true;readLink();}
+    window.addEventListener('hashchange',readLink);
+    return()=>window.removeEventListener('hashchange',readLink);
   },[]);
   async function signIn(){
     if(inFlight.current||!token.current)return;
