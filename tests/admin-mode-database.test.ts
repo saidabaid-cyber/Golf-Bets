@@ -1,0 +1,59 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { PGlite } from "@electric-sql/pglite";
+
+const superId = "10000000-0000-4000-8000-000000000001", adminId = "10000000-0000-4000-8000-000000000002", playerId = "10000000-0000-4000-8000-000000000003";
+const migration = (name: string) => fs.readFileSync(`supabase/migrations/${name}`, "utf8");
+async function database() {
+  const db = new PGlite();
+  await db.exec(`create role anon; create role authenticated; create role service_role; create schema auth; create schema private;
+    create table auth.users(id uuid primary key,email text,is_anonymous boolean default false,banned_until timestamptz);
+    create function auth.uid() returns uuid language sql as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+    grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated;
+    create table public.profiles(id uuid primary key,name text,display_name text,username text);
+    create function private.account_data_access_allowed() returns boolean language sql as $$select auth.uid() is not null$$;
+    create function private.account_subject_active(id uuid) returns boolean language sql as $$select exists(select 1 from auth.users where users.id=$1)$$;
+    create table public.admin_audit_log(id bigint generated always as identity primary key,actor_id uuid,actor_role text,action text,entity_type text,entity_id text,before_state jsonb,after_state jsonb,reason text,request_id uuid,created_at timestamptz default now());`);
+  await db.exec(migration("20260922132057_admin_control_center_v1.sql").split("create table public.admin_catalog_revisions")[0] + "commit;");
+  await db.exec(migration("20260922132140_admin_publication_workflows_v1.sql").split("create or replace function private.guard_admin_revision_v1")[0] + "commit;");
+  await db.exec(migration("20261001060612_admin_mode_v2_roles.sql"));
+  await db.exec(migration("20261001061219_admin_mode_v2_administrators.sql"));
+  await db.query("insert into auth.users(id,email) values($1,'owner@backyard.test'),($2,'admin@backyard.test'),($3,'player@backyard.test')", [superId, adminId, playerId]);
+  await db.query("insert into admin_memberships(user_id,role,scope_type) values($1,'SUPER_ADMIN','GLOBAL'),($2,'ADMIN','GLOBAL')", [superId, adminId]);
+  return db;
+}
+async function act(db: PGlite, id: string) { await db.query("select set_config('request.jwt.claim.sub',$1,false)", [id]); await db.exec("set role authenticated"); }
+test("real Postgres role permissions deny direct writes, PLAYER, ADMIN escalation and protected SUPER_ADMIN", async () => {
+  const db = await database();
+  try {
+    await act(db, playerId);
+    await assert.rejects(db.query("select * from admin_user_directory_v2()"), /ADMIN_REQUIRED/);
+    await assert.rejects(db.query("insert into admin_memberships(user_id,role,scope_type) values($1,'SUPER_ADMIN','GLOBAL')", [playerId]), /permission denied/);
+    await act(db, adminId);
+    await assert.rejects(db.query("select admin_change_role_v2($1,'PLAYER','ADMIN','Test',gen_random_uuid())", [playerId]), /SUPER_ADMIN_REQUIRED/);
+    const directory = await db.query<{ email: string | null }>("select * from admin_user_directory_v2()");
+    assert.ok(directory.rows.every(row => row.email === null));
+    await act(db, superId);
+    await assert.rejects(db.query("select admin_change_role_v2($1,'ADMIN','PLAYER','Test',gen_random_uuid())", [superId]), /SUPER_ADMIN_PROTECTED/);
+  } finally { await db.close(); }
+});
+test("real Postgres role changes persist for another session, audit once and reject stale/reused payloads", async () => {
+  const db = await database(); const operation = "20000000-0000-4000-8000-000000000001";
+  try {
+    await act(db, superId);
+    const args = [playerId, operation];
+    await db.query("select admin_change_role_v2($1,'PLAYER','ADMIN','Asignación revisada',$2)", args);
+    await db.query("select admin_change_role_v2($1,'PLAYER','ADMIN','Asignación revisada',$2)", args);
+    await assert.rejects(db.query("select admin_change_role_v2($1,'PLAYER','PLAYER','Payload distinto',$2)", args), /OPERATION_REUSED/);
+    await assert.rejects(db.query("select admin_change_role_v2($1,'PLAYER','ADMIN','Rol desactualizado',gen_random_uuid())", [playerId]), /ROLE_CHANGED_RELOAD/);
+    await act(db, playerId);
+    assert.equal((await db.query<{ role: string }>("select private.admin_application_role_v2() as role")).rows[0].role, "ADMIN");
+    await db.exec("reset role");
+    assert.equal((await db.query<{ count: number }>("select count(*)::int as count from admin_audit_log")).rows[0].count, 1);
+    await act(db, superId);
+    await db.query("select admin_change_role_v2($1,'ADMIN','PLAYER','Revocación revisada',gen_random_uuid())", [playerId]);
+    await act(db, playerId);
+    assert.equal((await db.query<{ role: string }>("select private.admin_application_role_v2() as role")).rows[0].role, "PLAYER");
+  } finally { await db.close(); }
+});
