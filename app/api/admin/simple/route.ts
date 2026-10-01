@@ -6,6 +6,7 @@ import { adminCatalogPage, buildCoursePayload, buildEquipmentPayload, buildCompe
 import { coursePayloadIssues, equipmentPayloadIssues, competitionPayloadIssues } from "../../../../lib/admin-payload-validation";
 import { getCourseCatalog } from "../../../../lib/course-catalog-provider.server";
 import { membershipAllows, type AdminEntityType } from "../../../../lib/admin-control-center";
+import {catalogLifecycle} from "../../../../lib/admin-catalog-lifecycle.server";
 import { isOperationalAdminData } from "../../../../lib/admin-data-environment";
 import { adminCourseFamilies, adminCatalogFacets, adminListSummary, filterAdminCatalog } from "../../../../lib/admin-operations";
 export const dynamic = "force-dynamic";
@@ -22,8 +23,9 @@ export async function GET(request: NextRequest) {
     const result=await access.client.from("admin_catalog_revisions").select("id,entity_id,status,payload,version").eq("entity_type","COMPETITION").in("status",["DRAFT","REVIEWED","VERIFIED","PUBLISHED"]).order("version",{ascending:false}).limit(1000);if(result.error)return json({error:"No pudimos cargar las competiciones."},503);
     const definitions=await access.client.from("competition_definitions").select("id,status").limit(1000);
     if(definitions.error)return json({error:"No pudimos confirmar los estados."},503);
+    const lifecycle=await catalogLifecycle();const deleted=new Set(lifecycle.filter(row=>row.entity_type==="COMPETITION"&&row.state==="DELETED").map(row=>row.entity_id));
     const states=new Map((definitions.data||[]).map(row=>[row.id,row.status]));
-    const seen=new Set<string>();const items=(result.data||[]).filter(isOperationalAdminData).filter(row=>row.status==="PUBLISHED").flatMap(row=>{
+    const seen=new Set<string>();const items=(result.data||[]).filter(isOperationalAdminData).filter(row=>row.status==="PUBLISHED"&&!deleted.has(row.entity_id)).flatMap(row=>{
       if(seen.has(row.entity_id))return [];seen.add(row.entity_id);const p=row.payload;const status=states.get(row.entity_id)||"PUBLISHED";
       return [{id:row.entity_id,title:p.name,subtitle:status==="PUBLISHED"?"Publicado":status==="COMPLETED"?"Finalizado":status==="ARCHIVED"?"Archivado":"Sin publicar",active:status!=="ARCHIVED",kind:"COMPETITION" as const,values:{...competitionFormValues(p),competitionStatus:status},version:row.version}];
     });

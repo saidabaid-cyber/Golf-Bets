@@ -1,3 +1,4 @@
+import {buildCoursePayload} from "../lib/admin-simple-catalog";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { adminCourseFamilies, adminListSummary, filterAdminCatalog, structuredNumbers } from "../lib/admin-operations";
@@ -14,4 +15,9 @@ test("structured equipment controls persist arrays and preserve source identity"
  const values={brand:"Marca",model:"Modelo",category:"WEDGE",active:true,bagEligible:true,fitEligible:false,sourceType:"ADMIN_RESEARCH",loftsText:[56,60],handsText:["RH","LH"],year:2025};
  const result=buildEquipmentPayload({id:"new-item",variants:[{loft:56,bounce:10}]},values,"CLUB_EQUIPMENT");
  assert.deepEqual(result.lofts,[56,60]);assert.deepEqual(result.handedness,["RH","LH"]);assert.equal(result.id,"new-item");assert.throws(()=>buildEquipmentPayload({id:"x"},{...values,handsText:["script"]},"CLUB_EQUIPMENT"));
+});
+
+test("new course preserves its parent club for persistent publication",()=>{
+ const payload=buildCoursePayload({club:{id:"new-club"},course:{id:"new-course"},tees:[],holes:[]},{name:"New",clubName:"New club",holeCount:"9",active:true});
+ assert.equal(payload.course.clubId,"new-club");
 });

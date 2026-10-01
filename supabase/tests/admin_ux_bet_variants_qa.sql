@@ -16,6 +16,10 @@ do $$ declare draft jsonb;preview jsonb;result jsonb;variant uuid;values_json js
  if not exists(select 1 from public.player_bet_variants_v3() where id=variant and config->>'value'='500' and version=2) then raise exception 'UPDATE_READBACK_FAILED';end if;
  perform public.admin_bet_variant_operation_v3(null,'archive',revision_id:=(draft->>'id')::uuid,change_reason:='Transient QA archive');
  if exists(select 1 from public.player_bet_variants_v3() where id=variant) then raise exception 'ARCHIVE_READBACK_FAILED';end if;
+ begin
+  perform public.admin_bet_variant_operation_v3(variant,'draft',values_json||'{"engine":"units","config":{"value":10}}',0);
+  raise exception 'ARCHIVED_ENGINE_CHANGED';
+ exception when raise_exception then if SQLERRM<>'ENGINE_IMMUTABLE' then raise;end if;end;
 end $$;
 select set_config('request.jwt.claim.sub','84583e0a-499d-452e-abff-24fd9ff2aa65',true);
 do $$ begin begin perform public.admin_bet_variant_operation_v3(null,'draft','{}');raise exception 'PLAYER_ALLOWED';exception when insufficient_privilege then null;end;end $$;

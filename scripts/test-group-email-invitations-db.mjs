@@ -45,6 +45,8 @@ try {
   for (const file of readdirSync("supabase/migrations").filter(name=>name.endsWith(".sql")).sort()) {
     const sql=readFileSync(`supabase/migrations/${file}`,"utf8").replace(/create extension if not exists pgcrypto(?: with schema extensions)?;/gi,"");
     try { await db.exec(sql); } catch(error) { throw new Error(`Migration ${file}: ${error.code}: ${error.message}`); }
+    // Explicitly bind this in-memory fixture before QA-only operation migrations.
+    if(file==="20261001141820_admin_mode_v2_isolated_qa_requests.sql")await db.exec("insert into private.admin_mode_v2_qa_binding(singleton,enabled,project_ref,reason) values(true,true,'gvzeymebltssgjkvksxt','In-memory PostgreSQL migration fixture; no remote database')");
   }
   check("all migrations compile against existing lifecycle/social/group schema");
   await q("insert into auth.users(id,email,email_confirmed_at) values($1,'qa-a@example.invalid',now()),($2,'qa-b@example.invalid',now()),($3,'qa-c@example.invalid',now()),($4,'unverified@example.invalid',null)",[A,B,C,E]);

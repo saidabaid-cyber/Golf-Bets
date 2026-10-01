@@ -42,6 +42,8 @@ try {
     const sql = readFileSync(`supabase/migrations/${file}`, "utf8")
       .replace(/create extension if not exists pgcrypto(?: with schema extensions)?;/gi, "");
     await db.exec(sql);
+    // Explicitly bind this in-memory fixture before QA-only operation migrations.
+    if(file==="20261001141820_admin_mode_v2_isolated_qa_requests.sql")await db.exec("insert into private.admin_mode_v2_qa_binding(singleton,enabled,project_ref,reason) values(true,true,'gvzeymebltssgjkvksxt','In-memory PostgreSQL migration fixture; no remote database')");
   }
   await q("insert into auth.users(id,email) values($1,'group-a@example.invalid'),($2,'group-b@example.invalid')", [A, B]);
 
