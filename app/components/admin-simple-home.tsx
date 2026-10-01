@@ -13,8 +13,11 @@ const Audit=dynamic(()=>import("./admin-audit").then(m=>m.AdminAudit));
 const Requests=dynamic(()=>import("./admin-requests").then(m=>m.AdminRequests));
 
 const LABELS: Record<SimpleAdminModule, [string, string]> = {
-  courses: ["Campos", "Información, tees, tarjetas y reglas locales"], equipment: ["Equipment", "Marcas, modelos y varillas"], balls: ["Bolas / Ball Fit", "Catálogo y opciones seguras"], bets: ["Apuestas", "Presentación y disponibilidad"], competitions: ["Torneos y competiciones", "Organiza y publica"], requests: ["Solicitudes", "Revisa lo que pide tu comunidad"], users: ["Usuarios", "Consulta perfiles y estado"], content: ["Contenido", "Textos de la app"], administrators: ["Administradores", "Asigna o retira permisos"], audit: ["Auditoría", "Consulta cambios registrados"], advanced: ["Administración avanzada", "Importaciones y operaciones técnicas"],
+  courses: ["Campos", "Información, tees y tarjetas"], equipment: ["Equipment", "Marcas, modelos y varillas"], balls: ["Bolas / Ball Fit", "Catálogo y configuración segura"], bets: ["Apuestas", "Motores y variantes"], competitions: ["Torneos", "Organiza y publica"], requests: ["Solicitudes", "Resuelve lo que pide tu comunidad"], users: ["Usuarios", "Perfiles y estado"], content: ["Contenido", "Textos de la app"], administrators: ["Administradores", "Asigna o retira permisos"], audit: ["Auditoría", "Cambios registrados"], advanced: ["Administración avanzada", "Importaciones y operaciones técnicas"],
 };
+const PRIMARY: SimpleAdminModule[] = ["courses", "equipment", "bets", "competitions", "requests"];
+const SECONDARY: SimpleAdminModule[] = ["balls", "users"];
+const ADVANCED: SimpleAdminModule[] = ["content", "administrators", "audit", "advanced"];
 export function AdminSimpleHome() {
   const { identity, adminAccess } = useBackyardAccount(); const token = identity.accessToken || "";
   const [modules, setModules] = useState<SimpleAdminModule[]>([]); const [error, setError] = useState(""); const [selected, setSelected] = useState<SimpleAdminModule | null>(null);
@@ -29,7 +32,7 @@ export function AdminSimpleHome() {
     {!token && <p className="notice">Inicia sesión con una cuenta administradora para continuar.</p>}
     {token && !adminAccess.hasAccess && !error && <p className="notice">Comprobando permisos…</p>}
     {selected && <button type="button" className="textButton" onClick={() => setSelected(null)}>← Volver a administración</button>}
-    {!selected && <div className="adminV2Grid">{modules.map(module => module === "advanced" ? <Link className="card adminV2Module" key={module} href="/admin"><h2>{LABELS[module][0]}</h2><p>{LABELS[module][1]}</p><span>Abrir →</span></Link> : <button className="card adminV2Module" key={module} onClick={() => setSelected(module)}><h2>{LABELS[module][0]}</h2><p>{LABELS[module][1]}</p><span>Administrar →</span></button>)}</div>}
+    {!selected && <div className="adminV2Stack">{[PRIMARY, SECONDARY].map((group, index) => <section key={index} aria-label={index ? "Catálogos y comunidad" : "Operación principal"} className={index ? "adminV2Secondary" : "adminV2Grid"}>{group.filter(module => modules.includes(module)).map(module => <button className="adminV2Module" key={module} onClick={() => setSelected(module)}><div><h2>{LABELS[module][0]}</h2><p>{LABELS[module][1]}</p></div><span aria-hidden="true">→</span></button>)}</section>)}<details className="adminV2Advanced"><summary>Más / Avanzado</summary><div className="adminV2Secondary">{ADVANCED.filter(module => modules.includes(module)).map(module => module === "advanced" ? <Link className="adminV2Module" key={module} href="/admin"><h2>{LABELS[module][0]}</h2><span aria-hidden="true">→</span></Link> : <button className="adminV2Module" key={module} onClick={() => setSelected(module)}><h2>{LABELS[module][0]}</h2><span aria-hidden="true">→</span></button>)}</div></details></div>}
     {selected === "administrators" && <Administrators token={token} />}
     {selected === "users" && <Administrators token={token} readOnly />}
     {(selected === "courses"||selected==="equipment"||selected==="balls"||selected==="competitions") && <Catalog key={selected} token={token} module={selected} />}
