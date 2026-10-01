@@ -10,6 +10,7 @@ import * as security from "../lib/backyard-ai/server/http-security";
 const OWNER = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
 const REQUEST_ID = "550e8400-e29b-41d4-a716-446655440000";
+const RECEIPT_ID = "6f7e8400-e29b-41d4-a716-446655440001";
 const DECIDED_AT = "2026-09-30T18:00:00.000Z";
 const ROUTE_URL = "https://app.example/api/account/optional-authorizations";
 
@@ -26,6 +27,7 @@ function canonicalBundle(action: Action) {
     resolved: true,
     eligible: false,
     receipt: {
+      id: RECEIPT_ID,
       bundleVersion: optionalAuthorizations.OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
       action,
       idempotencyKey: REQUEST_ID,

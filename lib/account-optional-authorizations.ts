@@ -145,6 +145,16 @@ export function parseOptionalAuthorizationState(value: unknown): OptionalAuthori
   let receipt: OptionalAuthorizationState["receipt"] = null;
   if (body.receipt !== null) {
     const rawReceipt = object(body.receipt);
+    // The canonical Postgres getter includes the internal receipt UUID. Older
+    // fixtures and clients predate that metadata, so accept exactly either
+    // known shape while continuing to reject every other unexpected field.
+    // The UUID is validated but intentionally omitted from the public client
+    // state because callers only need the idempotency key and decision.
+    const receiptKeys = ["action", "bundleVersion", "idempotencyKey", "decidedAt", "featureSet"] as const;
+    const receiptKeysWithId = [...receiptKeys, "id"] as const;
+    const receiptHasId = Boolean(rawReceipt && Object.prototype.hasOwnProperty.call(rawReceipt, "id"));
+    const receiptHasKnownShape = Boolean(rawReceipt
+      && (exactKeys(rawReceipt, receiptKeys) || exactKeys(rawReceipt, receiptKeysWithId)));
     const rawFeatureSet = object(rawReceipt?.featureSet);
     const rawFeatureScopes = rawFeatureSet?.scopes;
     const rawExcluded = rawFeatureSet?.excluded;
@@ -152,10 +162,11 @@ export function parseOptionalAuthorizationState(value: unknown): OptionalAuthori
     const rawProjectionSharing = object(rawProjections?.sharing);
     const rawProjectionNotifications = object(rawProjections?.notifications);
     const decidedAt = iso(rawReceipt?.decidedAt);
-    if (!rawReceipt || !exactKeys(rawReceipt, ["action", "bundleVersion", "idempotencyKey", "decidedAt", "featureSet"])
+    if (!rawReceipt || !receiptHasKnownShape
       || (rawReceipt.action !== "authorize_all" && rawReceipt.action !== "decline_all")
       || rawReceipt.bundleVersion !== OPTIONAL_AUTHORIZATION_BUNDLE_VERSION
       || typeof rawReceipt.idempotencyKey !== "string" || !UUID.test(rawReceipt.idempotencyKey) || !decidedAt
+      || (receiptHasId && (typeof rawReceipt.id !== "string" || !UUID.test(rawReceipt.id)))
       || !rawFeatureSet || !exactKeys(rawFeatureSet, ["scopes", "excluded", "projections"])
       || !Array.isArray(rawFeatureScopes) || rawFeatureScopes.length !== OPTIONAL_AUTHORIZATION_SCOPES.length
       || !Array.isArray(rawExcluded) || rawExcluded.length !== 2

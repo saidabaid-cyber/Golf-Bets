@@ -24,6 +24,29 @@ const MAX_BODY_BYTES = 1_024;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: BACKYARD_AI_PRIVATE_HEADERS });
 
+function objectKeys(value: unknown) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? Object.keys(value as Record<string, unknown>).sort()
+    : [];
+}
+
+function reportCanonicalStateFailure(
+  operation: "get" | "resolve" | "scope",
+  data: unknown,
+  error: { code?: string; message?: string } | null,
+) {
+  const record = data && typeof data === "object" && !Array.isArray(data)
+    ? data as Record<string, unknown>
+    : null;
+  console.error("[optional-authorizations] canonical state unavailable", {
+    operation,
+    dbErrorCode: error?.code ?? null,
+    hasDbError: Boolean(error),
+    topLevelKeys: objectKeys(data),
+    receiptKeys: objectKeys(record?.receipt),
+  });
+}
+
 function mappedFailure(error: { code?: string; message?: string } | null) {
   const message = error?.message || "";
   if (message.includes("optional_authorization_bundle_not_eligible")) return json({ error: "Esta decisión inicial ya no está disponible para la cuenta.", code: "NOT_ELIGIBLE" }, 409);
@@ -48,6 +71,7 @@ async function body(request: NextRequest) {
 async function state(client: SupabaseClient) {
   const { data, error } = await client.rpc("get_optional_authorization_state_v1");
   const parsed = parseOptionalAuthorizationState(data);
+  if (error || !parsed) reportCanonicalStateFailure("get", data, error);
   return { parsed, error };
 }
 
@@ -79,8 +103,12 @@ export async function POST(request: NextRequest) {
     requested_idempotency_key: input.idempotencyKey,
   });
   const saved = parseOptionalAuthorizationState(data);
-  if (error) return mappedFailure(error);
+  if (error) {
+    reportCanonicalStateFailure("resolve", data, error);
+    return mappedFailure(error);
+  }
   if (!saved || !isCompleteBundleResolution(saved, action)) {
+    reportCanonicalStateFailure("resolve", data, null);
     return json({ error: "No pudimos confirmar todas las autorizaciones. No mostramos un éxito parcial.", code: "CONSENT_CONFIRMATION_FAILED" }, 503);
   }
   return json(saved);
@@ -104,8 +132,12 @@ export async function PATCH(request: NextRequest) {
     requested_idempotency_key: input.idempotencyKey,
   });
   const saved = parseOptionalAuthorizationState(data);
-  if (error) return mappedFailure(error);
+  if (error) {
+    reportCanonicalStateFailure("scope", data, error);
+    return mappedFailure(error);
+  }
   if (!saved || saved.scopes[scope].active !== input.enabled) {
+    reportCanonicalStateFailure("scope", data, null);
     return json({ error: "No pudimos confirmar esta elección.", code: "CONSENT_CONFIRMATION_FAILED" }, 503);
   }
   return json(saved);

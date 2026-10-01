@@ -16,6 +16,7 @@ import { cacheAccountLearningConsent, clearAccountLearningConsentServerClock, fa
 import { BACKYARD_AI_MEMORY_POLICY_VERSION, defaultLearningConsent, learningConsentStorageKey, readLearningConsent, writeLearningConsent } from "../lib/backyard-ai/memory/learning-events";
 
 const REQUEST_ID = "550e8400-e29b-41d4-a716-446655440000";
+const RECEIPT_ID = "6f7e8400-e29b-41d4-a716-446655440001";
 const DECIDED_AT = "2026-09-30T18:00:00.000Z";
 
 function memoryStorage() {
@@ -34,6 +35,7 @@ function rawBundle(action: "authorize_all" | "decline_all", overrides: Record<st
     resolved: true,
     eligible: false,
     receipt: {
+      id: RECEIPT_ID,
       bundleVersion: OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
       action,
       idempotencyKey: REQUEST_ID,
@@ -98,6 +100,7 @@ test("canonical optional bundle parses all seven explicit scopes", () => {
   assert.equal(Object.keys(parsed.scopes).length, 7);
   assert.ok(OPTIONAL_AUTHORIZATION_SCOPES.every((scope) => parsed.scopes[scope].active));
   assert.equal(parsed.receipt?.action, "authorize_all");
+  assert.equal(parsed.receipt && "id" in parsed.receipt, false);
   assert.equal(isCompleteBundleResolution(parsed, "authorize_all"), true);
 });
 
@@ -231,6 +234,14 @@ test("malformed, incomplete or forged bundle responses fail closed", () => {
   const receipt = driftedReceipt.receipt as Record<string, unknown>;
   receipt.featureSet = { scopes: [], excluded: ["MARKETING"] };
   assert.equal(parseOptionalAuthorizationState(driftedReceipt), null);
+
+  const invalidReceiptId = rawBundle("authorize_all");
+  (invalidReceiptId.receipt as Record<string, unknown>).id = "not-a-uuid";
+  assert.equal(parseOptionalAuthorizationState(invalidReceiptId), null);
+
+  const unknownReceiptField = rawBundle("authorize_all");
+  (unknownReceiptField.receipt as Record<string, unknown>).unexpected = true;
+  assert.equal(parseOptionalAuthorizationState(unknownReceiptField), null);
 });
 
 test("scope state with a mismatched policy version fails closed", () => {
