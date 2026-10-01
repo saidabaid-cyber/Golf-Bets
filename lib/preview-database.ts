@@ -1,3 +1,5 @@
+import { adminModeDatabaseIsolated } from "./admin-mode";
+
 export const CANONICAL_QA_PROJECT_REF = "bymeopxkxapfizeeqeyb";
 
 const EXPECTED_VERCEL_ENVIRONMENTS = new Set(["development", "preview", "production"]);
@@ -30,6 +32,7 @@ export function isolatedPreviewDatabaseEnabled(
 export function previewDatabaseFeaturesAvailable(
   env: Record<string, string | undefined> = process.env,
 ) {
+  if (adminModeDatabaseIsolated(env)) return true;
   if (
     vercelDeploymentMarkerPresent(env)
     && !EXPECTED_VERCEL_ENVIRONMENTS.has(env.VERCEL_ENV || "")
