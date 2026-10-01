@@ -9,6 +9,7 @@ import type { SimpleAdminModule } from "../../lib/admin-mode";
 const Administrators = dynamic(() => import("./admin-administrators").then(m => m.AdminAdministrators));
 const Catalog = dynamic(() => import("./admin-visual-catalog").then(m=>m.AdminVisualCatalog));
 const Presentation=dynamic(()=>import("./admin-presentation-editor").then(m=>m.AdminPresentationEditor));
+const Audit=dynamic(()=>import("./admin-audit").then(m=>m.AdminAudit));
 const Requests=dynamic(()=>import("./admin-requests").then(m=>m.AdminRequests));
 
 const LABELS: Record<SimpleAdminModule, [string, string]> = {
@@ -34,6 +35,7 @@ export function AdminSimpleHome() {
     {(selected === "courses"||selected==="equipment"||selected==="balls"||selected==="competitions") && <Catalog key={selected} token={token} module={selected} />}
     {(selected==="bets"||selected==="content")&&<Presentation key={selected} token={token} module={selected}/>}
     {selected==="requests"&&<Requests token={token} onCreate={(module,title)=>{if(modules.includes(module)){setRequestTitle(title);setSelected(module);}}}/>}
+    {selected==="audit"&&<Audit token={token}/>}
     {requestTitle&&selected!=="requests"&&<p className="notice">Alta solicitada: {requestTitle}. Revisa los datos y agrega la información verificada antes de guardar.</p>}
     
     {selected && <button type="button" className="textButton" onClick={() => setSelected(null)}>← Volver a administración</button>}

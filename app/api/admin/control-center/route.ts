@@ -25,7 +25,7 @@ import { csvObjects, equipmentImportPreview, jsonObjects } from "../../../../lib
 import { getCourseCatalog } from "../../../../lib/course-catalog-provider.server";
 import { loadLayeredEquipmentCatalogs } from "../../../../lib/equipment-catalog-provider.server";
 import { golfBallCatalog, golfClubCatalog, golfShaftCatalog } from "../../../../lib/golf-equipment-catalog";
-import { authenticatedRequest } from "../../../../lib/server-auth";
+import { advancedAdminRequest as authenticatedRequest } from "../../../../lib/admin-advanced.server";
 import { getSupabaseAdmin } from "../../../../lib/supabase/server";
 import { serverPhase2FeatureFlags } from "../../../../features/feature-flags/server";
 

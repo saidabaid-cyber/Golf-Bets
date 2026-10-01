@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { serverPhase2FeatureFlags } from "../../../../features/feature-flags/server";
-import { authenticatedRequest } from "../../../../lib/server-auth";
+import { advancedAdminRequest as authenticatedRequest } from "../../../../lib/admin-advanced.server";
 
 const PRIVATE = { "cache-control": "private, no-store" };
 

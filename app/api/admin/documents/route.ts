@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { ADMIN_ENTITY_TYPES, ADMIN_SCOPE_TYPES, membershipAllows, type AdminMembership, type AdminEntityType, type AdminScopeType } from "../../../../lib/admin-control-center";
 import { validateAdminDocument } from "../../../../lib/admin-documents";
-import { authenticatedRequest } from "../../../../lib/server-auth";
+import { advancedAdminRequest as authenticatedRequest } from "../../../../lib/admin-advanced.server";
 import { serverPhase2FeatureFlags } from "../../../../features/feature-flags/server";
 
 export const dynamic = "force-dynamic";
