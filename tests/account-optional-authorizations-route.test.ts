@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
 import * as optionalAuthorizations from "../lib/account-optional-authorizations";
+import { optionalBundleLegalEvidence } from "../lib/account-optional-legal-evidence";
 import * as security from "../lib/backyard-ai/server/http-security";
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
@@ -37,11 +38,12 @@ function canonicalBundle(action: Action) {
           scope,
           policyVersion: optionalAuthorizations.OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope],
         })),
-        excluded: ["MARKETING", "FINANCIAL_PATRIMONIAL"],
+        excluded: [],
+        legal: optionalBundleLegalEvidence(action, REQUEST_ID, DECIDED_AT),
         projections: {
-          profileVisibility: active ? "public" : "private",
+          profileVisibility: "public",
           socialPrivacy: active ? "FRIENDS" : "PRIVATE",
-          socialProfilePrivacy: active ? "PUBLIC" : "PRIVATE",
+          socialProfilePrivacy: "PUBLIC",
           sharing: {
             enabledForFriends: active,
             rounds: active,
@@ -67,9 +69,13 @@ function canonicalBundle(action: Action) {
       source: active ? "onboarding_authorize_all" : "onboarding_decline_all",
       decidedAt: DECIDED_AT,
     }])),
-    profileVisibility: active ? "public" : "private",
+    legal: Object.fromEntries(["financial_data", "marketing"].map((subject) => [subject, {
+      active, status: active ? "accepted" : "rejected",
+      policyVersion: "2026-09-08-v6", decidedAt: DECIDED_AT,
+    }])),
+    profileVisibility: "public",
     socialPrivacy: active ? "FRIENDS" : "PRIVATE",
-    socialProfilePrivacy: active ? "PUBLIC" : "PRIVATE",
+    socialProfilePrivacy: "PUBLIC",
     sharing: {
       enabledForFriends: active,
       rounds: active,
@@ -88,27 +94,25 @@ function canonicalBundle(action: Action) {
   };
 }
 
-function normalized<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
 function routeHarness(options: {
   authenticated?: boolean;
   rpc?: (name: string, args?: Record<string, unknown>) => RpcResult | Promise<RpcResult>;
 } = {}) {
   let authCalls = 0;
   const rpcCalls: RpcCall[] = [];
+  let currentAction: Action = "authorize_all";
   const client = {
     rpc: async (name: string, args?: Record<string, unknown>): Promise<RpcResult> => {
       rpcCalls.push({ name, args });
       if (options.rpc) return options.rpc(name, args);
-      if (name === "resolve_optional_authorization_bundle_v1") {
+      if (name === "resolve_optional_authorization_bundle_v2") {
         return { data: canonicalBundle(args?.requested_action as Action), error: null };
       }
       if (name === "set_optional_authorization_scope_v1") {
-        return { data: canonicalBundle(args?.requested_enabled ? "authorize_all" : "decline_all"), error: null };
+        currentAction = args?.requested_enabled ? "authorize_all" : "decline_all";
+        return { data: canonicalBundle(currentAction), error: null };
       }
-      return { data: canonicalBundle("authorize_all"), error: null };
+      return { data: canonicalBundle(currentAction), error: null };
     },
   };
   const routeExports: Partial<RouteApi> = {};
@@ -119,8 +123,12 @@ function routeHarness(options: {
     exports: routeExports,
     Request,
     Response,
+    process: { env: {} },
     require: (id: string) => {
       if (id.endsWith("/account-optional-authorizations")) return optionalAuthorizations;
+      if (id.endsWith("/supabase/server")) return { getSupabaseAdmin: () => client };
+      if (id.endsWith("/runtime-environment")) return { resolveCanonicalDataEnvironment: () => "preview" };
+      if (id.endsWith("/account-optional-legal-evidence")) return { optionalBundleLegalEvidence };
       if (id.endsWith("/http-security")) return security;
       if (id.endsWith("/server-auth")) return {
         authenticatedRequest: async (request: Request) => {
@@ -290,26 +298,14 @@ test("canonical complete RPC states are returned for GET, bundle POST and scope 
   assert.equal((await get.json()).scopes.PERSONAL_MEMORY.active, true);
   assert.equal((await post.json()).receipt.action, "authorize_all");
   assert.equal((await patch.json()).scopes.PERSONAL_MEMORY.active, false);
-  assert.deepEqual(normalized(fixture.rpcCalls), [
-    { name: "get_optional_authorization_state_v1" },
-    {
-      name: "resolve_optional_authorization_bundle_v1",
-      args: {
-        requested_action: "authorize_all",
-        requested_bundle_version: optionalAuthorizations.OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
-        requested_idempotency_key: REQUEST_ID,
-      },
-    },
-    {
-      name: "set_optional_authorization_scope_v1",
-      args: {
-        requested_scope: "PERSONAL_MEMORY",
-        requested_enabled: false,
-        requested_idempotency_key: REQUEST_ID,
-      },
-    },
+  assert.deepEqual(fixture.rpcCalls.map((call) => call.name), [
+    "get_optional_authorization_state_v2", "resolve_optional_authorization_bundle_v2",
+    "set_optional_authorization_scope_v1", "get_optional_authorization_state_v2",
   ]);
-});
+  assert.equal(fixture.rpcCalls[1].args?.requested_owner_id, OWNER);
+  assert.equal(fixture.rpcCalls[1].args?.requested_environment, "preview");
+  const legal = fixture.rpcCalls[1].args?.requested_legal_events as Array<{ subject: string; action: string }>;
+  assert.deepEqual(legal.map((row) => [row.subject, row.action]), [["financial_data", "accepted"], ["marketing", "accepted"]]);});
 
 test("partial and malformed RPC states fail closed without reporting partial success", async () => {
   const partial = canonicalBundle("authorize_all");
@@ -381,10 +377,14 @@ test("the optional authorization route accepts no client-selected owner", async 
       idempotencyKey: REQUEST_ID,
     },
   }))).status, 200);
-  assert.doesNotMatch(JSON.stringify(canonical.rpcCalls), /userId|ownerId|requested_(?:user|owner|account)/i);
+  assert.equal(canonical.rpcCalls[0].args?.requested_owner_id, OWNER);
   assert.deepEqual(Object.keys(canonical.rpcCalls[0].args ?? {}).sort(), [
     "requested_action",
     "requested_bundle_version",
+    "requested_deployment_ref",
+    "requested_environment",
     "requested_idempotency_key",
+    "requested_legal_events",
+    "requested_owner_id",
   ]);
 });

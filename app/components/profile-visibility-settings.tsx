@@ -39,8 +39,8 @@ export function ProfileVisibilitySettings({ userId, accessToken, authenticated }
   return <section aria-label="Privacidad del perfil" aria-busy={loading || saving}>
     <b>Privacidad</b><p className="hint">Quién puede ver tu perfil social. Tu correo, ubicación y datos de cuenta no se hacen públicos.</p>
     <div className="segmented" role="group" aria-label="Visibilidad del perfil">
-      <button type="button" aria-pressed={visibility === "public"} disabled={!authenticated || loading || saving || visibility === null} onClick={() => void choose("public")}>Público</button>
-      <button type="button" aria-pressed={visibility === "friends"} disabled={!authenticated || loading || saving || visibility === null} onClick={() => void choose("friends")}>Amigos</button>
+      <button type="button" className={visibility === "public" ? "active" : undefined} aria-pressed={visibility === "public"} disabled={!authenticated || loading || saving || visibility === null} onClick={() => void choose("public")}>Público{visibility === "public" ? " ✓" : ""}</button>
+      <button type="button" className={visibility === "friends" ? "active" : undefined} aria-pressed={visibility === "friends"} disabled={!authenticated || loading || saving || visibility === null} onClick={() => void choose("friends")}>Amigos{visibility === "friends" ? " ✓" : ""}</button>
     </div>
     {visibility === "private" && <p className="hint">Tu configuración anterior sigue protegida. Elige una audiencia para cambiarla.</p>}
     {loading && <p role="status">Consultando privacidad…</p>}

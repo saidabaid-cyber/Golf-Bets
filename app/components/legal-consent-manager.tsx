@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { type LegalAcceptance } from "../../lib/account-state";
-import { LEGAL_DOCUMENT_VERSIONS, legalConfig } from "../../lib/legal-config";
+import { LEGAL_DOCUMENT_VERSIONS } from "../../lib/legal-config";
 import { MARKETING_CONSENT_VERSION, readMarketingConsent, writeMarketingConsent } from "../../lib/marketing-consent";
 import { BACKYARD_AI_MEMORY_POLICY_VERSION, defaultLearningConsent, readLearningConsent } from "../../lib/backyard-ai/memory/learning-events";
 import type { LearningConsent } from "../../lib/backyard-ai/memory/types";
@@ -13,7 +13,7 @@ import {
   requestOptionalAuthorizationState,
   saveOptionalAuthorizationScope,
 } from "../../lib/account-optional-authorizations";
-import { LEGAL_EVIDENCE_DEFINITIONS, type LegalEvidenceAction, type LegalEvidenceSubject } from "../../lib/legal-evidence";
+import { type LegalEvidenceAction, type LegalEvidenceSubject } from "../../lib/legal-evidence";
 import { hasResolvedMarketingConsent, latestLegalEvidence, type LegalEvidenceEvent } from "../../lib/legal-evidence-client";
 import { AiProcessingConsentSettings } from "./backyard-ai/ai-processing-consent";
 import { BottomBackAction } from "./bottom-back-action";
@@ -141,7 +141,7 @@ export function LegalConsentManager({ userId, accessToken, authenticated, accept
       <p className="hint">Versión {BACKYARD_AI_MEMORY_POLICY_VERSION}. Inputs privados permanecen excluidos por defecto.</p>
     </section>
 
-    <section className="card"><h2>Datos financieros/patrimoniales</h2><p>Apuestas, saldos, gastos y resultados económicos. Rechazarlo no bloquea score, campo ni funciones deportivas independientes.</p><div className="row between"><span>{bettingConsentGranted ? `Vigente · ${evidenceLabel("financial_data")}` : evidenceLabel("financial_data")}</span>{bettingConsentGranted ? <button type="button" className="secondary" onClick={() => void revokeFinancialConsent()}>Revocar autorización</button> : <button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar y decidir</button>}</div><p className="hint">{LEGAL_EVIDENCE_DEFINITIONS.financial_data.statements.revoked} Para ejercer derechos ARCO también puedes escribir a <a href={`mailto:${legalConfig.privacyEmail}`}>{legalConfig.privacyEmail}</a>.</p></section>
+    <section className="card"><h2>Apuestas, resultados y gastos</h2><p>Para registrar apuestas, resultados económicos, saldos o gastos necesitamos tu autorización expresa. Puedes seguir usando las demás funciones sin autorizarlo.</p><div className="row between"><span>{bettingConsentGranted ? `Vigente · ${evidenceLabel("financial_data")}` : evidenceLabel("financial_data")}</span>{bettingConsentGranted ? <button type="button" className="secondary" onClick={() => void revokeFinancialConsent()}>Revocar autorización</button> : <button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar y decidir</button>}</div></section>
 
     <section className="card"><h2>Marketing opcional</h2><label className="preferenceRow"><span><b>Recibir comunicaciones de marketing</b><small className="preferenceDescription">Opcional, apagado por defecto y sin activar campañas desde esta pantalla.</small></span><input type="checkbox" checked={marketing} onChange={(event) => void changeMarketing(event.target.checked)} /></label><p className="hint">Versión {MARKETING_CONSENT_VERSION} · {evidenceLabel("marketing")}.</p></section>
     {message && <div className="notice" role="status">{message}</div>}

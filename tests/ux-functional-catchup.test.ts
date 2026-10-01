@@ -10,7 +10,7 @@ test("initial consent separates required documents from the explicit optional bu
   assert.match(consent, /resolveOptionalAuthorizationBundle/);
   assert.match(consent, /AUTORIZAR TODO Y CONTINUAR/);
   assert.match(consent, /CONSENTIMIENTOS REQUERIDOS/);
-  assert.match(consent, /Marketing y datos financieros\/patrimoniales no forman parte/);
+  assert.match(consent, /marketing y cada autorización de IA conservan evidencia separada/);
   assert.doesNotMatch(consent, /type="checkbox"/);
   assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS/);
 });

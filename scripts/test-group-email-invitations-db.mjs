@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
+// This integration fixture runs after tsconfig.test.json compilation.
+import { optionalBundleLegalEvidence } from "../.test-dist/lib/account-optional-legal-evidence.js";
 
 // Actual PostgreSQL authorization/functions in isolated WASM. No remote writes,
 // external delivery, real emails or claims about inbox receipt.
@@ -153,11 +155,13 @@ try {
   await q("insert into auth.users(id,email,email_confirmed_at) values($1,'new-a@example.invalid',now()),($2,'new-b@example.invalid',now())",[A,B]);
   await q("update public.profiles set display_name='New A' where id=$1",[A]);
   await q("update public.profiles set display_name='New B' where id=$1",[B]);
-  // New-account bootstrap is intentionally private/off until an explicit
-  // choice. Exercise public identity and notification delivery through the
-  // atomic onboarding bundle instead of relying on former implicit defaults.
-  await asUser(A);await scalar("select public.resolve_optional_authorization_bundle_v1($1,$2,$3)",["authorize_all","optional-features-2026-09-30-v1","aaaaaaaa-0000-4000-8000-000000000001"]);
-  await asUser(B);await scalar("select public.resolve_optional_authorization_bundle_v1($1,$2,$3)",["authorize_all","optional-features-2026-09-30-v1","bbbbbbbb-0000-4000-8000-000000000002"]);
+  // Public audience is independent of the explicit optional delivery choice.
+  // Use the current server-only resolver in this fixture, not a retired RPC.
+  await asService();
+  for (const [owner,key] of [[A,"aaaaaaaa-0000-4000-8000-000000000001"],[B,"bbbbbbbb-0000-4000-8000-000000000002"]]) {
+    await scalar("select public.resolve_optional_authorization_bundle_v2($1,'authorize_all','optional-features-2026-10-01-v2',$2,'preview','group-test-fixture',$3::jsonb)",
+      [owner,key,JSON.stringify(optionalBundleLegalEvidence("authorize_all",key))]);
+  }
   await asUser(A);
   await q("insert into public.profile_completion_choices(user_id,handicap_choice,manual_hcp,not_applicable) values($1,'MANUAL',12,array['equipment','ball','fitting'])",[A]);
   await denied(()=>q("insert into public.profile_completion_choices(user_id,handicap_choice) values($1,'UNKNOWN')",[B]));

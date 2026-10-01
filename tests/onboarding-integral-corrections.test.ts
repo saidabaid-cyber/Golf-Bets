@@ -102,7 +102,7 @@ test("Home Club selection collapses only after persistence and reopens without c
   assert.match(picker, /const visibleNearby=nearby\.slice\(0,nearbyLimit\)/);
   assert.match(picker, /visibleNearby\.map\(c=>/);
   assert.match(picker, /Ver más campos cercanos/);
-  assert.match(picker, /!query\.trim\(\)&&!club&&relevant\.length>0/);
+  assert.doesNotMatch(picker, /relevant\.length|Campos relevantes del catálogo/);
   assert.doesNotMatch(picker, /location\.status!==['"]located['"]&&!query\.trim\(\)/);
   assert.match(picker, /<AnchoredSearch inlineResults label="Buscar otro campo"/);
   assert.match(picker, /onSelectHomeCourse\(homeCourseSelection\(selected\)\)/);

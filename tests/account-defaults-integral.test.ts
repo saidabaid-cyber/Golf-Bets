@@ -182,7 +182,8 @@ test("onboarding authorizes app intent while OS permission and delivery remain s
   assert.match(onboarding, /<InitialDevicePermissions/);
   assert.match(settings, /requestInitialLocation/);
   assert.match(settings, /requestInitialNotifications/);
-  assert.match(settings, /Preferencia, permiso del sistema y entrega son estados distintos/);
+  assert.match(settings, /devicePermissionReviewStatus/);
+  assert.doesNotMatch(settings, /Preferencia interna|Registro de entrega|Solicitud guardada/);
   assert.match(settings, /persistPreference\("notifications", "enabled"\)/);
   assert.doesNotMatch(settings, /notifications:\s*"granted"/);
 });

@@ -1,4 +1,7 @@
-export const OPTIONAL_AUTHORIZATION_BUNDLE_VERSION = "optional-features-2026-09-30-v1";
+import { legalEvidenceDefinition } from "./legal-evidence";
+
+export const LEGACY_OPTIONAL_AUTHORIZATION_BUNDLE_VERSION = "optional-features-2026-09-30-v1";
+export const OPTIONAL_AUTHORIZATION_BUNDLE_VERSION = "optional-features-2026-10-01-v2";
 export const OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT = "backyard:optional-authorizations-changed";
 export const OPTIONAL_AUTHORIZATION_REQUEST_TIMEOUT_MS = 20_000;
 
@@ -30,8 +33,8 @@ export const OPTIONAL_AUTHORIZATION_POLICY_VERSIONS = {
   AI_LAUNCH_MONITOR_PROCESSING_CONSENT: "2026-09-08-v2",
   PERSONAL_MEMORY: "ai-first-phase1-v1",
   GLOBAL_LEARNING: "ai-first-phase1-v1",
-  LOCATION_INTERNAL: OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
-  NOTIFICATION_INTERNAL: OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
+  LOCATION_INTERNAL: LEGACY_OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
+  NOTIFICATION_INTERNAL: LEGACY_OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
 } as const satisfies Record<OptionalAuthorizationScope, string>;
 
 export type OptionalAuthorizationScopeState = {
@@ -52,6 +55,10 @@ export type OptionalAuthorizationState = {
     decidedAt: string;
   };
   scopes: Record<OptionalAuthorizationScope, OptionalAuthorizationScopeState>;
+  legal?: Record<"financial_data" | "marketing", {
+    active: boolean; status: "accepted" | "rejected" | "revoked" | "missing";
+    policyVersion: string; decidedAt: string | null;
+  }>;
   profileVisibility: "private" | "friends" | "public";
   socialPrivacy: "PRIVATE" | "FRIENDS";
   socialProfilePrivacy: "PRIVATE" | "FRIENDS" | "PUBLIC";
@@ -168,21 +175,37 @@ export function parseOptionalAuthorizationState(value: unknown): OptionalAuthori
       || (rawReceipt.action !== "authorize_all" && rawReceipt.action !== "decline_all")
       || typeof rawReceipt.idempotencyKey !== "string" || !UUID.test(rawReceipt.idempotencyKey) || !decidedAt
       || (receiptHasId && (typeof rawReceipt.id !== "string" || !UUID.test(rawReceipt.id)))) return null;
-    if (receiptIsCanonical && (rawReceipt.bundleVersion !== OPTIONAL_AUTHORIZATION_BUNDLE_VERSION
-      || !rawFeatureSet || !exactKeys(rawFeatureSet, ["scopes", "excluded", "projections"])
+    const legacyReceipt = rawReceipt.bundleVersion === LEGACY_OPTIONAL_AUTHORIZATION_BUNDLE_VERSION;
+    const newReceipt = rawReceipt.bundleVersion === OPTIONAL_AUTHORIZATION_BUNDLE_VERSION;
+    if (receiptIsCanonical && ((!legacyReceipt && !newReceipt)
+      || !rawFeatureSet || !exactKeys(rawFeatureSet, legacyReceipt ? ["scopes", "excluded", "projections"] : ["scopes", "excluded", "projections", "legal"])
       || !Array.isArray(rawFeatureScopes) || rawFeatureScopes.length !== OPTIONAL_AUTHORIZATION_SCOPES.length
-      || !Array.isArray(rawExcluded) || rawExcluded.length !== 2
-      || !rawExcluded.includes("MARKETING") || !rawExcluded.includes("FINANCIAL_PATRIMONIAL")
+      || !Array.isArray(rawExcluded)
+      || (legacyReceipt ? rawExcluded.length !== 2 || !rawExcluded.includes("MARKETING") || !rawExcluded.includes("FINANCIAL_PATRIMONIAL") : rawExcluded.length !== 0)
       || !rawProjections || !exactKeys(rawProjections, ["profileVisibility", "socialPrivacy", "socialProfilePrivacy", "sharing", "notifications"])
       || !rawProjectionSharing || !exactKeys(rawProjectionSharing, ["enabledForFriends", "rounds", "achievements", "equipment", "courses"])
       || !rawProjectionNotifications || !exactKeys(rawProjectionNotifications, ["internal", "master", "push", "email", "rounds", "reminders"]))) return null;
     if (receiptIsCanonical) {
       const receiptEnabled = rawReceipt.action === "authorize_all";
-      if (rawProjections!.profileVisibility !== (receiptEnabled ? "public" : "private")
+      if ((legacyReceipt && rawProjections!.profileVisibility !== (receiptEnabled ? "public" : "private"))
         || rawProjections!.socialPrivacy !== (receiptEnabled ? "FRIENDS" : "PRIVATE")
-        || rawProjections!.socialProfilePrivacy !== (receiptEnabled ? "PUBLIC" : "PRIVATE")
+        || (legacyReceipt && rawProjections!.socialProfilePrivacy !== (receiptEnabled ? "PUBLIC" : "PRIVATE"))
+        || !new Set(["public", "friends", "private"]).has(String(rawProjections!.profileVisibility))
+        || !new Set(["PUBLIC", "FRIENDS", "PRIVATE"]).has(String(rawProjections!.socialProfilePrivacy))
         || !Object.values(rawProjectionSharing!).every((value) => value === receiptEnabled)
         || !Object.values(rawProjectionNotifications!).every((value) => value === receiptEnabled)) return null;
+      if (!legacyReceipt) {
+        const legal = rawFeatureSet!.legal;
+        if (!Array.isArray(legal) || legal.length !== 2) return null;
+        for (const subject of ["financial_data", "marketing"] as const) {
+          const event = legal.find((value) => object(value)?.subject === subject);
+          const definition = legalEvidenceDefinition(subject, receiptEnabled ? "accepted" : "rejected")!;
+          if (!event || event.action !== (receiptEnabled ? "accepted" : "rejected")
+            || event.documentKey !== definition.documentKey || event.documentVersion !== definition.version
+            || event.documentHash !== definition.documentHash || event.statementText !== definition.statement
+            || event.statementHash !== definition.statementHash || event.origin !== "onboarding") return null;
+        }
+      }
       const receiptScopes = new Set<OptionalAuthorizationScope>();
       for (const rawFeatureScope of rawFeatureScopes as unknown[]) {
         const featureScope = object(rawFeatureScope);
@@ -197,7 +220,22 @@ export function parseOptionalAuthorizationState(value: unknown): OptionalAuthori
   }
   if (body.resolved !== Boolean(receipt)) return null;
 
+  let legal: OptionalAuthorizationState["legal"];
+  if (body.legal !== undefined) {
+    const rows = object(body.legal);
+    if (!rows || !exactKeys(rows, ["financial_data", "marketing"])) return null;
+    legal = {} as NonNullable<OptionalAuthorizationState["legal"]>;
+    for (const subject of ["financial_data", "marketing"] as const) {
+      const row = object(rows[subject]);
+      if (!row || !["accepted", "rejected", "revoked", "missing"].includes(String(row.status))
+        || row.active !== (row.status === "accepted") || row.policyVersion !== legalEvidenceDefinition(subject, "accepted")!.version
+        || (row.status === "missing" ? row.decidedAt !== null : !iso(row.decidedAt))) return null;
+      legal[subject] = { active: row.active as boolean, status: row.status as NonNullable<OptionalAuthorizationState["legal"]>["marketing"]["status"],
+        policyVersion: row.policyVersion as string, decidedAt: row.decidedAt === null ? null : iso(row.decidedAt) };
+    }
+  }
   return {
+    ...(legal ? { legal } : {}),
     bundleVersion: OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
     resolved: body.resolved,
     eligible: body.eligible,
@@ -299,15 +337,11 @@ export function isCompleteBundleResolution(state: OptionalAuthorizationState, ac
   if (!state.resolved || state.receipt?.action !== action) return false;
   const accepted = action === "authorize_all";
   if (OPTIONAL_AUTHORIZATION_SCOPES.some((scope) => state.scopes[scope].active !== accepted)) return false;
-  return accepted
-    ? state.profileVisibility === "public"
-      && state.socialPrivacy === "FRIENDS"
-      && state.socialProfilePrivacy === "PUBLIC"
-      && Object.values(state.sharing).every(Boolean)
-      && Object.values(state.notifications).every(Boolean)
-    : state.profileVisibility === "private"
-      && state.socialPrivacy === "PRIVATE"
-      && state.socialProfilePrivacy === "PRIVATE"
-      && Object.values(state.sharing).every((value) => !value)
-      && Object.values(state.notifications).every((value) => !value);
+  if (!state.legal || Object.values(state.legal).some((row) => row.active !== accepted
+    || row.status !== (accepted ? "accepted" : "rejected"))) return false;
+  // Public profile audience is an independent user preference, not consent
+  // to share activity. Neither initial action is allowed to overwrite it.
+  return state.socialPrivacy === (accepted ? "FRIENDS" : "PRIVATE")
+    && Object.values(state.sharing).every((value) => value === accepted)
+    && Object.values(state.notifications).every((value) => value === accepted);
 }

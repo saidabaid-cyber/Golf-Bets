@@ -16,6 +16,9 @@ import {
   readJsonBodyWithLimit,
 } from "../../../../lib/backyard-ai/server/http-security";
 import { authenticatedRequest } from "../../../../lib/server-auth";
+import { getSupabaseAdmin } from "../../../../lib/supabase/server";
+import { resolveCanonicalDataEnvironment } from "../../../../lib/runtime-environment";
+import { optionalBundleLegalEvidence } from "../../../../lib/account-optional-legal-evidence";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -69,7 +72,9 @@ async function body(request: NextRequest) {
 }
 
 async function state(client: SupabaseClient) {
-  const { data, error } = await client.rpc("get_optional_authorization_state_v1");
+  const { data, error } = await client.rpc("get_optional_authorization_state_v2", {
+    requested_environment: resolveCanonicalDataEnvironment(),
+  });
   const parsed = parseOptionalAuthorizationState(data);
   if (error || !parsed) reportCanonicalStateFailure("get", data, error);
   return { parsed, error };
@@ -97,10 +102,16 @@ export async function POST(request: NextRequest) {
   }
   const account = await authenticatedRequest(request);
   if (!account.ok) return json({ error: account.error, code: account.code }, account.status);
-  const { data, error } = await account.client.rpc("resolve_optional_authorization_bundle_v1", {
+  const admin = getSupabaseAdmin("cloud", 15_000);
+  if (!admin) return mappedFailure(null);
+  const { data, error } = await admin.rpc("resolve_optional_authorization_bundle_v2", {
+    requested_owner_id: account.userId,
     requested_action: action,
     requested_bundle_version: OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
     requested_idempotency_key: input.idempotencyKey,
+    requested_environment: resolveCanonicalDataEnvironment(),
+    requested_deployment_ref: process.env.VERCEL_GIT_COMMIT_SHA || null,
+    requested_legal_events: optionalBundleLegalEvidence(action, input.idempotencyKey),
   });
   const saved = parseOptionalAuthorizationState(data);
   if (error) {
@@ -131,7 +142,8 @@ export async function PATCH(request: NextRequest) {
     requested_enabled: input.enabled,
     requested_idempotency_key: input.idempotencyKey,
   });
-  const saved = parseOptionalAuthorizationState(data);
+  const confirmed = error ? null : await state(account.client);
+  const saved = confirmed?.parsed;
   if (error) {
     reportCanonicalStateFailure("scope", data, error);
     return mappedFailure(error);

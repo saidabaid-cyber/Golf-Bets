@@ -83,7 +83,7 @@ function privacyHarness(initial: audience.PersistedProfileAudience = "private", 
 
 test("actual privacy UI offers only Public/Friends and does not widen a legacy private profile", async () => {
   const h = privacyHarness(); await h.settle();
-  assert.deepEqual(h.buttons().map(text), ["Público", "Amigos"]);
+  assert.deepEqual(h.buttons().map((button) => text(button).trim()), ["Público", "Amigos"]);
   assert.ok(h.buttons().every((button) => button.props["aria-pressed"] === false));
   assert.equal(h.writes.length, 0); assert.equal(h.server(), "private");
   assert.match(text(h.tree()), /configuración anterior sigue protegida/);
@@ -96,6 +96,8 @@ test("public/friends changes wait for server persistence and reload reads the co
     (h.buttons()[index].props.onClick as () => void)();
     await h.settle(); assert.deepEqual(h.writes, [choice]); assert.equal(h.server(), choice);
     assert.equal(h.buttons()[index].props["aria-pressed"], true);
+    assert.equal(h.buttons()[index].props.className, "active");
+    assert.match(text(h.buttons()[index]), /✓/);
     const reload = privacyHarness(h.server()); await reload.settle(); assert.equal(reload.buttons()[index].props["aria-pressed"], true);
   }
 });

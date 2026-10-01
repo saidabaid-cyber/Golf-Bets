@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { optionalBundleLegalEvidence } from "../lib/account-optional-legal-evidence";
 
 import {
   OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
@@ -42,11 +43,12 @@ function rawBundle(action: "authorize_all" | "decline_all", overrides: Record<st
       decidedAt: DECIDED_AT,
       featureSet: {
         scopes: OPTIONAL_AUTHORIZATION_SCOPES.map((scope) => ({ scope, policyVersion: OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope] })),
-        excluded: ["MARKETING", "FINANCIAL_PATRIMONIAL"],
+        excluded: [],
+        legal: optionalBundleLegalEvidence(action, REQUEST_ID, DECIDED_AT),
         projections: {
-          profileVisibility: active ? "public" : "private",
+          profileVisibility: "public",
           socialPrivacy: active ? "FRIENDS" : "PRIVATE",
-          socialProfilePrivacy: active ? "PUBLIC" : "PRIVATE",
+          socialProfilePrivacy: "PUBLIC",
           sharing: {
             enabledForFriends: active,
             rounds: active,
@@ -72,9 +74,13 @@ function rawBundle(action: "authorize_all" | "decline_all", overrides: Record<st
       source: active ? "onboarding_authorize_all" : "onboarding_decline_all",
       decidedAt: DECIDED_AT,
     }])),
-    profileVisibility: active ? "public" : "private",
+    legal: Object.fromEntries(["financial_data", "marketing"].map((subject) => [subject, {
+      active, status: active ? "accepted" : "rejected",
+      policyVersion: "2026-09-08-v6", decidedAt: DECIDED_AT,
+    }])),
+    profileVisibility: "public",
     socialPrivacy: active ? "FRIENDS" : "PRIVATE",
-    socialProfilePrivacy: active ? "PUBLIC" : "PRIVATE",
+    socialProfilePrivacy: "PUBLIC",
     sharing: {
       enabledForFriends: active,
       rounds: active,
@@ -200,12 +206,12 @@ test("decline-all is complete only when every included projection remains OFF", 
   assert.equal(isCompleteBundleResolution(partial, "decline_all"), false);
 });
 
-test("authorize-all is incomplete when a projected privacy or notification default is missing", () => {
+test("authorize-all preserves independent profile audience but requires notification projections", () => {
   const privateProfile = parseOptionalAuthorizationState(rawBundle("authorize_all", {
     socialProfilePrivacy: "PRIVATE",
   }));
   assert.ok(privateProfile);
-  assert.equal(isCompleteBundleResolution(privateProfile, "authorize_all"), false);
+  assert.equal(isCompleteBundleResolution(privateProfile, "authorize_all"), true);
 
   const notificationsWithoutMaster = parseOptionalAuthorizationState(rawBundle("authorize_all", {
     notifications: {

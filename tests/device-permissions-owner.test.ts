@@ -57,8 +57,9 @@ test("onboarding conecta el prompt nativo sólo al tap explícito y evita texto 
   const source = readFileSync("app/components/device-permission-settings.tsx", "utf8");
   assert.match(source, /onClick=\{\(\) => void notifications\(\)\}/);
   assert.match(source, /requestInitialNotifications\(localStorage, userId, api\)/);
-  assert.match(source, /ACTIVAR NOTIFICACIONES/);
-  assert.match(source, /Perfecto\. Las activaremos cuando uses la app de The Backyard\./);
+  assert.match(source, /Permitir notificaciones/);
+  assert.match(source, /Puedes continuar sin notificaciones en este navegador\./);
+  assert.doesNotMatch(source, /Solicitud guardada/);
   assert.doesNotMatch(source, /processPendingNotificationIntent/);
   assert.match(source, /refreshDevicePermissionStateWithoutPrompt/);
   assert.match(source, /Notificaciones no activadas/);
@@ -75,19 +76,15 @@ test("onboarding conecta el prompt nativo sólo al tap explícito y evita texto 
   assert.doesNotMatch(skip, /disableNotificationsForApp/);
 });
 
-test("Settings separates internal location intent from the device permission", () => {
-  const source = readFileSync("app/components/device-permission-settings.tsx", "utf8");
-  assert.match(source, /Uso en The Backyard:/);
-  assert.match(source, /value\.locationPreference === "enabled"/);
-  assert.match(source, /locationSystemStatus\(value\.location\)/);
-  assert.match(source, /Preferencia, permiso del sistema y entrega son estados distintos/);
-  assert.match(source, /Activar uso interno de ubicación/);
-  assert.match(source, /Desactivar uso interno de ubicación/);
-  assert.match(source, /Solicitar permiso del dispositivo/);
-  assert.match(source, /value\.locationPreference === "enabled" && value\.location !== "granted"/);
-  assert.match(source, /changePreference\("location", "disabled"\)/);
+test("Settings reviews effective permissions and only offers revocation", () => {
+  const source = readFileSync("app/components/device-permission-settings.tsx", "utf8").split("export function DevicePermissionSettings")[1];
+  assert.match(source, /devicePermissionReviewStatus\(value, "location"\)/);
+  assert.match(source, /devicePermissionReviewStatus\(value, "notifications"\)/);
+  assert.match(source, /Desactivar ubicación/);
+  assert.match(source, /Desactivar notificaciones/);
+  assert.match(source, /deactivate\("location"\)/);
   assert.match(source, /disabled=\{busy\}/);
-  assert.match(source, /requestInitialLocation/);
+  assert.doesNotMatch(source, /Preferencia interna|Registro de entrega|No disponible|Solicitud guardada|requestInitialNotifications|requestInitialLocation/);
 });
 
 test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece salida instructiva", () => {
@@ -139,7 +136,7 @@ test("Home Club is persisted in onboarding and remains editable in Profile", () 
   assert.match(picker, /!choosingHomeCourse&&selectionLabel&&club&&chosen/);
   assert.match(picker, />Cambiar campo<\/button>/);
   assert.match(picker, /setChoosingHomeCourse\(true\)/);
-  assert.match(picker, /Campos relevantes del catálogo/);
+  assert.doesNotMatch(picker, /Campos relevantes del catálogo/);
   assert.doesNotMatch(picker, /Salida \/ tee inicial/);
   assert.doesNotMatch(picker, /Ratings y tees por jugador/);
   assert.match(profile, /<CatalogCoursePicker[^>]*purpose="home-club"/);

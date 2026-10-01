@@ -1269,11 +1269,13 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("storage", rehydrateFromAnotherTab);
     window.addEventListener("focus", refreshOnFocus);
     window.addEventListener("online", refreshOnFocus);
+    window.addEventListener(OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT, refreshOnFocus);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       window.removeEventListener("storage", rehydrateFromAnotherTab);
       window.removeEventListener("focus", refreshOnFocus);
       window.removeEventListener("online", refreshOnFocus);
+      window.removeEventListener(OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT, refreshOnFocus);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [identity, legalEnvironment, accountMutationStillActive]);

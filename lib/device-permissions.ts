@@ -33,6 +33,14 @@ export type DevicePermissionPreferences = {
   updatedAt: string;
 };
 
+/** Review UI never equates account intent with an effective device grant. */
+export function devicePermissionReviewStatus(value: DevicePermissionPreferences, kind: "location" | "notifications") {
+  const enabled = kind === "location" ? value.locationPreference === "enabled" : value.notificationPreference === "enabled";
+  if (!enabled || value[kind] === "denied") return kind === "location" ? "Desactivada" : "Desactivadas";
+  if (value[kind] === "granted") return kind === "location" ? "Permitida" : "Activadas";
+  return "Pendientes en este dispositivo";
+}
+
 type PermissionNavigator = { permissions?: { query?: (input: PermissionDescriptor) => Promise<PermissionStatus> } };
 type ReadableStorage = Pick<Storage, "getItem">;
 type WritableStorage = Pick<Storage, "setItem">;
@@ -287,7 +295,7 @@ function availableNotificationApi(): NotificationPermissionApi | undefined {
   return typeof globalThis.Notification === "undefined" ? undefined : globalThis.Notification;
 }
 
-export async function requestInitialNotifications(storage: ReadableStorage & WritableStorage, userId: string, notificationApi: NotificationPermissionApi | undefined = availableNotificationApi()) {
+export async function requestInitialNotifications(storage: ReadableStorage & WritableStorage, userId: string, notificationApi: NotificationPermissionApi | null | undefined = availableNotificationApi()) {
   const requestedAt = now();
   if (!notificationApi || typeof notificationApi.requestPermission !== "function") {
     const latest = readDevicePermissionPreferences(storage, userId);
@@ -334,7 +342,7 @@ export async function refreshDevicePermissionStateWithoutPrompt(
   storage: ReadableStorage & WritableStorage,
   userId: string,
   navigatorValue: Navigator = navigator,
-  notificationApi: NotificationPermissionApi | undefined = availableNotificationApi(),
+  notificationApi: NotificationPermissionApi | null | undefined = availableNotificationApi(),
   options: { shouldCommit?: () => boolean } = {},
 ) {
   const current = readDevicePermissionPreferences(storage, userId);

@@ -25,12 +25,13 @@ test("initial consent is embedded in onboarding and canonical unresolved eligibi
 test("required legal and the atomic optional bundle are explicit and separate", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
   for (const copy of ["Términos y Condiciones", "Aviso de Privacidad", "mayoría de edad", "CONSENTIMIENTOS REQUERIDOS", "FUNCIONES OPCIONALES DE THE BACKYARD"]) assert.match(consent, new RegExp(copy));
-  for (const included of ["texto o dictado", "fotos e imágenes", "launch monitor", "Memoria personal", "learning global", "Perfil público", "actividad compartida", "Uso interno de ubicación y notificaciones"]) assert.match(consent, new RegExp(included, "i"));
+  for (const included of ["texto o dictado", "fotos e imágenes", "launch monitor", "Memoria personal", "learning global", "Tu perfil nace público", "actividad compartida", "Uso interno de ubicación y notificaciones"]) assert.match(consent, new RegExp(included, "i"));
   assert.match(consent, /AUTORIZAR TODO Y CONTINUAR/);
   assert.match(consent, /ACEPTAR REQUERIDOS/);
   assert.match(consent, /NO ACEPTO/);
   assert.match(consent, /CONTINUAR SIN AUTORIZAR/);
-  assert.match(consent, /Marketing y datos financieros\/patrimoniales no forman parte/);
+  assert.match(consent, /LEGAL_EVIDENCE_DEFINITIONS\.financial_data\.statements\.accepted/);
+  assert.match(consent, /LEGAL_EVIDENCE_DEFINITIONS\.marketing\.statements\.accepted/);
   assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS/);
   assert.doesNotMatch(consent, /type="checkbox"/);
   assert.match(consent, /resolveOptionalAuthorizationBundle/);

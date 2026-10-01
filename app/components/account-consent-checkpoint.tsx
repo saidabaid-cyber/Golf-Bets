@@ -11,6 +11,7 @@ import {
 } from "../../lib/account-optional-authorizations";
 import { cacheAccountLearningConsent, ACCOUNT_LEARNING_CONSENT_HYDRATED_EVENT } from "../../lib/account-learning-consent-cache";
 import { hydrateOptionalDevicePermissionPreferences } from "../../lib/account-device-permission-preferences";
+import { LEGAL_EVIDENCE_DEFINITIONS } from "../../lib/legal-evidence";
 import { STORAGE_KEYS } from "../../lib/round-utils";
 import styles from "./account-consent-checkpoint.module.css";
 
@@ -167,10 +168,12 @@ export function InitialOnboardingConsents({
       <ul>
         <li>Backyard AI para texto o dictado, fotos e imágenes y lectura de datos de práctica o launch monitor que decidas enviar.</li>
         <li>Memoria personal privada y learning global futuro con datos desidentificados y revisados.</li>
-        <li>Perfil público y actividad compartida con la audiencia y relaciones actuales de Social.</li>
+        <li>Actividad compartida con la audiencia y relaciones actuales de Social. Tu perfil nace público; puedes cambiarlo después en Configuración.</li>
         <li>Uso interno de ubicación y notificaciones; el permiso del dispositivo y la entrega se muestran y solicitan por separado.</li>
+        <li>{LEGAL_EVIDENCE_DEFINITIONS.financial_data.statements.accepted}</li>
+        <li>{LEGAL_EVIDENCE_DEFINITIONS.marketing.statements.accepted}</li>
       </ul>
-      <p className={styles.hint}>Marketing y datos financieros/patrimoniales no forman parte de esta autorización; conservan decisiones expresas y separadas.</p>
+      <p className={styles.hint}>Apuestas, resultados y gastos, marketing y cada autorización de IA conservan evidencia separada. Puedes continuar sin autorizarlos.</p>
       {!remote && <div className={styles.actions}><button type="button" className="secondary" disabled={Boolean(busy) || !accessToken} onClick={() => { setError(""); setRetry((value) => value + 1); }}>REINTENTAR</button></div>}
       {remote && optional !== "pending" ? <><p className={styles.resolved} role="status">{optional === "accepted"
         ? isCompleteBundleResolution(remote, "authorize_all")

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { optionalBundleLegalEvidence } from "../lib/account-optional-legal-evidence";
 
 import {
   OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
@@ -30,11 +31,12 @@ function sqlOptionalAuthorizationState(action: "authorize_all" | "decline_all") 
           scope,
           policyVersion: OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope],
         })),
-        excluded: ["MARKETING", "FINANCIAL_PATRIMONIAL"],
+        excluded: [],
+        legal: optionalBundleLegalEvidence(action, REQUEST_ID, DECIDED_AT),
         projections: {
-          profileVisibility: active ? "public" : "private",
+          profileVisibility: "public",
           socialPrivacy: active ? "FRIENDS" : "PRIVATE",
-          socialProfilePrivacy: active ? "PUBLIC" : "PRIVATE",
+          socialProfilePrivacy: "PUBLIC",
           sharing: {
             enabledForFriends: active,
             rounds: active,
@@ -61,9 +63,12 @@ function sqlOptionalAuthorizationState(action: "authorize_all" | "decline_all") 
       source: active ? "onboarding_authorize_all" : "onboarding_decline_all",
       decidedAt: DECIDED_AT,
     }])),
-    profileVisibility: active ? "public" : "private",
+    legal: Object.fromEntries(["financial_data", "marketing"].map((subject) => [subject, {
+      active, status: active ? "accepted" : "rejected", policyVersion: "2026-09-08-v6", decidedAt: DECIDED_AT,
+    }])),
+    profileVisibility: "public",
     socialPrivacy: active ? "FRIENDS" : "PRIVATE",
-    socialProfilePrivacy: active ? "PUBLIC" : "PRIVATE",
+    socialProfilePrivacy: "PUBLIC",
     sharing: {
       enabledForFriends: active,
       rounds: active,

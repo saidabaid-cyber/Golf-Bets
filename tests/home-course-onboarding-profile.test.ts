@@ -252,9 +252,13 @@ async function selectCourseThroughPicker(
   await flush();
   render();
   hooks.runEffects();
-  const club = nodes(tree!).find((node) => node.type === "button" && text(node).includes(COURSE.clubName));
+  const search = nodes(tree!).find((node) => node.type === "anchored-search");
+  assert.ok(search);
+  (search.props.onChange as (query: string) => void)(COURSE.clubName);
+  render();
+  const club = nodes(tree!).find((node) => node.type === "anchored-search-option" && text(node).includes(COURSE.clubName));
   assert.ok(club, "the fetched Home Course must be selectable from the real picker");
-  (club.props.onClick as () => void)();
+  (club.props.onSelect as () => void)();
   await flush();
   render();
   hooks.runEffects();

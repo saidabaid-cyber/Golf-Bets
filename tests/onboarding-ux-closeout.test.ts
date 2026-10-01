@@ -28,7 +28,8 @@ test("betting consent is contextual and score-only stays free of betting UI", ()
   const provider = source("app/components/account-provider.tsx");
   const page = source("app/page.tsx");
   assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS|onResolveBetting/);
-  assert.doesNotMatch(consent, /apuestas/i);
+  assert.match(consent, /Apuestas, resultados y gastos/);
+  assert.match(consent, /LEGAL_EVIDENCE_DEFINITIONS\.financial_data\.statements\.accepted/);
   assert.doesNotMatch(provider, /initialBettingDecision=|onResolveBetting=/);
   assert.match(page, /const runAfterBettingConsent/);
   assert.match(page, /roundPresentation\.playMode !== "score_only"/);

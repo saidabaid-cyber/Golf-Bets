@@ -14,11 +14,6 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
   const [location,setLocation]=useState<PickerLocationState>({status:'idle'});
   const locationController=useRef<AbortController|null>(null);
   const nearby=useMemo(()=>location.status==='located'?nearestReviewedClubs(entries,location.point):[],[entries,location]);
-  const relevant=useMemo(()=>{
-    const clubs=new Map<string,Entry>();
-    for(const entry of entries){const current=clubs.get(entry.clubId);if(!current||entry.completeCards>current.completeCards)clubs.set(entry.clubId,entry);}
-    return [...clubs.values()].sort((a,b)=>Number(b.completeCards>0)-Number(a.completeCards>0)||a.clubName.localeCompare(b.clubName,'es-MX')||a.clubId.localeCompare(b.clubId)).slice(0,3);
-  },[entries]);
   const [nearbyLimit,setNearbyLimit]=useState(3);
   const visibleNearby=nearby.slice(0,nearbyLimit);
   const locating=location.status==='loading';
@@ -111,15 +106,13 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
   </section>;
   return <section className={styles.picker} aria-label="Catálogo de campos">
     {showHeading&&<h3>Campo</h3>}
-    <button type="button" className={styles.locate} disabled={locating||!token} onClick={locate}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M12 21s7-6 7-12A7 7 0 0 0 5 9c0 6 7 12 7 12ZM15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>{locating?'Buscando ubicación…':'Campos cercanos'}</button>
-    {location.status==='idle'&&<small>Usa la ubicación autorizada para ordenar campos cercanos. La búsqueda manual siempre está disponible.</small>}
+    {location.status!=='idle'&&<button type="button" className={styles.locate} disabled={locating||!token} onClick={locate}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M12 21s7-6 7-12A7 7 0 0 0 5 9c0 6 7 12 7 12ZM15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>{locating?'Buscando ubicación…':'Campos cercanos'}</button>}
     {locating&&<><p role="status">Buscando tu ubicación autorizada…</p><button type="button" className="textButton" onClick={()=>{locationController.current?.abort();setLocation({status:'idle'});}}>Cancelar búsqueda</button></>}
     {locationError&&<div role="status"><p>{locationError}</p><button type="button" className="secondary" onClick={locate}>Reintentar</button></div>}
     {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':error?'Ubicación obtenida. Reintenta cargar el catálogo.':`${reviewedClubsLocationSummary(nearby)}${location.point.accuracyMeters===undefined?'':` Precisión informada por el dispositivo: ±${location.point.accuracyMeters} m.`}`}</p>}
     {visibleNearby.map(c=><button type="button" className={`${styles.club} ${club===c.clubId?styles.clubSelected:''}`} aria-pressed={club===c.clubId} disabled={selectingCourseId!==null} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km</span>{club===c.clubId&&<em>✓ {selectingCourseId?'Guardando…':'Seleccionado'}</em>}</button>)}
     {nearby.length>visibleNearby.length&&<button type="button" className="textButton" onClick={()=>setNearbyLimit(limit=>Math.min(limit+9,nearby.length))}>Ver más campos cercanos</button>}
     {nearby.length>0&&<details className={styles.notes}><summary>Sobre las distancias</summary><small>Distancia geográfica aproximada, no de manejo, entre clubes con ubicación disponible. Algunas ubicaciones: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors (ODbL)</a>.</small></details>}
-    {!query.trim()&&!club&&relevant.length>0&&<div><p><b>Campos relevantes del catálogo</b></p><small>Primero mostramos campos con tarjeta completa; después se ordenan por nombre.</small>{relevant.map(c=><button type="button" className={styles.club} aria-pressed={false} disabled={selectingCourseId!==null} key={`relevant-${c.clubId}`} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')}</span></button>)}</div>}
     <AnchoredSearch inlineResults label="Buscar otro campo" value={query} onChange={setQuery} placeholder="Nombre, club o nombre alternativo" expanded={Boolean(query.trim())} status={loading?'Cargando catálogo…':query.trim()&&!clubs.length?'Sin coincidencias. Puedes solicitar el campo.':`${entries.length} recorridos disponibles`}>
       {clubs.slice(0,30).map(c=><AnchoredSearchOption key={c.clubId} label={`Seleccionar ${c.clubName}`} onSelect={()=>selectClub(c)}><b>{c.clubName}</b><small>{[c.city,c.stateRegion].filter(Boolean).join(', ')}</small></AnchoredSearchOption>)}
       {clubs.length>30&&<p>Refina el nombre para ver más coincidencias.</p>}

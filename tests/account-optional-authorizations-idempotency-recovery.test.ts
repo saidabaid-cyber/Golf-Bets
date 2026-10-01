@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
 import * as optionalAuthorizations from "../lib/account-optional-authorizations";
+import { optionalBundleLegalEvidence } from "../lib/account-optional-legal-evidence";
 import * as security from "../lib/backyard-ai/server/http-security";
 
 const OWNER = "11111111-1111-4111-8111-111111111111";
@@ -25,9 +26,9 @@ type RouteApi = {
 
 function projections(active: boolean) {
   return {
-    profileVisibility: active ? "public" : "private",
+    profileVisibility: "public",
     socialPrivacy: active ? "FRIENDS" : "PRIVATE",
-    socialProfilePrivacy: active ? "PUBLIC" : "PRIVATE",
+    socialProfilePrivacy: "PUBLIC",
     sharing: {
       enabledForFriends: active,
       rounds: active,
@@ -55,7 +56,7 @@ function state(action: Action | null, idempotencyKey: string | null) {
     resolved,
     eligible: !resolved,
     receipt: resolved ? {
-      // get_optional_authorization_state_v1 returns the persisted receipt id.
+      // get_optional_authorization_state_v2 returns the persisted receipt id.
       id: RECEIPT_ID,
       bundleVersion: optionalAuthorizations.OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,
       action,
@@ -65,7 +66,8 @@ function state(action: Action | null, idempotencyKey: string | null) {
           scope,
           policyVersion: optionalAuthorizations.OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope],
         })),
-        excluded: ["MARKETING", "FINANCIAL_PATRIMONIAL"],
+        excluded: [],
+        legal: optionalBundleLegalEvidence(action!, idempotencyKey!, DECIDED_AT),
         projections: projection,
       },
       decidedAt: DECIDED_AT,
@@ -76,6 +78,10 @@ function state(action: Action | null, idempotencyKey: string | null) {
       policyVersion: optionalAuthorizations.OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope],
       source: resolved ? (active ? "onboarding_authorize_all" : "onboarding_decline_all") : null,
       decidedAt: resolved ? DECIDED_AT : null,
+    }])),
+    legal: Object.fromEntries(["financial_data", "marketing"].map((subject) => [subject, {
+      active, status: resolved ? (active ? "accepted" : "rejected") : "missing",
+      policyVersion: "2026-09-08-v6", decidedAt: resolved ? DECIDED_AT : null,
     }])),
     profileVisibility: projection.profileVisibility,
     socialPrivacy: projection.socialPrivacy,
@@ -93,10 +99,10 @@ function statefulRouteHarness(options: { loseFirstCommittedResponse?: boolean } 
 
   const client = {
     rpc: async (name: string, args?: Record<string, unknown>): Promise<RpcResult> => {
-      if (name === "get_optional_authorization_state_v1") {
+      if (name === "get_optional_authorization_state_v2") {
         return { data: state(storedAction, storedIdempotencyKey), error: null };
       }
-      if (name !== "resolve_optional_authorization_bundle_v1") {
+      if (name !== "resolve_optional_authorization_bundle_v2") {
         throw new Error(`Unexpected RPC ${name}`);
       }
 
@@ -131,8 +137,12 @@ function statefulRouteHarness(options: { loseFirstCommittedResponse?: boolean } 
     exports: routeExports,
     Request,
     Response,
+    process: { env: {} },
     require: (id: string) => {
       if (id.endsWith("/account-optional-authorizations")) return optionalAuthorizations;
+      if (id.endsWith("/supabase/server")) return { getSupabaseAdmin: () => client };
+      if (id.endsWith("/runtime-environment")) return { resolveCanonicalDataEnvironment: () => "preview" };
+      if (id.endsWith("/account-optional-legal-evidence")) return { optionalBundleLegalEvidence };
       if (id.endsWith("/http-security")) return security;
       if (id.endsWith("/server-auth")) return {
         authenticatedRequest: async () => ({ ok: true, userId: OWNER, client }),
