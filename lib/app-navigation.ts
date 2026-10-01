@@ -17,7 +17,7 @@ const PLAY_TABS = new Set<AppTab>([
 ]);
 
 export function primarySectionForTab(tab: AppTab): PrimaryAppSection {
-  if (tab === "career" || tab === "stats" || tab === "history" || tab === "historyDetail" || tab === "personals") return "Carrera";
+  if (tab === "career" || tab === "stats" || tab === "history" || tab === "historyDetail") return "Carrera";
   if (tab === "coach") return "My Coach";
   if (tab === "rules") return "Reglas";
   if (PLAY_TABS.has(tab)) return "Play";
