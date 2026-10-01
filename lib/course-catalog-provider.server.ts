@@ -20,6 +20,7 @@ import { reviewedCourseDatabaseEnabled } from "./preview-database";
 import { reviewedTeeRatingIsAuthorized, type ReviewedCatalogCourse } from "./review-course-catalog";
 import { getSupabaseAdmin } from "./supabase/server";
 import { readPublishedCatalog } from "./admin-published-catalog.server";
+import { applyCatalogLifecycle, catalogLifecycle } from "./admin-catalog-lifecycle.server";
 import { reviewedCoursePublicationShape } from "./puebla-course-publication";
 
 type CourseCard = {
@@ -197,7 +198,10 @@ export async function getCourseCatalog(database: SupabaseClient | null = getSupa
     if (!publicationIsEffective({ effectiveFrom: row.effective_from, effectiveUntil: row.effective_until }, now)) return [];
     const catalog = publishedCourse(row.payload, row.version); return catalog ? [catalog] : [];
   });
-  return overlays.length ? mergeCatalog(base, overlays) : base;
+  const catalog = overlays.length ? mergeCatalog(base, overlays) : base;
+  const states = await catalogLifecycle();
+  if (!states.length) return catalog;
+  return {...catalog,courses:applyCatalogLifecycle(catalog.courses,states,"COURSE"),tees:applyCatalogLifecycle(catalog.tees,states,"TEE")};
 }
 
 export async function getCourseCatalogProvider(database: SupabaseClient | null = getSupabaseAdmin("cloud")) {

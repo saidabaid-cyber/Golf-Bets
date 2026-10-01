@@ -7,6 +7,7 @@ import { coursePayloadIssues, equipmentPayloadIssues, competitionPayloadIssues }
 import { getCourseCatalog } from "../../../../lib/course-catalog-provider.server";
 import { membershipAllows, type AdminEntityType } from "../../../../lib/admin-control-center";
 import { isOperationalAdminData } from "../../../../lib/admin-data-environment";
+import { adminCourseFamilies, adminCatalogFacets, adminListSummary, filterAdminCatalog } from "../../../../lib/admin-operations";
 export const dynamic = "force-dynamic";
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "cache-control": "private, no-store" } });
 export async function GET(request: NextRequest) {
@@ -24,17 +25,26 @@ export async function GET(request: NextRequest) {
   }
   if(section==="equipment"||section==="balls"){
     const items=await simpleEquipment(access.memberships,section==="balls");const q=(request.nextUrl.searchParams.get("q")||"").toLowerCase();
+    const id=request.nextUrl.searchParams.get("id");
+    if(id)return json({item:items.find(item=>item.id===id)||null});
     const drafts=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload").in("entity_type",section==="balls"?["BALL"]:["CLUB_EQUIPMENT","SHAFT"]).in("status",["DRAFT","REVIEWED","VERIFIED"]).order("created_at",{ascending:false}).limit(40);
     if(drafts.error)return json({error:"No pudimos cargar los borradores."},503);
-    return json({...adminCatalogPage(items,q,state,offset),drafts:(drafts.data||[]).filter(isOperationalAdminData)});
+    const filtered=filterAdminCatalog(items,Object.fromEntries(["brand","category","year"].map(key=>[key,request.nextUrl.searchParams.get(key)||""])));
+    const page=adminCatalogPage(filtered,q,state,offset);
+    return json({...page,items:page.items.map(adminListSummary),facets:adminCatalogFacets(items),drafts:(drafts.data||[]).filter(isOperationalAdminData)});
   }
   if (section === "courses") {
     const items = await simpleCourses(access.client, access.memberships);
     const id = request.nextUrl.searchParams.get("id"); const query=(request.nextUrl.searchParams.get("q") || "").toLowerCase();
-    if (id) return json({ item: items.find(i=>i.id===id) || null });
+    if (id) {
+      const item=items.find(i=>i.id===id);
+      const family=adminCourseFamilies(items).find(group=>(group.values.family as {id:string}[]).some(child=>child.id===id));
+      return json({item:item?{...item,values:{...item.values,family:family?.values.family}}:null});
+    }
     const drafts=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload").eq("entity_type","COURSE").in("status",["DRAFT","REVIEWED","VERIFIED"]).order("created_at",{ascending:false}).limit(40);
     if(drafts.error)return json({error:"No pudimos cargar los borradores."},503);
-    return json({ ...adminCatalogPage(items,query,state,offset), drafts:(drafts.data||[]).filter(isOperationalAdminData) });
+    const page=adminCatalogPage(adminCourseFamilies(items),query,state,offset);
+    return json({ ...page,items:page.items.map(adminListSummary), drafts:(drafts.data||[]).filter(isOperationalAdminData) });
   }
   if (section === "users") {
     const result = await access.client.rpc("admin_user_directory_v2", { search_text: search.slice(0,160), page_offset: Number(offset||0) });
@@ -49,6 +59,15 @@ export async function POST(request: NextRequest) {
   const access=await requireAdminMode(request,section as SimpleAdminModule);
   if (!access.ok) return json({error:access.error,code:access.code},access.status);
   try {
+    if(["inspect","archive-record","activate-record","delete-record"].includes(String(body.operation))){
+      const allowed:Record<string,string[]>={courses:["COURSE","TEE"],equipment:["CLUB_EQUIPMENT","SHAFT"],balls:["BALL"],competitions:["COMPETITION"]};
+      if(!allowed[section]?.includes(String(body.kind))||typeof body.id!=="string"||body.id.length>240)throw new Error("Registro no válido.");
+      const operation=String(body.operation).replace("-record","");
+      if(operation!=="inspect"&&body.confirmed!==true)throw new Error("Confirma el cambio antes de continuar.");
+      const result=await access.client.rpc("admin_catalog_lifecycle_v3",{kind:body.kind,item_id:body.id,operation,change_reason:body.reason||null});
+      if(result.error)throw new Error("No pudimos completar el cambio. El registro y sus históricos se conservan.");
+      return json({item:result.data});
+    }
     if(body.operation==="draft"&&section==="competitions"){
       const values=body.values as Record<string,unknown>;if(!values||typeof values!=="object"||Array.isArray(values))throw new Error("Revisa la competición.");
       const id=typeof body.id==="string"&&body.id?body.id:crypto.randomUUID();
