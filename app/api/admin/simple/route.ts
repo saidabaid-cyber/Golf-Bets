@@ -14,9 +14,9 @@ export async function GET(request: NextRequest) {
   const access = await requireAdminMode(request, module as SimpleAdminModule | undefined);
   if (!access.ok) return json({ error: access.error, code: access.code }, access.status);
   if (!module) return json({ role: access.role, modules: access.modules });
-  if(module==="equipment"){
-    const items=await simpleEquipment(access.memberships);const q=(request.nextUrl.searchParams.get("q")||"").toLowerCase();
-    const drafts=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload").in("entity_type",["CLUB_EQUIPMENT","SHAFT"]).in("status",["DRAFT","REVIEWED","VERIFIED"]).order("created_at",{ascending:false}).limit(40);
+  if(module==="equipment"||module==="balls"){
+    const items=await simpleEquipment(access.memberships,module==="balls");const q=(request.nextUrl.searchParams.get("q")||"").toLowerCase();
+    const drafts=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload").in("entity_type",module==="balls"?["BALL"]:["CLUB_EQUIPMENT","SHAFT"]).in("status",["DRAFT","REVIEWED","VERIFIED"]).order("created_at",{ascending:false}).limit(40);
     if(drafts.error)return json({error:"No pudimos cargar los borradores."},503);
     return json({items:items.filter(i=>`${i.title} ${i.subtitle}`.toLowerCase().includes(q)),drafts:(drafts.data||[]).filter(isOperationalAdminData)});
   }
@@ -39,10 +39,10 @@ export async function POST(request: NextRequest) {
   const access=await requireAdminMode(request,module as SimpleAdminModule);
   if (!access.ok) return json({error:access.error,code:access.code},access.status);
   try {
-    if(body.operation==="draft"&&module==="equipment"){
-      const kind=body.kind as AdminEntityType;if(!["CLUB_EQUIPMENT","SHAFT"].includes(kind)||!body.values||typeof body.values!=="object"||Array.isArray(body.values))throw new Error("Revisa el equipo seleccionado.");
+    if(body.operation==="draft"&&(module==="equipment"||module==="balls")){
+      const kind=body.kind as AdminEntityType;if(!(module==="balls"?["BALL"]:["CLUB_EQUIPMENT","SHAFT"]).includes(kind)||!body.values||typeof body.values!=="object"||Array.isArray(body.values))throw new Error("Revisa el equipo seleccionado.");
       const id=typeof body.id==="string"&&body.id?body.id:`equipment-${crypto.randomUUID()}`;
-      const existing=(await simpleEquipment(access.memberships)).find(i=>i.id===id&&i.kind===kind);
+      const existing=(await simpleEquipment(access.memberships,module==="balls")).find(i=>i.id===id&&i.kind===kind);
       if(body.id&&!existing)return json({error:"Este equipo no está disponible para tu cuenta."},403);
       const payload=buildEquipmentPayload(existing?.values||{id},body.values as Record<string,unknown>,kind);const issues=equipmentPayloadIssues(payload,kind,id);if(issues.length)throw new Error(issues.join(" "));
       const result=await access.client.rpc("admin_create_revision_v1",{target_entity_type:kind,target_entity_id:id,target_scope_type:"CATALOG",target_scope_id:"equipment",target_payload:{...payload,dataEnvironment:"PRODUCTION"},target_source_type:payload.sourceType,target_source_name:payload.sourceName,target_source_url:payload.sourceUrl,target_provenance_status:payload.verifiedAt?"VERIFIED":"REPORTED",target_verified_at:payload.verifiedAt,target_confidence:null,target_notes:null});
