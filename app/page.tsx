@@ -117,6 +117,7 @@ import { useBackyardIndexPreference } from "./components/use-backyard-index-pref
 import { useGhinReadOnlyProfile } from "./components/use-ghin-read-only-profile";
 import { selectedHandicapIndex } from "../lib/handicap-source";
 import { HomeDashboard, type ActiveRoundSummary } from "./components/home-dashboard";
+import { CareerHub } from "./components/career-hub";
 
 import { ModalShell } from './components/modal-shell';
 import { roundBetResult } from '../lib/round-betting-boundary';
@@ -463,6 +464,7 @@ function GolfBetsApp() {
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const [profileCompletionTarget, setProfileCompletionTarget] = useState<CompletionSection | null>(null);
   const [profileRootRevision, setProfileRootRevision] = useState(0);
+  const [careerView, setCareerView] = useState<"summary" | "trophy">("summary");
   const [openAiPrivacySettings, setOpenAiPrivacySettings] = useState(false);
   const [accountSection, setAccountSection] = useState<AccountSettingsSection>("account");
   const openAccountSettings = (section: AccountSettingsSection = "account") => { setAccountSection(section); setTab("account"); };
@@ -3757,11 +3759,11 @@ function GolfBetsApp() {
       onOpenRounds={() => setTab("history")}
       onOpenFriends={() => { setSocialInitialView("friends"); setTab("social"); }}
       onPrivacy={() => openAccountSettings("privacy")}
-      onOpenAchievements={() => setTab("career")}
+      onOpenAchievements={() => { setCareerView("trophy"); setTab("career"); }}
     />}
     {showPageBack && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
-    {tab === "career" && <section className="navigationEmpty"><h2>Tu historia como jugador</h2><p>Progreso, estadísticas y rondas guardadas.</p><button type="button" className="secondary" onClick={() => setTab("stats")}>Estadísticas</button><button type="button" className="textButton" onClick={() => setTab("history")}>Historial</button></section>}
+    {tab === "career" && <CareerHub displayName={identity.displayName} avatarUrl={identity.avatarUrl} userId={identity.userId} index={accountIndex} insights={betaGolfInsights} rounds={statisticsHistory} ready={statisticsReady} view={careerView} onView={setCareerView} onOpenStats={() => setTab("stats")} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} />}
     {tab === "coach" && <section className="navigationEmpty"><h2>Mejora cada día</h2><p>Tu práctica y fitting, con los módulos de The Backyard.</p><button type="button" className="secondary" onClick={() => { setProfileCompletionTarget("fitting"); setProfileFocus("equipment"); setTab("profile"); }}>Ball Fit</button></section>}
 
     {tab === "play" && <PlayHub
