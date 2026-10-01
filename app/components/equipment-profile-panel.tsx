@@ -46,6 +46,7 @@ import { mergeBallFitSessionCatalog } from "../../lib/ball-fit-session";
 import { BottomBackAction } from "./bottom-back-action";
 
 type EquipmentProfilePanelProps = {
+  initialLaunchMonitor?: boolean;
   userId: string;
   accessToken: string | null;
   defaultHandicap: number | null;
@@ -172,7 +173,7 @@ export function EquipmentProfileSummary({ userId, accessToken, onOpen }: { userI
   </section>;
 }
 
-export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, defaultHandicapSource, defaultHandedness, ballFitDefaults, onBackToProfile, onOpenPrivacy, onFlowDepthChange, initialSection }: EquipmentProfilePanelProps) {
+export function EquipmentProfilePanel({ initialLaunchMonitor = false, userId, accessToken, defaultHandicap, defaultHandicapSource, defaultHandedness, ballFitDefaults, onBackToProfile, onOpenPrivacy, onFlowDepthChange, initialSection }: EquipmentProfilePanelProps) {
   const { profile, status, message, update, updateConfirmed, retry, resolveConflict, recoverLocalProfile } = useEquipmentProfile(userId, accessToken);
   const [clubEditor, setClubEditor] = useState<PlayerClub | "new" | null>(null);
   const [newClubCategory, setNewClubCategory] = useState<PlayerClub["category"] | null>(null);
@@ -351,7 +352,7 @@ export function EquipmentProfilePanel({ userId, accessToken, defaultHandicap, de
     setDeleteIntent(null);
   }
 
-  if (fitOpen) return <div className={styles.fullPageFlow} data-equipment-screen="ball-fit"><section className={styles.editorPage}><BallFitWizard userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} savedInput={restoredFit?.input} currentBall={currentBall} catalog={fitSessionCatalog.length ? fitSessionCatalog : ballCatalog.items} sessionId={fitSessionId} onCancel={() => { setFitSessionCatalog([]); setFitSessionId(null); setFitOpen(false); }} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>;
+  if (fitOpen) return <div className={styles.fullPageFlow} data-equipment-screen="ball-fit"><section className={styles.editorPage}><BallFitWizard initialLaunchMonitor={initialLaunchMonitor} userId={userId} accessToken={accessToken} defaultHandicap={defaultHandicap} defaultHandicapSource={defaultHandicapSource} profileDefaults={ballFitDefaults} savedInput={restoredFit?.input} currentBall={currentBall} catalog={fitSessionCatalog.length ? fitSessionCatalog : ballCatalog.items} sessionId={fitSessionId} onCancel={() => { setFitSessionCatalog([]); setFitSessionId(null); setFitOpen(false); }} onCurrentBallSelect={selectFitCurrentBall} onComplete={completeFit} onOpenPrivacy={onOpenPrivacy} /></section></div>;
   if (savedFitOpen && profile.lastBallFit) return <div className={styles.fullPageFlow} data-equipment-screen="saved-ball-fit"><section className={styles.editorPage}><button type="button" className={styles.pageBack} onClick={closeSavedFit}>← Volver a Mi Bolsa</button><div className={styles.wizardHeader}><div><div className="eyebrow">RESULTADO GUARDADO</div><h2>Tu mejor grupo de bolas</h2>{restoredFit && <p>{BALL_FIT_HANDICAP_LABELS[restoredFit.input.handicapSource || "UNKNOWN"]}{restoredFit.input.handicap === null ? "" : `: ${restoredFit.input.handicap}`}</p>}</div></div>{restoredFit ? <BallFitResults result={restoredFit.result} catalog={ballCatalog.items} current={restoredFit.input.currentBallId ? ballCatalog.items.find((ball) => ball.id === restoredFit.input.currentBallId) || null : null} /> : <SavedBallFitComparison summary={profile.lastBallFit} catalog={ballCatalog.items} currentBall={currentBall} />}<BottomBackAction label="← Volver a Mi Bolsa" onBack={closeSavedFit} /></section></div>;
   if (wedgeCollectionOpen) return <div className={styles.fullPageFlow} data-equipment-screen="wedge-collection">
     <WedgeCollectionEditor userId={userId} catalog={clubCatalog.items} shafts={shaftCatalog.items} wedges={currentWedges} defaultHandedness={defaultHandedness} onBack={() => setWedgeCollectionOpen(false)} onSave={saveWedge} onDelete={deleteWedge} onManageDistance={(club) => { setWedgeCollectionOpen(false); setClubDetailId(club.id); }} />

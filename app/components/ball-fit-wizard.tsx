@@ -154,6 +154,7 @@ function BallFitIntroHero({ currentBall }: { currentBall: PlayerBall | null }) {
 }
 
 type BallFitWizardProps = {
+  initialLaunchMonitor?: boolean;
   userId: string;
   accessToken?: string | null;
   /** Both current entry points are account-only, even during token refresh. */
@@ -180,7 +181,7 @@ type BallFitResultChoice =
   | { action: "RECOMMENDATION"; catalogBallId: string }
   | null;
 
-export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = true, defaultHandicap, defaultHandicapSource, profileDefaults, savedInput, currentBall, catalog, sessionId = null, onCancel, onCurrentBallSelect, onComplete, onOpenPrivacy }: BallFitWizardProps) {
+export function BallFitWizard({ initialLaunchMonitor = false, userId, accessToken, requiresRemoteConsent = true, defaultHandicap, defaultHandicapSource, profileDefaults, savedInput, currentBall, catalog, sessionId = null, onCancel, onCurrentBallSelect, onComplete, onOpenPrivacy }: BallFitWizardProps) {
   const [input, setInput] = useState<BallFitInput>(() => savedInput?.userId === userId
     ? structuredClone(savedInput)
     : defaultInput(userId, defaultHandicap, currentBall?.catalogBallId || null, profileDefaults, defaultHandicapSource));
@@ -196,7 +197,7 @@ export function BallFitWizard({ userId, accessToken, requiresRemoteConsent = tru
   const [calculating, setCalculating] = useState(false);
   const [ballQuery, setBallQuery] = useState("");
   const [ballSearchOpen, setBallSearchOpen] = useState(false);
-  const [launchOpen, setLaunchOpen] = useState(false);
+  const [launchOpen, setLaunchOpen] = useState(Boolean(initialLaunchMonitor));
   const [launchCaptureCompleted, setLaunchCaptureCompleted] = useState(false);
   const handicapChoiceTouched = useRef(false);
   useViewScrollReset(`${step}:${draftChoicePending}:${hydrated}:${launchOpen}`);
