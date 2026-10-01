@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminMode } from "../../../../lib/admin-mode.server";
 import { simpleCourses } from "../../../../lib/admin-simple-catalog.server";
 import { membershipAllows } from "../../../../lib/admin-control-center";
+import { physicalCourseOperationHoles } from "../../../../lib/admin-course-operation-references";
 export const dynamic="force-dynamic";
 const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{"cache-control":"private, no-store"}});
 export async function GET(request:NextRequest){
@@ -26,8 +27,15 @@ export async function POST(request:NextRequest){
     const values=body.values||{};const name=String(values.name||"").trim();const reason=String(body.reason||"").trim();
     if(body.operation==="draft"){
       if(!name||name.length>200||!String(values.sourceName||"").trim())throw new Error("Indica un nombre y fuente de información.");
-      const baseHoles=course.values.holes as Record<string,unknown>[];const baseTees=course.values.tees as Record<string,unknown>[];
+      let baseHoles=course.values.holes as Record<string,unknown>[];const baseTees=course.values.tees as Record<string,unknown>[];
+      if(body.kind==="profiles"||body.kind==="configurations"){
+        const physical=await access.client.from("golf_holes").select("id,course_id,hole_number,par").eq("course_id",courseId);
+        if(physical.error)throw new Error("No pudimos verificar los hoyos físicos del recorrido.");
+        baseHoles=physicalCourseOperationHoles(courseId,Number((course.values.course as Record<string,unknown>).holes),baseHoles,physical.data||[]);
+      }
       if(body.kind==="profiles"){
+        const physicalTees=await access.client.from("golf_course_tees").select("id").eq("course_id",courseId);
+        if(physicalTees.error||!baseTees.length||baseTees.some(tee=>!physicalTees.data?.some(row=>row.id===tee.id)))throw new Error("Este recorrido necesita sus tees físicos registrados antes de crear tarjetas.");
         const result=await access.client.rpc("admin_create_scorecard_profile_v1",{profile_payload:{courseId,name,provenance:"ADMIN_VERIFIED",sourceProvider:values.sourceName,verifiedAt:values.verifiedAt||null,evidence:[{sourceName:values.sourceName,sourceUrl:values.sourceUrl||null}],tees:baseTees.map(t=>({teeId:t.id,ratingGender:t.category||"UNSPECIFIED",par:t.par||null,courseRating:t.rating||null,slopeRating:t.slope||null,totalYards:t.totalYards||null})),holes:baseHoles.map(h=>({holeId:h.id,holeNumber:h.holeNumber,strokeIndex:h.strokeIndex,ratingGender:"UNSPECIFIED"})),reason:"Nueva versión visual de tarjeta"}});
         if(result.error)throw new Error("No se guardó la tarjeta. Comprueba que el campo esté publicado y completo.");return json({item:result.data},201);
       }
