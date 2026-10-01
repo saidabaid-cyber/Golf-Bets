@@ -242,7 +242,7 @@ test("account destination remounts independently of retained profile component s
 });
 test("Account owns its Regresar pair instead of inheriting the generic app-shell button", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(page, /\["welcome", "more", "play", "groups", "social", "profile", "account", "round"\]/);
+  assert.match(page, /!isPrimaryTab\(tab\) && !\(\["groups", "social", "account", "round"\] as AppTab\[\]\)\.includes\(tab\)/);
   assert.match(page, /view="account"[\s\S]{0,1800}onPageBack=\{handlePageBack\}/);
 });
 test("QR keeps sharing and clipboard but no longer renders a technical Preview URL", () => {

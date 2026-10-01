@@ -102,19 +102,20 @@ test("fallo de consentimiento remoto muestra causa y garantiza que no hubo enví
   assert.match(setup, /!consentInfrastructureNotice && !remoteConsentUnavailable/);
 });
 
-test("Más concentra herramientas y ayuda sin duplicar Configuración de Perfil", () => {
-  const more = readFileSync("app/components/more-hub.tsx", "utf8");
+test("former More functions remain accessible in their dedicated sections", () => {
+  const profile = readFileSync("app/components/profile-account-panel.tsx", "utf8");
+  const play = readFileSync("app/components/play-hub.tsx", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
-  for (const label of ["Campos", "Mi Bolsa", "Handicap / GHIN", "Fitting", "GPS / Hole Map", "Ayuda"]) {
-    assert.match(more, new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
-  }
-  assert.doesNotMatch(more, /title: "Perfil"/);
-  assert.match(page, /onOpenHelp=\{\(\)\s*=>\s*requestFeedback\(\)\}/);
-  assert.match(page, /onOpenRules=\{openRulesForRound\}/);
-  assert.doesNotMatch(more, /Configuración adicional|onOpenSettings/);
+  assert.doesNotMatch(page, /<MoreHub|tab === "more"/);
+  assert.match(profile, /Mi Bolsa/);
+  assert.match(profile, /HandicapSourceChoices/);
+  assert.match(profile, /Soporte/);
+  assert.match(profile, /requestFeedback\(\)/);
+  assert.match(play, /Campos/);
+  assert.match(play, /GPS \/ Hole Map/);
+  assert.match(page, /openCoachFitting/);
   assert.doesNotMatch(page, /onOpenSettings/);
 });
-
 test("plantillas de grupo conservan Foursome Match y las reglas explícitas de animales", () => {
   const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
   assert.match(editor, /<option value="match" disabled=\{value\.roundDefaults\.roundHoles !== 18\}>Match · Primera \/ Segunda \/ Total<\/option>/);

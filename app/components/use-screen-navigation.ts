@@ -14,11 +14,12 @@ export function useScreenNavigation() {
   const guard = useRef<NavigationGuard>((next) => next);
   useEffect(() => {
     const pop = () => {
-      const requested = window.history.state?.backyardTab as AppTab | undefined;
-      const target = guard.current(requested || screenFromSearch(window.location.search));
-      if (target !== requested) window.history.replaceState({ ...window.history.state, backyardTab: target }, "", screenHref(target, window.location.search));
-      trail.current.pop();
+      const stateTab = window.history.state?.backyardTab as string | undefined;
+      const requested = screenFromSearch(stateTab ? `?screen=${encodeURIComponent(stateTab)}` : window.location.search);
+      const target = guard.current(requested);
+      window.history.replaceState({ ...window.history.state, backyardTab: target }, "", screenHref(target, window.location.search));
       if (target === current.current) return;
+      trail.current.pop();
       current.current = target;
       showTab(target);
     };

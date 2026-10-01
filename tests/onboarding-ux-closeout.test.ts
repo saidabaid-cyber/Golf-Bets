@@ -24,9 +24,9 @@ test("onboarding requires one of the two final index sources", () => {
 });
 
 test("betting consent is contextual and score-only stays free of betting UI", () => {
+  const page = source("app/page.tsx");
   const consent = source("app/components/account-consent-checkpoint.tsx");
   const provider = source("app/components/account-provider.tsx");
-  const page = source("app/page.tsx");
   assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS|onResolveBetting/);
   assert.match(consent, /Apuestas, resultados y gastos/);
   assert.match(consent, /LEGAL_EVIDENCE_DEFINITIONS\.financial_data\.statements\.accepted/);
@@ -39,14 +39,14 @@ test("betting consent is contextual and score-only stays free of betting UI", ()
 test("profile progress is actionable, optional-aware and removes No aplica", () => {
   const ring = source("app/components/profile-completion-ring.tsx");
   const panel = source("app/components/profile-account-panel.tsx");
-  const page = source("app/page.tsx");
   assert.match(ring, /Completa tu perfil/);
   assert.match(ring, /percent !== 100/);
   assert.match(ring, /onOpen\(section\.id\)/);
   assert.doesNotMatch(ring, /No aplica|mismo peso|not_applicable/);
   for (const target of ["equipment", "ball", "fitting"]) assert.match(panel, new RegExp(`completionTarget === "${target}"`));
   assert.match(panel, /setCompletionEditTarget\(completionTarget\)/);
-  assert.match(page, /setProfileCompletionTarget\(section\)/);
+  assert.match(panel, /<ProfileCompletionRing/);
+  assert.match(panel, /setCompletionEquipment\(section\)/);
   const completion = source("lib/profile-completion.ts");
   const route = source("app/api/account/completion/route.ts");
   assert.match(completion, /input\.indexValue/);

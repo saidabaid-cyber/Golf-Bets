@@ -24,7 +24,7 @@ test("group save dialog shares one close handler", () => {
 });
 
 test("secondary social-feed views share their top and bottom activity handler", () => {
-  assert.match(socialFeed, /function backToActivity\(\) \{ open\("activity"\); \}/);
+  assert.match(socialFeed, /function backToActivity\(\) \{ if \(onHome\) onHome\(\); else open\("activity"\); \}/);
   assert.match(socialFeed, /view !== "activity" && view !== "qr" && view !== "scan" && <button[^>]*onClick=\{backToActivity\}>\u2190 Feed de amigos<\/button>/);
   assert.match(socialFeed, /view !== "activity" && view !== "qr" && view !== "scan" && <BottomBackAction label="\u2190 Feed de amigos" onBack=\{backToActivity\} \/>/);
 });

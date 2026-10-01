@@ -94,7 +94,8 @@ test("Cuenta permite activar avisos internos sin prometer push del dispositivo",
 });
 
 test("Social separa feed de amigos y avisos; lectura persistida y preferencias explícitas", () => {
-  assert.match(social, /friendsOnly/);
+  assert.match(readFileSync("app/components/home-dashboard.tsx", "utf8"), /friendsOnly/);
+  assert.doesNotMatch(social, /<CloudSocialActivity/);
   assert.match(social, /Notificaciones/);
   assert.match(social, /SocialSharingPreferences/);
   assert.doesNotMatch(social, /localStorage/);

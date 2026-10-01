@@ -9,7 +9,7 @@ test("My Coach opens the same fitting and launch monitor through the existing eq
   const fit = readFileSync("app/components/ball-fit-wizard.tsx", "utf8");
   assert.match(page, /onBallFit=\{\(\) => openCoachFitting\(false\)\}/);
   assert.match(page, /onLaunchMonitor=\{\(\) => openCoachFitting\(true\)\}/);
-  assert.match(page, /<ProfileAccountPanel initialLaunchMonitor=\{launchMonitorEntry\}/);
+  assert.match(page, /<ProfileAccountPanel[^>]*initialLaunchMonitor=\{launchMonitorEntry\}/);
   assert.match(profile, /<EquipmentProfilePanel initialLaunchMonitor=\{initialLaunchMonitor\}/);
   assert.match(equipment, /<BallFitWizard initialLaunchMonitor=\{initialLaunchMonitor\}/);
   assert.match(fit, /value=\{input.launchMonitorSession\}/);

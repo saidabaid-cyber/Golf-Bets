@@ -62,8 +62,9 @@ test('saved permissions checkpoint resumes at the optional decision instead of s
   const restored=normalizeBetaOnboardingProgress(legacy,'A','2026-09-22T00:00:00.000Z');
   assert.equal(restored?.status,'in_progress');assert.equal(restored?.step,'permissions');assert.equal(restored?.completedSteps.includes('permissions'),false);
 });
-test('one completion calculation feeds Home and Profile, visual progress disappears at 100',()=>{
-  for(const path of ['app/page.tsx','app/components/profile-account-panel.tsx']) assert.match(readFileSync(path,'utf8'),/ProfileCompletionRing/);
+test('one completion calculation feeds Profile through the avatar, visual progress disappears at 100',()=>{
+  assert.match(readFileSync('app/components/profile-account-panel.tsx','utf8'),/ProfileCompletionRing/);
+  assert.match(readFileSync('app/page.tsx','utf8'),/onProfile=\{openProfileRoot\}/);
   const ring=readFileSync('app/components/profile-completion-ring.tsx','utf8');
   assert.match(ring,/api\/account\/completion/);assert.match(ring,/percent !== 100/);
 });
