@@ -23,6 +23,8 @@ async function database(withSuper=true) {
   await db.exec(migration("20261001063622_admin_mode_v2_visual_publication.sql"));
   await db.exec("create table public.feedback_requests(id uuid primary key,request_status text not null default 'NEW' check(request_status in ('NEW','IN_REVIEW','RESOLVED','REJECTED')),data_environment text default 'PRODUCTION',updated_at timestamptz default now(),resolved_at timestamptz)");
   await db.exec(migration("20261001064607_admin_mode_v2_requests_security.sql"));
+  await db.exec("alter table feedback_requests add column title text,add column description text,add column contextual_category text,add column created_at timestamptz default now()");
+  await db.exec(migration("20261001141820_admin_mode_v2_isolated_qa_requests.sql"));
   await db.exec("create table admin_catalog_revisions(id uuid primary key default gen_random_uuid(),entity_type text,entity_id text,status text,payload jsonb,version int); grant select,insert on admin_catalog_revisions to authenticated; alter table admin_catalog_revisions enable row level security; create policy test_existing_scope on admin_catalog_revisions for all to authenticated using(private.admin_has_scope_v1(entity_type,'GLOBAL',null,'READ')) with check(private.admin_has_scope_v1(entity_type,'GLOBAL',null,'CREATE_DRAFT'))");
   for(const table of ['course_configurations','course_configuration_holes','course_configuration_tee_holes','course_configuration_ratings','course_local_rule_sets','course_local_rules','competition_definitions','competition_rule_sets','competition_rules','admin_import_jobs','admin_import_rows','admin_request_drafts','course_scorecard_profiles','course_scorecard_profile_tees','course_scorecard_profile_holes'])await db.exec(`create table ${table}(id uuid)`);
   await db.exec("alter table competition_rule_sets add column competition_id uuid,add column version int; alter table competition_rules add column rule_set_id uuid,add column category text,add column title text,add column engine_contract jsonb");
@@ -69,6 +71,30 @@ test("published visual metadata persists across sessions; draft, critical payloa
     await db.exec("reset role;set role anon");const published=await db.query<{values:{title:string}}>("select * from player_visual_content_v2()");assert.equal(published.rows[0].values.title,"Skins del club");
     await assert.rejects(db.query("update admin_visual_versions set payload='{}'"),/permission denied/);
     await act(db,adminId);await assert.rejects(db.query("select admin_save_visual_draft_v2('BET','skins',$1,0)",[JSON.stringify({title:"Stale",active:true,order:1,icon:"⛳"})]),/STALE_CONTENT/);
+  }finally{await db.close();}
+});
+
+test("isolated QA requests require an operator binding and never expose synthetic fixtures or permit PLAYER access",async()=>{
+  const db=await database();
+  const qa="30000000-0000-4000-8000-000000000003",synthetic="30000000-0000-4000-8000-000000000004";
+  try{
+    await db.query("insert into feedback_requests(id,data_environment) values($1,'QA'),($2,'SYNTHETIC')",[qa,synthetic]);
+    await act(db,adminId);
+    assert.equal((await db.query<{queue:{items:unknown[]}}>("select admin_simple_request_queue_v2() as queue")).rows[0].queue.items.length,0);
+    await assert.rejects(db.query("select admin_review_request_v2($1,'NEW','APPROVED','Revisado')",[qa]),/REQUEST_NOT_AVAILABLE/);
+    await assert.rejects(db.query("insert into private.admin_mode_v2_qa_binding(project_ref,enabled,reason) values('aaaaaaaaaaaaaaaaaaaa',true,'Test aislado')"),/permission denied/);
+    await db.exec("reset role;set role service_role");
+    await db.query("insert into private.admin_mode_v2_qa_binding(project_ref,enabled,reason) values('aaaaaaaaaaaaaaaaaaaa',true,'Operador verificó aislamiento')");
+    await act(db,playerId);await assert.rejects(db.query("select admin_simple_request_queue_v2()"),/ADMIN_REQUIRED/);
+    await act(db,adminId);
+    const queue=(await db.query<{queue:{isolatedQa:boolean;items:{id:string}[]}}>("select admin_simple_request_queue_v2() as queue")).rows[0].queue;
+    assert.equal(queue.isolatedQa,true);assert.deepEqual(queue.items.map(i=>i.id),[qa]);
+    await assert.rejects(db.query("select admin_review_request_v2($1,'NEW','APPROVED','Revisado')",[synthetic]),/REQUEST_NOT_AVAILABLE/);
+    await db.query("select admin_review_request_v2($1,'NEW','APPROVED','Revisión aislada')",[qa]);
+    await db.exec("reset role");
+    assert.equal((await db.query<{request_status:string}>("select request_status from feedback_requests where id=$1",[qa])).rows[0].request_status,"APPROVED");
+    assert.equal((await db.query<{count:number}>("select count(*)::int as count from admin_audit_log where action='CONFIGURE_ISOLATED_QA_REQUESTS'")).rows[0].count,1);
+    assert.equal((await db.query<{count:number}>("select count(*)::int as count from admin_audit_log where action='REVIEW_REQUEST'")).rows[0].count,1);
   }finally{await db.close();}
 });
 test("real Postgres role changes persist for another session, audit once and reject stale/reused payloads", async () => {
