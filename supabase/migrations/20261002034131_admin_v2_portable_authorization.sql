@@ -73,7 +73,7 @@ for each row execute function private.admin_guard_competition_engine_v2();
 -- Preserve the existing permissive ownership policies. These restrictions
 -- separate global catalog administration from a player's private manual rows.
 -- They grant no new personal operations and never authorize by email/JWT metadata.
-do $$ declare relation text; personal text; restriction text; begin
+do $$ declare relation text; personal text; global_resource text; restriction text; begin
  foreach relation in array array['golf_clubs','golf_courses','golf_course_tees','golf_holes','golf_tee_hole_yardages','golf_hole_geo_features','golf_club_catalog','golf_ball_catalog','golf_shaft_catalog','golf_club_brands','golf_ball_brands','golf_shaft_brands'] loop
   if to_regclass('public.'||relation) is not null then
    personal:=case
@@ -84,7 +84,14 @@ do $$ declare relation text; personal text; restriction text; begin
     when relation='golf_hole_geo_features' then
      'golf_hole_geo_features.provider=''USER_MANUAL'' and exists(select 1 from public.golf_holes h join public.golf_courses c on c.id=h.course_id where h.id=golf_hole_geo_features.hole_id and c.created_by=(select auth.uid()) and c.provider=''USER_MANUAL'' and c.visibility=''PRIVATE'')'
     else 'false' end;
-   restriction:=format('private.account_data_access_allowed() and (private.admin_application_role_v2()=''SUPER_ADMIN'' or (%s))',personal);
+   global_resource:=case
+    when relation in ('golf_clubs','golf_courses') then 'not(provider=''USER_MANUAL'' and visibility=''PRIVATE'')'
+    when relation in ('golf_course_tees','golf_holes','golf_tee_hole_yardages') then
+     format('not exists(select 1 from public.golf_courses c where c.id=%I.course_id and c.provider=''USER_MANUAL'' and c.visibility=''PRIVATE'')',relation)
+    when relation='golf_hole_geo_features' then
+     'not exists(select 1 from public.golf_holes h join public.golf_courses c on c.id=h.course_id where h.id=golf_hole_geo_features.hole_id and c.provider=''USER_MANUAL'' and c.visibility=''PRIVATE'')'
+    else 'true' end;
+   restriction:=format('private.account_data_access_allowed() and ((private.admin_application_role_v2()=''SUPER_ADMIN'' and (%s)) or (%s))',global_resource,personal);
    execute format('drop policy if exists admin_v2_base_insert on public.%I',relation);
    execute format('drop policy if exists admin_v2_base_update on public.%I',relation);
    execute format('drop policy if exists admin_v2_preserve_history on public.%I',relation);
@@ -130,6 +137,35 @@ revoke all on function private.admin_global_course_revision_guard_v2() from publ
 drop trigger if exists admin_global_course_revision_guard_v2 on public.admin_catalog_revisions;
 create trigger admin_global_course_revision_guard_v2 before insert or update on public.admin_catalog_revisions
 for each row execute function private.admin_global_course_revision_guard_v2();
+
+-- Direct administrative configuration writes must obey the same global/private
+-- boundary. A player's pre-existing RLS path is unchanged by these triggers.
+create or replace function private.admin_global_course_operation_guard_v2() returns trigger
+language plpgsql security definer set search_path='' as $$
+declare row_data jsonb:=to_jsonb(new); course_key text; parent_key text;
+begin
+ if private.admin_application_role_v2()='PLAYER' then return new; end if;
+ course_key:=row_data->>'course_id';
+ if tg_table_name in ('course_configuration_holes','course_configuration_tee_holes','course_configuration_ratings') then
+  parent_key:=row_data->>'configuration_id';
+  select course_id into course_key from public.course_configurations where id=parent_key::uuid;
+ elsif tg_table_name='course_local_rules' then
+  parent_key:=row_data->>'rule_set_id';
+  select course_id into course_key from public.course_local_rule_sets where id=parent_key::uuid;
+ elsif tg_table_name in ('course_scorecard_profile_tees','course_scorecard_profile_holes') then
+  parent_key:=row_data->>'profile_id';
+  select course_id into course_key from public.course_scorecard_profiles where id=parent_key;
+ end if;
+ perform private.admin_assert_global_course_v2(course_key);
+ return new;
+end $$;
+revoke all on function private.admin_global_course_operation_guard_v2() from public,anon,authenticated;
+do $$ declare relation text; begin
+ foreach relation in array array['course_configurations','course_configuration_holes','course_configuration_tee_holes','course_configuration_ratings','course_local_rule_sets','course_local_rules','course_scorecard_profiles','course_scorecard_profile_tees','course_scorecard_profile_holes'] loop
+  execute format('drop trigger if exists admin_global_course_operation_guard_v2 on public.%I',relation);
+  execute format('create trigger admin_global_course_operation_guard_v2 before insert or update on public.%I for each row execute function private.admin_global_course_operation_guard_v2()',relation);
+ end loop;
+end $$;
 
 -- One-time operator bootstrap for a fresh, isolated Auth database. It is never
 -- callable with a player's or administrator's JWT and uses no email allowlist.

@@ -41,6 +41,12 @@ test('promotion preserves PLAYER private-course ownership and rejects global wri
    await assert.rejects(db.query("select admin_create_revision_v1('COURSE','personal-course','COURSE','personal-course','{}','ADMIN_MANUAL','Fixture','https://example.invalid','VERIFIED',now(),'HIGH',null)"),/PERSONAL_COURSE_NOT_GLOBAL_CATALOG/);
    await assert.rejects(db.query("select admin_create_revision_v1('COURSE','new-global','COURSE','new-global',$1,'ADMIN_MANUAL','Fixture','https://example.invalid','VERIFIED',now(),'HIGH',null)",[JSON.stringify({clubId:'personal-course-club'})]),/PERSONAL_COURSE_NOT_GLOBAL_CATALOG/);
   });
+  await t.test('SUPER_ADMIN with a legacy trusted claim still cannot overwrite another personal course',async()=>{
+   await asUser(db,IDS.super);
+   await db.query("select set_config('request.jwt.claims',$1,false)",[JSON.stringify({sub:IDS.super,role:'authenticated',app_metadata:{role:'admin'}})]);
+   assert.equal((await db.query("update golf_courses set name='Forbidden super overwrite' where id='personal-course' returning id")).rows.length,0);
+   assert.equal((await db.query("update golf_courses set name='Legacy global super permission' where id='global-course' returning id")).rows.length,1);
+  });
  }finally{await db.close();}
 });
 

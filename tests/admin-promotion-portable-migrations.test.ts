@@ -42,11 +42,14 @@ test('portable manifest installs with no QA binding, preserves personal writes a
   await t.test('ADMIN cannot archive/delete a player personal course through global tools',async()=>{
    await asUser(db,IDS.admin);
    for(const action of ['inspect','archive','delete'])await assert.rejects(db.query("select admin_catalog_lifecycle_v3('COURSE','portable-private',$1,'Offline attempt')",[action]),/PERSONAL_COURSE_NOT_GLOBAL_CATALOG/);
+   await assert.rejects(db.query("insert into course_local_rule_sets(course_id,title,version,created_by) values('portable-private','Not a global rule',1,$1)",[IDS.admin]),/permission denied|PERSONAL_COURSE_NOT_GLOBAL_CATALOG/);
+   await assert.rejects(db.query("select admin_create_revision_v1('COURSE_CONFIGURATION','global-config','COURSE','portable-private',$1,'ADMIN_RESEARCH','Offline test','https://example.invalid','VERIFIED',now(),'HIGH',null)",[JSON.stringify({courseId:'portable-private'})]),/PERSONAL_COURSE_NOT_GLOBAL_CATALOG/);
   });
   await t.test('ADMIN archives, deletes unused global and blocks referenced global deletion',async()=>{
    await db.query("select admin_catalog_lifecycle_v3('COURSE','portable-global','archive','Offline archival')");
    await asUser(db,IDS.super);
    assert.equal((await db.query<{state:string}>("select state from admin_catalog_lifecycle where entity_id='portable-global'")).rows[0].state,'ARCHIVED');
+   await asUser(db,IDS.admin);
    await db.query("select admin_catalog_lifecycle_v3('COURSE','portable-global','delete','Offline unused deletion')");
    await asOperator(db);
    assert.equal((await db.query("select id from golf_courses where id='portable-global'")).rows.length,0);
@@ -62,6 +65,24 @@ test('portable manifest installs with no QA binding, preserves personal writes a
    await asUser(db,IDS.other);assert.equal((await db.query<{role:string}>('select private.admin_application_role_v2() role')).rows[0].role,'ADMIN');
    await asUser(db,IDS.super);await db.query("select admin_change_role_v2($1,'ADMIN','PLAYER','Offline revoke',gen_random_uuid())",[IDS.other]);
    await asUser(db,IDS.other);assert.equal((await db.query<{role:string}>('select private.admin_application_role_v2() role')).rows[0].role,'PLAYER');
+   await asUser(db,IDS.super);await publishCourse(db,'super-global','Global Super course');
+   await db.query("select admin_catalog_lifecycle_v3('COURSE','super-global','archive','Super archival')");
+  });
+  await t.test('Advanced Admin IN_REVIEW request flow retains verified publication and audit',async()=>{
+   const id='20000000-0000-4000-8000-000000000009';
+   await asOperator(db);await db.query("insert into feedback_requests(id,user_id,category,payload,status,title,description,contextual_category) values($1,$2,'COURSE','{}','NOT_SENT','Requested course','Controlled offline request','COURSE')",[id,IDS.player]);
+   await asUser(db,IDS.super);
+   const link=(await db.query<{id:string}>("select (admin_create_draft_from_request_v1($1,'COURSE',gen_random_uuid())).id id",[id])).rows[0].id;
+   // Attach the legacy draft to a verified revision as Advanced Admin does.
+   const payload={club:{id:'advanced-club',name:'Advanced club'},course:{id:'advanced-course',clubId:'advanced-club',name:'Advanced course',holes:9},tees:[],holes:[],teeHoleYardages:[]};
+   const revision=(await db.query<{id:string}>("select (admin_create_revision_v1('COURSE','advanced-course','COURSE','advanced-course',$1,'ADMIN_RESEARCH','Reviewed source','https://example.invalid','VERIFIED',now(),'HIGH',null)).id id",[JSON.stringify(payload)])).rows[0].id;
+   await db.query('update admin_request_drafts set revision_id=$1 where id=$2',[revision,link]);
+   const hash=(await db.query<{preview:{previewHash:string}}>('select admin_prepare_revision_v1($1) preview',[revision])).rows[0].preview.previewHash;
+   await db.query("select admin_transition_revision_v1($1,'REVIEWED','Advanced review',gen_random_uuid())",[revision]);
+   await db.query("select admin_transition_revision_v1($1,'VERIFIED','Advanced verification',gen_random_uuid())",[revision]);
+   await db.query("select admin_publish_revision_v1($1,$2,'Advanced publication',gen_random_uuid())",[revision,hash]);
+   await asOperator(db);assert.equal((await db.query<{status:string}>('select request_status status from feedback_requests where id=$1',[id])).rows[0].status,'RESOLVED');
+   assert.equal((await db.query<{n:number}>("select count(*)::int n from admin_audit_log where entity_id=$1 and action='RESOLVE_REQUEST_WITH_RECORD'",[id])).rows[0].n,1);
   });
   await t.test('request environment is portable, operator-only and excludes TEST/SYNTHETIC',async()=>{
    await asOperator(db);
@@ -69,7 +90,7 @@ test('portable manifest installs with no QA binding, preserves personal writes a
    for(const [i,environment]of ['PRODUCTION','QA','TEST','SYNTHETIC'].entries())await db.query("insert into feedback_requests(id,user_id,category,payload,status,title,description,contextual_category,data_environment) values($1,$2,'COURSE','{}','NOT_SENT','Missing course','Offline controlled request','COURSE',$3)",[requestIds[i],IDS.player,environment]);
    await asUser(db,IDS.admin);
    const queue=async()=> (await db.query<{queue:{items:{id:string}[]}}>('select admin_simple_request_queue_v2() queue')).rows[0].queue.items.map(r=>r.id);
-   assert.deepEqual(await queue(),[requestIds[0]]);
+   assert.deepEqual(new Set(await queue()),new Set([requestIds[0],'20000000-0000-4000-8000-000000000009']));
    await assert.rejects(db.query("insert into private.admin_runtime_configuration_v2(request_environment,reason) values('QA','Unauthorized configuration')"),/permission denied/);
    await assert.rejects(db.query("select admin_review_request_v2($1,'NEW','APPROVED','Wrong environment')",[requestIds[1]]),/REQUEST_NOT_AVAILABLE/);
    await db.query("select admin_review_request_v2($1,'NEW','APPROVED','Reviewed ordinary request')",[requestIds[0]]);
