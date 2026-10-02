@@ -23,3 +23,5 @@
 @media(max-width:600px){.adminV2Search{flex-direction:column;align-items:stretch}.adminV2Search>button{align-self:flex-start;padding:9px 18px}.adminV2Search>label{width:100%}}
 
 .adminV2SaveActions,.adminV2WizardNavigation{display:flex;justify-content:flex-end;gap:10px;flex:1}.adminV2WizardFooter{display:grid;gap:8px}.adminV2WizardNavigation{justify-content:space-between}.adminV2WizardNavigation button{max-width:none}.adminV2WizardFooter .adminV2SaveActions{font-size:14px}.adminV2Sheet .adminV2StickyActions{margin-left:0;margin-right:0}
+
+.adminV2RequestRow>.adminV2Actions{flex:0 0 auto;flex-wrap:wrap;max-width:240px}.adminV2RequestRow small{display:block}@media(max-width:600px){.adminV2RequestRow{flex-wrap:wrap}.adminV2RequestRow>.adminV2Actions{flex:1 0 100%;max-width:none;flex-direction:row;justify-content:flex-start}.adminV2RequestRow>.adminV2Actions button{width:auto;font-size:13px}.adminV2RequestRow h3{font-size:16px}}
