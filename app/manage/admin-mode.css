@@ -21,3 +21,5 @@
 
 .adminV2Search{display:flex;align-items:end;gap:10px}.adminV2Search>label{flex:1;min-width:0}.adminV2Search>button{min-height:44px;flex-shrink:0}.adminV2Search+.adminV2Filter{margin-bottom:6px}.adminV2ListToolbar+.adminV2Search{margin-top:2px}
 @media(max-width:600px){.adminV2Search{flex-direction:column;align-items:stretch}.adminV2Search>button{align-self:flex-start;padding:9px 18px}.adminV2Search>label{width:100%}}
+
+.adminV2SaveActions,.adminV2WizardNavigation{display:flex;justify-content:flex-end;gap:10px;flex:1}.adminV2WizardFooter{display:grid;gap:8px}.adminV2WizardNavigation{justify-content:space-between}.adminV2WizardNavigation button{max-width:none}.adminV2WizardFooter .adminV2SaveActions{font-size:14px}.adminV2Sheet .adminV2StickyActions{margin-left:0;margin-right:0}
