@@ -22,3 +22,11 @@ export function adminReferenceMessage(noun:string,references:number,canDelete:bo
  if(canDelete)return "Sin históricos asociados. Puedes archivar o eliminar definitivamente.";
  return references>0?`Este ${noun} tiene información o históricos asociados y no puede eliminarse definitivamente. Puedes archivarlo.`:`Este ${noun} debe conservarse por su información asociada. Puedes archivarlo.`;
 }
+
+/** Older revisions remain stored; the everyday list opens only the newest draft. */
+export function newestBetDraftRows<T extends {variant_id:string;version:number;base_version?:number}>(rows:readonly T[],published?:readonly {variant_id:string;version:number}[]){
+ const newest=new Map<string,T>();
+ const current=published&&new Map(published.map(row=>[row.variant_id,row.version]));
+ for(const row of rows){if(current&&row.base_version!==(current.get(row.variant_id)||0))continue;if(!newest.has(row.variant_id)||newest.get(row.variant_id)!.version<row.version)newest.set(row.variant_id,row);}
+ return [...newest.values()];
+}

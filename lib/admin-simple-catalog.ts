@@ -1,6 +1,7 @@
 import type { AdminEntityType } from "./admin-control-center";
 import { CLUB_CATEGORIES } from "./golf-equipment";
 import { structuredNumbers } from "./admin-operations";
+import { BET_REGISTRY } from "./bets/registry";
 export type AdminRecord = { id: string; title: string; subtitle: string; active: boolean; kind: AdminEntityType; values: Record<string, unknown>; version?: number };
 export type AdminField = { key: string; label: string; type?: "text" | "number" | "textarea" | "checkbox" | "select" | "url" | "date" | "datetime-local"; required?: boolean; options?: readonly string[]; min?: number; max?: number };
 export function adminOptionLabel(value:string) {
@@ -122,6 +123,6 @@ export function humanChanges(before: unknown, after: unknown, prefix = ""): Huma
     if(!prefix&&(a.course||b.course)){for(const key of [...COURSE_FIELDS.map(field=>field.key),"family","yardages"]){delete a[key];delete b[key];}}
     return [...new Set([...Object.keys(a),...Object.keys(b)])].filter(k => !/(^id$|Id$|_id$|provider|schema|revision|legacy|catalogVersion|dataEnvironment|data_environment|engineContract)/i.test(k)).flatMap(k => humanChanges(b[k],a[k],`${prefix}${LABELS[k] || BET_CONFIG_LABELS[k] || ({club:"Club",course:"Campo",tees:"Tees",rules:"Reglas",payload:"Cambio",role:"Rol",status:"Estado",shortSummary:"Resumen",holeNumber:"Hoyo",strokeIndex:"Stroke Index",totalMeters:"Metros",category:"Categoría",handedness:"Mano",aliases:"Otros nombres",sourceType:"Fuente",country:"País",address:"Dirección",latitude:"Latitud",longitude:"Longitud",construction:"Construcción",coverMaterial:"Cubierta",flight:"Vuelo",feel:"Sensación",driverSpin:"Spin de driver",ironSpin:"Spin de hierros",shortGameSpin:"Spin de juego corto",order:"Orden",icon:"Icono",instructions:"Instrucciones",format:"Formato",organizer:"Organizador",changedAt:"Fecha",effectiveFrom:"Inicio",effectiveUntil:"Fin",description:"Descripción"} as Record<string,string>)[k] || (Array.isArray(after) ? `Elemento ${Number(k)+1}` : "Información")} · `));
   }
-  const display = (value: unknown) => value == null || value === "" ? "—" : typeof value === "boolean" ? value ? "Sí" : "No" : typeof value === "object" ? "Información agregada" : adminOptionLabel(String(value));
+  const display = (value: unknown) => value == null || value === "" ? "—" : typeof value === "boolean" ? value ? "Sí" : "No" : typeof value === "object" ? "Información agregada" : prefix.endsWith("Tipo de apuesta · ") ? BET_REGISTRY.find(item=>item.id===value)?.label||"Tipo no disponible" : adminOptionLabel(String(value));
   return display(before)===display(after)?[]:[{label:prefix.replace(/ · $/,""),before:display(before),after:display(after)}];
 }

@@ -2,6 +2,7 @@ import { NextRequest,NextResponse } from "next/server";
 import { requireAdminMode } from "../../../../lib/admin-mode.server";
 import { BET_REGISTRY } from "../../../../lib/bets/registry";
 import { betVariantCapability,validatedBetVariant } from "../../../../lib/admin-bet-variants";
+import { newestBetDraftRows } from "../../../../lib/admin-ui";
 import { humanChanges } from "../../../../lib/admin-simple-catalog";
 export const dynamic="force-dynamic";
 const json=(body:unknown,status=200)=>NextResponse.json(body,{status,headers:{"cache-control":"private, no-store"}});
@@ -11,7 +12,10 @@ export async function GET(request:NextRequest){
  const published=await access.client.from("admin_bet_variant_versions").select("id,variant_id,version,status,payload",{count:"exact"}).eq("status","PUBLISHED").order("published_at",{ascending:false}).range(offset,offset+39);
  const drafts=await access.client.from("admin_bet_variant_versions").select("id,variant_id,version,base_version,status,payload").eq("status","DRAFT").order("created_at",{ascending:false}).limit(40);
  if(published.error||drafts.error)return json({error:"No pudimos cargar las apuestas."},503);
- return json({items:published.data,drafts:drafts.data,total:published.count,engines:BET_REGISTRY.flatMap(engine=>{const capability=betVariantCapability(engine.id);return capability?[{id:engine.id,label:engine.label}]:[];})});
+ const pending=drafts.data||[];
+ const bases=pending.length?await access.client.from("admin_bet_variant_versions").select("variant_id,version").eq("status","PUBLISHED").in("variant_id",[...new Set(pending.map(row=>row.variant_id))]):{data:[],error:null};
+ if(bases.error)return json({error:"No pudimos comprobar los borradores. Intenta nuevamente."},503);
+ return json({items:published.data,drafts:newestBetDraftRows(pending,bases.data||[]),total:published.count,engines:BET_REGISTRY.flatMap(engine=>{const capability=betVariantCapability(engine.id);return capability?[{id:engine.id,label:engine.label}]:[];})});
 }
 export async function POST(request:NextRequest){
  const access=await requireAdminMode(request,"bets");if(!access.ok)return json({error:access.error},access.status);
