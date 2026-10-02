@@ -24,7 +24,7 @@ export async function simpleEquipment(memberships:AdminMembership[],balls=false)
 }
 export async function simpleCourses(client: SupabaseClient, memberships: AdminMembership[]) {
   const catalog = await getCourseCatalog(client, { forceFresh: true });
-  const items: AdminRecord[] = catalog.courses.filter(course => isOperationalAdminData(course) && memberships.some(m => membershipAllows(m,{entityType:"COURSE",scopeType:"COURSE",scopeId:course.id},"READ"))).map(course => {
+  const items: AdminRecord[] = catalog.courses.filter(course => course.provider!=="USER_MANUAL" && isOperationalAdminData(course) && memberships.some(m => membershipAllows(m,{entityType:"COURSE",scopeType:"COURSE",scopeId:course.id},"READ"))).map(course => {
     const club = catalog.clubs.find(c => c.id===course.clubId)!;
     const tees = catalog.tees.filter(t=>t.courseId===course.id).map(t=>({...t,category:t.gender || "",frontRating:t.frontNineRating,backRating:t.backNineRating}));
     const holes = catalog.holes.filter(h=>h.courseId===course.id); const ids = new Set(tees.map(t=>t.id));

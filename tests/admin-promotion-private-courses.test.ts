@@ -26,11 +26,13 @@ test('promotion preserves PLAYER private-course ownership and rejects global wri
    await assert.rejects(db.query("select admin_create_revision_v1('COURSE','forged','COURSE','forged','{}','ADMIN_MANUAL','Fixture','https://example.invalid','VERIFIED',now(),'HIGH',null)"),/ADMIN_SCOPE_REQUIRED/);
   });
   await t.test('private tees, holes and yardages retain their existing ownership path',async()=>{
-   await db.exec("insert into golf_course_tees(id,course_id,name,provider) values('private-tee','personal-course','White','USER_MANUAL');insert into golf_holes(id,course_id,hole_number,par,stroke_index,provider) values('private-hole','personal-course',1,4,1,'USER_MANUAL');insert into golf_tee_hole_yardages(tee_id,hole_id,course_id,yards,provider) values('private-tee','private-hole','personal-course',350,'USER_MANUAL')");
+   await db.exec("insert into golf_course_tees(id,course_id,name,provider) values('private-tee','personal-course','White','USER_MANUAL');insert into golf_holes(id,course_id,hole_number,par,stroke_index,provider) values('private-hole','personal-course',1,4,1,'USER_MANUAL');insert into golf_tee_hole_yardages(tee_id,hole_id,course_id,yards,provider) values('private-tee','private-hole','personal-course',350,'USER_MANUAL');insert into golf_hole_geo_features(id,hole_id,type,label,provider,latitude,longitude) values('private-geometry','private-hole','GREEN_CENTER','Own green','USER_MANUAL',20,10)");
    assert.equal((await db.query("update golf_course_tees set name='Owned tee' where id='private-tee' returning id")).rows.length,1);
    assert.equal((await db.query("update golf_holes set par=5 where id='private-hole' returning id")).rows.length,1);
    assert.equal((await db.query("update golf_tee_hole_yardages set yards=360 where tee_id='private-tee' returning tee_id")).rows.length,1);
+   assert.equal((await db.query("update golf_hole_geo_features set label='Edited green' where id='private-geometry' returning id")).rows.length,1);
    await asUser(db,IDS.other);assert.equal((await db.query("update golf_course_tees set name='Forbidden' where id='private-tee' returning id")).rows.length,0);
+   assert.equal((await db.query("update golf_hole_geo_features set label='Forbidden' where id='private-geometry' returning id")).rows.length,0);
   });
   await t.test('ADMIN still uses own private path but cannot directly overwrite global rows',async()=>{
    await privateCourse(db,'admin-private',IDS.admin);

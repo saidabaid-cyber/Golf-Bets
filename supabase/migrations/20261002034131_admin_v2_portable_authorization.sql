@@ -119,7 +119,8 @@ create or replace function private.admin_global_course_revision_guard_v2() retur
 language plpgsql security definer set search_path='' as $$
 begin
  if new.entity_type='COURSE' then
-  perform private.admin_assert_global_course_v2(new.entity_id,new.payload->>'clubId');
+  perform private.admin_assert_global_course_v2(new.entity_id,coalesce(new.payload->'club'->>'id',new.payload->>'clubId'));
+  perform private.admin_assert_global_course_v2(new.payload->'course'->>'id');
  elsif new.entity_type in ('COURSE_CONFIGURATION','LOCAL_RULE_SET') then
   perform private.admin_assert_global_course_v2(new.payload->>'courseId');
  end if;

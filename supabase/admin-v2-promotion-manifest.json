@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "status": "PREPARATION_ONLY_NO_REMOTE_APPLY",
+  "requiredBaseSha": "1b53cf2e200d5ae6bd95d8f405b3dbe05004ede8",
+  "backupGate": "RECOVERABLE_DEV_BACKUP_REQUIRED",
+  "toApply": [
+    "20261001060612_admin_mode_v2_roles.sql",
+    "20261001061219_admin_mode_v2_administrators.sql",
+    "20261001063622_admin_mode_v2_visual_publication.sql",
+    "20261001064607_admin_mode_v2_requests_security.sql",
+    "20261002034131_admin_v2_portable_authorization.sql",
+    "20261002035553_admin_v2_portable_requests.sql",
+    "20261002035555_admin_v2_portable_catalog_lifecycle.sql",
+    "20261002035557_admin_v2_portable_bet_variants.sql",
+    "20261002035559_admin_v2_portable_operations_guards.sql",
+    "20261002035601_admin_v2_portable_request_record_link.sql",
+    "20261002035602_admin_v2_portable_snapshot_reference_guard.sql"
+  ],
+  "rejected": ["20261001065019_admin_mode_v2_authorization_guards.sql"],
+  "qaOnly": [
+    "20261001141820_admin_mode_v2_isolated_qa_requests.sql",
+    "20261001223854_admin_ux_catalog_lifecycle.sql",
+    "20261001225620_admin_ux_bet_variants.sql",
+    "20261001231103_admin_ux_operations_guards.sql",
+    "20261001231702_admin_ux_request_record_link.sql",
+    "20261001232711_admin_ux_snapshot_reference_guard.sql"
+  ]
+}
