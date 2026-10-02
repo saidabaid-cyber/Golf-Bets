@@ -5,6 +5,7 @@
     "deploymentEnabled": {
       "*": false,
       "integration/backyard-current": true,
+      "feature/admin-mode-v2": true,
       "infra/backup-automation": false,
       "hotfix/cloud-backup-*": false
     }

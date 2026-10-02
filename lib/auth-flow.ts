@@ -58,11 +58,14 @@ export async function sendEmailOtpWhenReady(auth: AuthFlowClient, providers: Aut
 export class EmailOtpRequestError extends Error {
   readonly code: string;
   readonly status: number;
-  constructor(message: string, code: string, status: number) {
+  readonly retryAfterSeconds: number;
+  constructor(message: string, code: string, status: number, retryAfterSeconds = 60) {
     super(message);
     this.name = "EmailOtpRequestError";
     this.code = code;
     this.status = status;
+    this.retryAfterSeconds = Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+      ? Math.min(86_400, Math.ceil(retryAfterSeconds)) : 60;
   }
 }
 
@@ -82,6 +85,7 @@ export async function requestEmailOtp(email: string, intent: "create" | "login",
       typeof payload?.error === "string" ? payload.error : "No pudimos enviar el código. Intenta nuevamente.",
       typeof payload?.code === "string" ? payload.code : "OTP_SEND_FAILED",
       response.status,
+      Number(response.headers.get("retry-after")),
     );
   }
 }

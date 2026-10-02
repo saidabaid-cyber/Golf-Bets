@@ -8,14 +8,16 @@ import { COURSE_SCORECARD_REQUIRED_MESSAGE,FEEDBACK_ATTACHMENT_MAX_BYTES,FEEDBAC
 import { feedbackAttachmentMimeFromPath,feedbackAttachmentType } from '../../../lib/feedback-attachment';
 import { receiveFeedback,notifyFeedbackSafely } from '../../../lib/feedback-workflow';
 import { backyardAiClientAddress,isCrossSiteRequest,readJsonBodyWithLimit } from '../../../lib/backyard-ai/server/http-security';
+import { adminModeDatabaseIsolated } from '../../../lib/admin-mode';
 export const dynamic='force-dynamic';
 const headers={'cache-control':'private, no-store'};
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const hash=(value:string|Uint8Array)=>createHash('sha256').update(value).digest('hex');
-export function GET(){const emailAvailable=reviewCatalogQaEnabled()&&Boolean(feedbackMailerConfig());return NextResponse.json({internalRequestsAvailable:reviewCatalogQaEnabled(),serverEmailAvailable:emailAvailable,emailAttachmentsAvailable:emailAvailable,maxOriginalAttachmentBytes:FEEDBACK_ATTACHMENT_MAX_ORIGINAL_BYTES,maxAttachmentBytes:FEEDBACK_ATTACHMENT_MAX_BYTES,maxAttachmentDimension:FEEDBACK_ATTACHMENT_MAX_DIMENSION,acceptedAttachmentTypes:['image/jpeg','image/png','image/webp'],heicSupported:false},{headers});}
+function feedbackPersistenceAvailable(){return reviewCatalogQaEnabled()||adminModeDatabaseIsolated();}
+export function GET(){const available=feedbackPersistenceAvailable();const emailAvailable=available&&Boolean(feedbackMailerConfig());return NextResponse.json({internalRequestsAvailable:available,serverEmailAvailable:emailAvailable,emailAttachmentsAvailable:emailAvailable,maxOriginalAttachmentBytes:FEEDBACK_ATTACHMENT_MAX_ORIGINAL_BYTES,maxAttachmentBytes:FEEDBACK_ATTACHMENT_MAX_BYTES,maxAttachmentDimension:FEEDBACK_ATTACHMENT_MAX_DIMENSION,acceptedAttachmentTypes:['image/jpeg','image/png','image/webp'],heicSupported:false},{headers});}
 export async function POST(request:NextRequest) {
   if(isCrossSiteRequest(request))return NextResponse.json({error:'Solicitud no permitida.'},{status:403,headers});
-  if(!reviewCatalogQaEnabled())return NextResponse.json({error:'El soporte no está disponible en este entorno. Tu texto se conserva.'},{status:503,headers});
+  if(!feedbackPersistenceAvailable())return NextResponse.json({error:'El soporte no está disponible en este entorno. Tu texto se conserva.'},{status:503,headers});
   try {
     const db=getSupabaseAdmin();if(!db)throw Error('BACKEND_UNAVAILABLE');
     let userId:string|null=null,identity:Record<string,unknown>={};

@@ -1,3 +1,5 @@
+import { adminModeDatabaseIsolated } from "./admin-mode";
+
 export const CANONICAL_QA_PROJECT_REF = "bymeopxkxapfizeeqeyb";
 
 const EXPECTED_VERCEL_ENVIRONMENTS = new Set(["development", "preview", "production"]);
@@ -25,11 +27,24 @@ export function isolatedPreviewDatabaseEnabled(
   }
 }
 
+/** Read-only course projections also support the separately bound Admin V2
+ * Preview. This does not authorize account lifecycle or destructive QA tools. */
+export function reviewedCourseDatabaseEnabled(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  if (/^feature\/admin-mode-v2(?:-|$)/.test(env.VERCEL_GIT_COMMIT_REF || "")) {
+    return adminModeDatabaseIsolated(env);
+  }
+  return isolatedPreviewDatabaseEnabled(env) || adminModeDatabaseIsolated(env);
+}
+
 /** Runtime features may use the normal binding outside Vercel Preview, but a
  * Preview must prove its isolated database ref before exposing cloud/Auth UI. */
 export function previewDatabaseFeaturesAvailable(
   env: Record<string, string | undefined> = process.env,
 ) {
+  if (/^feature\/admin-mode-v2(?:-|$)/.test(env.VERCEL_GIT_COMMIT_REF || "")) return adminModeDatabaseIsolated(env);
+  if (adminModeDatabaseIsolated(env)) return true;
   if (
     vercelDeploymentMarkerPresent(env)
     && !EXPECTED_VERCEL_ENVIRONMENTS.has(env.VERCEL_ENV || "")

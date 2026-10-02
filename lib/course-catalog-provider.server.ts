@@ -15,10 +15,12 @@ import {
   playerVisibleTeeRating,
 } from "./golf-course-directory";
 import { haversineDistanceKm } from "./course-distance";
-import { invalidateReviewedCourseCatalogCache, loadReviewedCourseCatalog, reviewCatalogQaEnabled } from "./review-course-catalog.server";
+import { invalidateReviewedCourseCatalogCache, loadReviewedCourseCatalog } from "./review-course-catalog.server";
+import { reviewedCourseDatabaseEnabled } from "./preview-database";
 import { reviewedTeeRatingIsAuthorized, type ReviewedCatalogCourse } from "./review-course-catalog";
 import { getSupabaseAdmin } from "./supabase/server";
 import { readPublishedCatalog } from "./admin-published-catalog.server";
+import { applyCatalogLifecycle, catalogLifecycle } from "./admin-catalog-lifecycle.server";
 import { reviewedCoursePublicationShape } from "./puebla-course-publication";
 
 type CourseCard = {
@@ -174,8 +176,8 @@ function mergeCatalog(base: GolfCourseCatalog, overlays: readonly GolfCourseCata
 
 export async function getCourseCatalog(database: SupabaseClient | null = getSupabaseAdmin("cloud"), options: { requireQaReviewedCatalog?: boolean; forceFresh?: boolean } = {}) {
   let base = INTERNAL_GOLF_COURSE_CATALOG;
-  if (options.requireQaReviewedCatalog && !reviewCatalogQaEnabled()) throw Error("CATALOG_QA_ONLY");
-  if (reviewCatalogQaEnabled()) {
+  if (options.requireQaReviewedCatalog && !reviewedCourseDatabaseEnabled()) throw Error("CATALOG_QA_ONLY");
+  if (reviewedCourseDatabaseEnabled()) {
     if (!database && options.requireQaReviewedCatalog) throw Error("CATALOG_AUTH_REQUIRED");
     if (database) {
       try {
@@ -196,7 +198,10 @@ export async function getCourseCatalog(database: SupabaseClient | null = getSupa
     if (!publicationIsEffective({ effectiveFrom: row.effective_from, effectiveUntil: row.effective_until }, now)) return [];
     const catalog = publishedCourse(row.payload, row.version); return catalog ? [catalog] : [];
   });
-  return overlays.length ? mergeCatalog(base, overlays) : base;
+  const catalog = overlays.length ? mergeCatalog(base, overlays) : base;
+  const states = await catalogLifecycle();
+  if (!states.length) return catalog;
+  return {...catalog,courses:applyCatalogLifecycle(catalog.courses,states,"COURSE"),tees:applyCatalogLifecycle(catalog.tees,states,"TEE")};
 }
 
 export async function getCourseCatalogProvider(database: SupabaseClient | null = getSupabaseAdmin("cloud")) {

@@ -1,0 +1,15 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {adminEditingBase,humanChanges,preserveVerificationTime,buildEquipmentPayload} from "../lib/admin-simple-catalog";
+test("course preview ignores stale form aliases without mutating stored evidence",()=>{const before={course:{id:"course",name:"Campo"},club:{address:"Before"},address:"Stale"};const after={course:{id:"course",name:"Campo"},club:{address:"After"}};const snapshot=JSON.stringify(before);const changes=humanChanges(before,after);assert.deepEqual(changes,[{label:"Club · Dirección",before:"Before",after:"After"}]);assert.equal(JSON.stringify(before),snapshot);});
+test("unchanged verification day preserves the original timestamp",()=>{const previous="2026-10-01T14:15:51.525Z";assert.equal(preserveVerificationTime(previous,"2026-10-01"),previous);assert.equal(preserveVerificationTime(previous,"2026-10-02"),"2026-10-02");});
+test("canonical edit keeps published provenance and never reports blank technical noise",()=>{const original={id:"old",createdAt:"2026-01-01",sourceEvidence:[{sourceUrl:"https://example.invalid"}],variants:[{loft:10}]};const base=adminEditingBase(original,{brand:"Brand",model:"Model",createdAt:undefined},"copy");const payload=buildEquipmentPayload(base,{brand:"Brand",model:"New",category:"DRIVER",active:true,bagEligible:true,fitEligible:false,sourceType:"ADMIN_RESEARCH",sourceName:"Source",handsText:"RH",loftsText:"10"},"CLUB_EQUIPMENT");assert.equal(payload.id,"copy");assert.equal(payload.createdAt,original.createdAt);assert.deepEqual(payload.sourceEvidence,original.sourceEvidence);assert.deepEqual(humanChanges({optional:undefined},{optional:null}),[]);});
+
+test("bet review names supported configuration instead of technical placeholders",()=>{assert.deepEqual(humanChanges({config:{value:50,mode:"carry"}},{config:{value:500,mode:"no_carry"}}),[{label:"Configuración · Monto predeterminado",before:"50",after:"500"},{label:"Configuración · Modalidad",before:"Acumular",after:"Sin acumulación"}]);});
+
+test("bet publication summary names the type without exposing its internal engine key",()=>{
+ assert.deepEqual(humanChanges(null,{engine:"individual_nassau"}),[{label:"Tipo de apuesta",before:"—",after:"Nassau individual"}]);
+});
+
+test("nested course evidence survives undefined normalized metadata",()=>{assert.deepEqual(adminEditingBase({club:{source:"Original"},course:{verifiedAt:"2026-01-01"}},{club:{source:undefined,city:"Puebla"},course:{verifiedAt:undefined,name:"Campo"}},"course"),{id:"course",club:{source:"Original",city:"Puebla"},course:{verifiedAt:"2026-01-01",name:"Campo"}});});
+test("player projection cannot overwrite the publication ledger's private provenance",()=>{const original={createdAt:"2026-09-06T00:00:00.000Z",provenance:[{sourceName:"Verified source"}]};const base=adminEditingBase(original,{createdAt:null,provenance:[],brand:"Brand"},"id");assert.equal(base.createdAt,original.createdAt);assert.deepEqual(base.provenance,original.provenance);});

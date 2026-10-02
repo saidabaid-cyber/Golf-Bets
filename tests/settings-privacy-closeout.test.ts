@@ -38,7 +38,7 @@ function load(file: string, dependencies: Record<string, unknown>) {
 
 test("all five primary headers open the existing profile and notification actions", () => {
   const profile = load("app/components/profile-navigation-button.tsx", { "./profile-avatar-media": { ProfileAvatarMedia: () => null } });
-  const header = load("app/components/primary-header.tsx", { "./profile-navigation-button": profile, "../../lib/app-navigation": navigation });
+  const header = load("app/components/primary-header.tsx", { "./profile-navigation-button": profile, "../../lib/app-navigation": navigation, "./admin-mode-menu": { AdminModeMenu: () => null } });
   for (const tab of Object.values(navigation.BOTTOM_NAV_TARGETS)) {
     const visited: string[] = [];
     const buttons = nodes(header.PrimaryHeader({ tab, displayName: "Golfista", avatarUrl: "", onProfile: () => visited.push("profile"), onNotifications: () => visited.push("notifications") })).filter((node) => node.type === "button");

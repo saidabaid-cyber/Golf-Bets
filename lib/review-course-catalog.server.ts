@@ -1,7 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from './supabase/server';
-import { isolatedPreviewDatabaseEnabled } from './preview-database';
+import { isolatedPreviewDatabaseEnabled, reviewedCourseDatabaseEnabled } from './preview-database';
 import type { ReviewedCatalogCourse, ReviewedScorecardProfile, ReviewedTeeSource } from './review-course-catalog';
 import { SCORECARD_PROFILE_PROVENANCE } from './course-scorecard-profiles';
 
@@ -11,7 +11,7 @@ export function reviewCatalogQaEnabled() {
 let cached:{expires:number;data:ReviewedCatalogCourse[]}|undefined;
 export function invalidateReviewedCourseCatalogCache(){cached=undefined;}
 export async function loadReviewedCourseCatalog(database?:SupabaseClient|null):Promise<ReviewedCatalogCourse[]> {
-  if(!reviewCatalogQaEnabled()) throw Error('CATALOG_QA_ONLY');
+  if(!reviewedCourseDatabaseEnabled()) throw Error('CATALOG_QA_ONLY');
   if(cached && cached.expires>Date.now()) return cached.data;
   // Player reads use their own JWT through a narrow, read-only projection.
   // The underlying reviewed rows remain private and protected by RLS.

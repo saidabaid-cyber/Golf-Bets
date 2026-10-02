@@ -1,0 +1,13 @@
+"use client";
+import {useState} from "react";
+import {AdminSheet} from "./admin-sheet";
+import {adminOptionLabel} from "../../lib/admin-simple-catalog";
+import {ADMIN_CATALOG_COPY} from "../../lib/admin-ui";
+export function AdminCatalogFilters({module,query,state,facets,filters,onQuery,onApply}:{module:string;query:string;state:string;facets:Record<string,string[]>;filters:Record<string,string>;onQuery:(query:string)=>void;onApply:(state:string,filters:Record<string,string>)=>void}){
+ const [open,setOpen]=useState(false),[pending,setPending]=useState<Record<string,string>>({}),[pendingState,setPendingState]=useState("all");
+ const copy=ADMIN_CATALOG_COPY[module]||ADMIN_CATALOG_COPY.equipment;
+ const choices=[["brand","Marca"],["category","Categoría"],["year","Año"]].filter(([key])=>facets[key]?.length);
+ const count=Object.values(filters).filter(Boolean).length+(state!=="all"?1:0);
+ function controls(currentState:string,currentFilters:Record<string,string>,apply:(state:string,filters:Record<string,string>)=>void){return <><label>Estado<select value={currentState} onChange={event=>apply(event.target.value,currentFilters)}><option value="all">Todos</option><option value="active">Activos / actuales</option><option value="inactive">Archivados / históricos</option></select></label>{choices.map(([key,label])=><label key={key}>{label}<select value={currentFilters[key]||""} onChange={event=>apply(currentState,{...currentFilters,[key]:event.target.value})}><option value="">Todos</option>{facets[key].map(option=><option key={option} value={option}>{adminOptionLabel(option)}</option>)}</select></label>)}</>;}
+ return <><div className="adminV2Search"><label>Buscar<input type="search" value={query} placeholder={copy.search} onChange={event=>onQuery(event.target.value)}/></label><button type="button" className="secondary adminV2MobileOnly" onClick={()=>{setPending({...filters});setPendingState(state);setOpen(true);}}>Filtros{count?` (${count})`:""}</button></div><div className="adminV2Filter adminV2DesktopOnly">{controls(state,filters,onApply)}{count>0&&<button type="button" className="secondary" onClick={()=>onApply("all",{})}>Limpiar</button>}</div>{open&&<AdminSheet title="Filtros" onClose={()=>setOpen(false)}><form className="adminV2Stack" onSubmit={event=>{event.preventDefault();onApply(pendingState,pending);setOpen(false);}}><div className="adminV2FormGrid">{controls(pendingState,pending,(next,nextFilters)=>{setPendingState(next);setPending(nextFilters);})}</div><div className="adminV2StickyActions"><button type="button" className="secondary" onClick={()=>{setPending({});setPendingState("all");}}>Limpiar</button><button className="primary">Aplicar</button></div></form></AdminSheet>}</>;
+}

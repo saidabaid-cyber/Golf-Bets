@@ -19,6 +19,7 @@ import { NumericCaptureInput } from "./numeric-capture-input";
 import { HandicapBaseControl } from "./handicap-base-control";
 import { HcpPercentageInput } from "./hcp-percentage-input";
 import styles from "./group-bet-template-editor.module.css";
+import { useVisualContent } from "./use-visual-content";
 
 function makeId(prefix: string) {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -78,6 +79,7 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
   onlyBetId?: string;
 }) {
   const [expandedBetId, setExpandedBetId] = useState<string | null>(null);
+  const published=useVisualContent();const presentation=new Map(published.filter(p=>p.target_kind==="BET").map(p=>[p.target_key,p.values]));
   const runActivation = (action: () => void) => {
     if (!requestActivation) { action(); return; }
     void requestActivation().then((accepted) => { if (accepted) action(); });
@@ -188,11 +190,12 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
     const renderSelection = (items: ReturnType<typeof groupTemplateSelectionDefinitions>, heading: string) => <section className={styles.selectionSection} aria-labelledby={`template-${heading === "Individuales / Personales" ? "personal" : "general"}`}>
       <h3 id={`template-${heading === "Individuales / Personales" ? "personal" : "general"}`}>{heading}</h3>
       <div className={styles.modeGrid}>
-        {items.map((item) => {
+        {[...items].sort((a,b)=>(presentation.get(a.id)?.order??a.templateEditor.sortOrder)-(presentation.get(b.id)?.order??b.templateEditor.sortOrder)).map((item) => {
           const active = selectionState(item);
+          const copy=presentation.get(item.id);if(copy?.active===false&&!active)return null;
           const expanded = active && expandedBetId === item.id;
           return <section className={styles.modeSection} key={item.id}>
-            <div className={styles.modeCard}><span className={styles.modeIcon}>{item.icon}</span><span><b>{item.id === "personals" ? "Nassau / Personales" : item.label}</b><small>{item.description}</small>{active && mode === "complete" && <button type="button" className={styles.configureButton} disabled={locked} aria-expanded={expanded} aria-controls={`group-template-${item.id}`} onClick={() => setExpandedBetId(expanded ? null : item.id)}>{expanded ? "Cerrar configuración" : "Configurar / editar"}</button>}</span><Switch checked={active} label={item.label} disabled={locked} onChange={() => { if (!active) setExpandedBetId(item.id); toggleSelection(item); }} /></div>
+            <div className={styles.modeCard}><span className={styles.modeIcon}>{copy?.icon||item.icon}</span><span><b>{copy?.title||(item.id === "personals" ? "Nassau / Personales" : item.label)}</b><small>{copy?.description||item.description}</small>{copy?.instructions&&<small>{copy.instructions}</small>}{active && mode === "complete" && <button type="button" className={styles.configureButton} disabled={locked} aria-expanded={expanded} aria-controls={`group-template-${item.id}`} onClick={() => setExpandedBetId(expanded ? null : item.id)}>{expanded ? "Cerrar configuración" : "Configurar / editar"}</button>}</span><Switch checked={active} label={copy?.title||item.label} disabled={locked} onChange={() => { if (!active) setExpandedBetId(item.id); toggleSelection(item); }} /></div>
             {mode === "complete" && expanded && <div id={`group-template-${item.id}`} className={styles.inlineEditor}><GroupBetTemplateEditor value={value} players={players} ownerId={ownerId} mode="details" onlyBetId={item.id} onChange={onChange} locked={locked} requestActivation={requestActivation} /></div>}
           </section>;
         })}

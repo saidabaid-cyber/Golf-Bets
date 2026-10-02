@@ -301,6 +301,12 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       setMessage("Código enviado. Revisa tu correo.");
     } catch (error) {
       sendGate.current.release();
+      if (error instanceof EmailOtpRequestError && error.status === 429) {
+        sendGate.current.nextSendAt = Date.now() + error.retryAfterSeconds * 1_000;
+        try { sessionStorage.setItem(OTP_COOLDOWN_KEY, String(sendGate.current.nextSendAt)); }
+        catch { /* Cooldown remains enforced in memory if storage is unavailable. */ }
+        setRetrySeconds(otpRetrySeconds(sendGate.current.nextSendAt));
+      }
       if (error instanceof EmailOtpRequestError && error.code === "ACCOUNT_NOT_FOUND" && requestedIntent === "login") {
         setMessage("No encontramos una cuenta con este correo.");
         setLoginRecovery(true);

@@ -66,7 +66,7 @@ async function requireAdmin(request: NextRequest): Promise<AdminAccess> {
   if (!data.user || data.user.is_anonymous) return { ok: false, response: json({ error: "La sesión terminó. Vuelve a iniciar sesión.", code: "AUTH_REQUIRED" }, 401) };
   const accessFailure = await accountAccessFailure(userClient);
   if (accessFailure) return { ok: false, response: json(accessFailure, accessFailure.status) };
-  const membership = await userClient.from("admin_memberships").select("id").eq("user_id", data.user.id).eq("active", true).limit(1);
+  const membership = await userClient.from("admin_memberships").select("id").eq("user_id", data.user.id).eq("active", true).eq("role","SUPER_ADMIN").eq("scope_type","GLOBAL").is("scope_id",null).limit(1);
   if (membership.error) {
     return { ok: false, response: json({ error: "Admin Control Center requiere la migración aditiva en la base QA.", code: "ADMIN_SCHEMA_PENDING" }, 503) };
   }

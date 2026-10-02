@@ -67,7 +67,7 @@ function EvidenceFields({ initial }: { initial?: Json | null } = {}) {
 }
 
 export function AdminControlCenter() {
-  const { identity, openAccess } = useBackyardAccount();
+  const { identity, openAccess, adminAccess } = useBackyardAccount();
   const token = identity.mode === "authenticated" ? identity.accessToken : null;
   const [view, setView] = useState<View>("dashboard");
   const [data, setData] = useState<Json | null>(null);
@@ -109,6 +109,7 @@ export function AdminControlCenter() {
   }
 
   if (!token) return <main className={styles.page}><section className={styles.authCard}><p className={styles.eyebrow}>THE BACKYARD · ADMIN</p><h1>Control Center</h1><p>Esta ruta sólo aparece para membresías administrativas verificadas en el servidor.</p><button type="button" onClick={openAccess}>Iniciar sesión</button><Link href="/">Volver a The Backyard</Link></section></main>;
+  if(!adminAccess.roles.includes("SUPER_ADMIN"))return <main className={styles.page}><section className={styles.authCard}><h1>Administración avanzada</h1><p>Este espacio requiere permisos de Super Admin.</p><Link href="/manage">Volver a modo administrador</Link></section></main>;
   if (!authorized && !loading) return <main className={styles.page}><section className={styles.authCard}><p className={styles.eyebrow}>ACCESO RESTRINGIDO</p><h1>Admin no disponible</h1><p>{error || "Esta cuenta no tiene acceso administrativo."}</p><button type="button" onClick={() => void load("dashboard")}>Volver a validar</button><Link href="/">Volver a The Backyard</Link></section></main>;
 
   return <main className={styles.page}>

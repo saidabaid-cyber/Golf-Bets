@@ -11,7 +11,7 @@ import { SlidingWindowRateLimiter } from "../../../../../../lib/ghin/core";
 import { resolveGhinRuntime } from "../../../../../../lib/ghin/runtime.server";
 import { INTERNAL_GOLF_COURSE_CATALOG } from "../../../../../../lib/golf-course-directory";
 import { isolatedPreviewDatabaseEnabled } from "../../../../../../lib/preview-database";
-import { authenticatedRequest } from "../../../../../../lib/server-auth";
+import { advancedAdminRequest as authenticatedRequest } from "../../../../../../lib/admin-advanced.server";
 import { getSupabaseAdmin } from "../../../../../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";

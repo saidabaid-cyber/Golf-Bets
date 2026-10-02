@@ -1,0 +1,40 @@
+[
+  {
+    "original": "20260927045252_account_delete_round_player_tombstones.sql",
+    "originalSha256": "2907d5a52b5252bdf345130b49291e8aed5540ace47c6be7f3378206140860ee",
+    "omittedStatements": 1,
+    "omittedStarts": [
+      "do $$\r\ndeclare\r\n  actor record;\r\n  target record;\r\nbegin\r\n  \n  \n  \n  if exists(\r\n    select 1\r\n    from public.round_course_handicap_snapshots handicap\r\n    joi"
+    ],
+    "applied": true,
+    "installOnlyFile": "20260927045252_account_delete_round_player_tombstones_qa_install_only.sql",
+    "targetProjectRef": "gvzeymebltssgjkvksxt",
+    "variantSha256": "094f1600412854ef86ca12ede752ce0e029f35085db496510186af33f462e92b"
+  },
+  {
+    "original": "20260928031010_migrate_legacy_self_attested_ghin.sql",
+    "originalSha256": "0318d906cbe917737484b867bc81b2c9398df3e9b276424c418ecf10e3d23d45",
+    "omittedStatements": 3,
+    "omittedStarts": [
+      "insert into private.ghin_legacy_self_attested_migrations (\r\n  owner_id, provider, external_player_id, provider_player_name,\r\n  provider_club_name, provider_home",
+      "insert into public.profile_completion_choices (\r\n  user_id, handicap_choice, manual_hcp, not_applicable, updated_at\r\n)\r\nselect\r\n  legacy.owner_id,\r\n  'MANUAL',\r",
+      "delete from public.player_handicap_provider_profiles\r\nwhere provider = 'GHIN'\r\n  and association_status = 'SELF_ATTESTED';"
+    ],
+    "applied": true,
+    "installOnlyFile": "20260928031010_migrate_legacy_self_attested_ghin_qa_install_only.sql",
+    "targetProjectRef": "gvzeymebltssgjkvksxt",
+    "variantSha256": "0730f7071c42e9aac33f83e95e7c144d6ab04ce4afeacf0d4ffedf49f202adb4"
+  },
+  {
+    "original": "20260928121000_account_delete_late_domain_cleanup.sql",
+    "originalSha256": "e598b41e46b7813850a29390a9d6e76b5eb8f22af60d85c17e92d05a0b7bb64c",
+    "omittedStatements": 1,
+    "omittedStarts": [
+      "delete from private.ghin_legacy_self_attested_migrations audit\r\nwhere not exists(select 1 from auth.users account where account.id=audit.owner_id);"
+    ],
+    "applied": true,
+    "installOnlyFile": "20260928121000_account_delete_late_domain_cleanup_qa_install_only.sql",
+    "targetProjectRef": "gvzeymebltssgjkvksxt",
+    "variantSha256": "9903ece2f3cfb0017f8594b7d93c1f2394e1f768139c73f1db27ccc9dad2d505"
+  }
+]

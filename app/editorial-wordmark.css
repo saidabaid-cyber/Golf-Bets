@@ -1,0 +1,37 @@
+/* Shared by player and administration routes, including direct entry. */
+.editorialWordmark {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: auto 20px;
+  align-items: end;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -1.4px;
+  line-height: 1;
+}
+.editorialWordmark > span {
+  border-bottom: 2px solid #bd9c51;
+  padding: 3px 1px 5px;
+}
+.editorialWordmark svg {
+  height: 37px;
+  width: 20px;
+  fill: #bd9c51;
+  stroke: #bd9c51;
+  stroke-width: 1.4;
+  margin-bottom: 0;
+}
+.editorialWordmark small {
+  grid-column: 1 / -1;
+  font-family: var(--by-font, Arial, sans-serif);
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-align: center;
+  margin-top: 7px;
+  color: #244b39;
+}
+@media (max-width: 390px) {
+  .editorialWordmark { font-size: 26px; }
+}

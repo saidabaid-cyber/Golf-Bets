@@ -11,7 +11,7 @@ import {
   readJsonBodyWithLimit,
 } from "../../../../lib/backyard-ai/server/http-security";
 import { resolveCanonicalDataEnvironment } from "../../../../lib/runtime-environment";
-import { authenticatedRequest } from "../../../../lib/server-auth";
+import { advancedAdminRequest as authenticatedRequest } from "../../../../lib/admin-advanced.server";
 import { getSupabaseAdmin } from "../../../../lib/supabase/server";
 
 export const dynamic = "force-dynamic";

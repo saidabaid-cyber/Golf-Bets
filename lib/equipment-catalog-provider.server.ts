@@ -1,4 +1,5 @@
 import "server-only";
+import { applyCatalogLifecycle, catalogLifecycle } from "./admin-catalog-lifecycle.server";
 
 import { publicationIsEffective } from "./admin-control-center";
 import { createInternalEquipmentCatalogProvider } from "./equipment-catalog-provider";
@@ -151,14 +152,15 @@ export async function loadLayeredEquipmentCatalogs() {
     else if (revision.entity_type === "CLUB_EQUIPMENT") { const item = club(payload); if (item) clubs.push(item); }
     else { const item = shaft(payload); if (item) shafts.push(item); }
   }
-  if (!balls.length && !clubs.length && !shafts.length) return seed;
+  const states = await catalogLifecycle();
+  if (!balls.length && !clubs.length && !shafts.length) return {balls:applyCatalogLifecycle(seed.balls,states,"BALL"),clubs:applyCatalogLifecycle(seed.clubs,states,"CLUB_EQUIPMENT"),shafts:applyCatalogLifecycle(seed.shafts,states,"SHAFT")};
   return {
     // Equal IDs are overlaid first. Semantic dedupe then preserves one public
     // identity when Admin publishes the same product under a different ID;
     // the discarded ID is retained as an alias for saved bags and snapshots.
-    balls: dedupeGolfBallCatalog(mergePublishedCatalog(golfBallCatalog, balls)),
-    clubs: dedupeGolfClubCatalog(mergePublishedCatalog(golfClubCatalog, clubs)),
-    shafts: dedupeGolfShaftCatalog(mergePublishedCatalog(golfShaftCatalog, shafts), []),
+    balls: applyCatalogLifecycle(dedupeGolfBallCatalog(mergePublishedCatalog(golfBallCatalog, balls)),states,"BALL"),
+    clubs: applyCatalogLifecycle(dedupeGolfClubCatalog(mergePublishedCatalog(golfClubCatalog, clubs)),states,"CLUB_EQUIPMENT"),
+    shafts: applyCatalogLifecycle(dedupeGolfShaftCatalog(mergePublishedCatalog(golfShaftCatalog, shafts), []),states,"SHAFT"),
   };
 }
 

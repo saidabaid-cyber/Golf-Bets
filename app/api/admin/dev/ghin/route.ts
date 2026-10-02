@@ -17,7 +17,7 @@ import {
   isCrossSiteRequest,
   readJsonBodyWithLimit,
 } from "../../../../../lib/backyard-ai/server/http-security";
-import { authenticatedRequest } from "../../../../../lib/server-auth";
+import { advancedAdminRequest as authenticatedRequest } from "../../../../../lib/admin-advanced.server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";

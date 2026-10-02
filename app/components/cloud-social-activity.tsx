@@ -1,4 +1,5 @@
 "use client";
+import { useVisualContent } from "./use-visual-content";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SocialActivityCard, SocialActivityPage, SocialActivityPreferences, SocialComment, SocialNotification, SocialNotificationPage } from "../../lib/social-activity-contract";
@@ -156,6 +157,7 @@ export function CloudSocialNotifications({ viewerId, accessToken, onFriends, onR
 
 /** Key this component by authenticated identity; never carry another account's feed across login. */
 export function CloudSocialActivity({ viewerId, accessToken, localRoundId, friendsOnly = false, onOpenAchievements }: { viewerId: string; accessToken?: string; localRoundId?: string; friendsOnly?: boolean; onOpenAchievements?: () => void }) {
+  const emptyCopy=useVisualContent().find(c=>c.target_key==="home_empty_feed")?.values;
   const [cards, setCards] = useState<SocialActivityCard[]>([]);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
@@ -192,7 +194,7 @@ export function CloudSocialActivity({ viewerId, accessToken, localRoundId, frien
     {!localRoundId && <button type="button" className="secondary" disabled={loading || loadingMore} onClick={() => { setLoading(true); void refresh().catch(error => setMessage(socialErrorMessage(error))).finally(() => setLoading(false)); }}>Actualizar feed</button>}
     {loading && <p role="status">Cargando actividad…</p>}
     {message && <div className={styles.notice} role="status"><p>{message}</p><button type="button" onClick={() => void refresh().catch((error) => setMessage(socialErrorMessage(error)))}>Reintentar</button></div>}
-    {!loading && !message && !cards.length && <div className={styles.empty}><h2>{localRoundId ? "Tarjeta social pendiente" : "Aún no hay actividad compartida"}</h2><p>{localRoundId ? "Estará disponible cuando la ronda termine y su sincronización cloud se confirme." : "Tus preferencias controlan qué compartes. No publicamos rondas en tiempo real."}</p></div>}
+    {!loading && !message && !cards.length && <div className={styles.empty}><h2>{localRoundId ? "Tarjeta social pendiente" : emptyCopy?.active!==false&&emptyCopy?.title ? emptyCopy.title : "Aún no hay actividad compartida"}</h2><p>{localRoundId ? "Estará disponible cuando la ronda termine y su sincronización cloud se confirme." : emptyCopy?.active!==false&&emptyCopy?.body ? emptyCopy.body : "Tus preferencias controlan qué compartes. No publicamos rondas en tiempo real."}</p></div>}
     {cards.map((card) => <SocialRoundActivityCard key={`${viewerId}:${card.id}`} card={card} viewerId={viewerId} accessToken={accessToken} onRefresh={refresh} onOpenAchievements={onOpenAchievements} />)}
     {nextCursor && <div className={styles.actions}><button type="button" disabled={loadingMore} onClick={() => void loadMore()}>{loadingMore ? "Cargando…" : "Ver más actividad"}</button></div>}
   </section>;

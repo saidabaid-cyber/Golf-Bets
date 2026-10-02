@@ -51,6 +51,7 @@ function loadRoute(file: string, dependencies: Record<string, unknown>) {
       if (id.endsWith("/account-data-export")) return accountExportModule;
       if (id.endsWith("/backyard-ai/server/http-security")) return securityModule;
       if (id.endsWith("/runtime-environment")) return { resolveCanonicalDataEnvironment: () => "test" };
+      if(id.endsWith("/admin-advanced.server")) return {advancedAdminRequest:(dependencies["../../../../lib/server-auth"] as {authenticatedRequest:unknown}).authenticatedRequest};
       if (id in dependencies) return dependencies[id];
       throw new Error(`Unexpected dependency ${id}`);
     },

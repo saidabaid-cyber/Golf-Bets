@@ -1,3 +1,4 @@
+import {isAdminPreviewOrigin} from "./admin-preview-binding";
 export const PRODUCTION_APP_ORIGIN = "https://app.thebackyard.com.mx";
 export const CANONICAL_QA_APP_ORIGIN = "https://dev.thebackyard.com.mx";
 export const CANONICAL_QA_BRANCH_APP_ORIGIN = "https://golf-bets-git-integration-backyard-current-saha8.vercel.app";
@@ -27,6 +28,7 @@ export function isLocalAppOrigin(value: string) {
 export function resolveBrowserAppOrigin(browserOrigin: string, configuredOrigin?: string) {
   const browser = exactAppOrigin(browserOrigin, "invalid_browser_app_origin");
   if (isLocalAppOrigin(browser)) return browser;
+  if(isAdminPreviewOrigin(browser))return browser;
   if (configuredOrigin?.trim()) {
     const configured = exactAppOrigin(configuredOrigin.trim(), "invalid_configured_app_origin");
     if (configured !== CANONICAL_QA_APP_ORIGIN && configured !== PRODUCTION_APP_ORIGIN) throw new Error("unsupported_configured_app_origin");
