@@ -24,13 +24,19 @@ export function simpleAdminModules(memberships: readonly AdminMembership[]): Sim
   });
 }
 
-/** A separate Git branch must never silently write to the frozen DEV database. */
+/** Explicit environment binding: QA stays isolated; DEV requires an intentional
+ * opt-in on its integration/promotion branch. This does not grant user access. */
 export function adminModeDatabaseIsolated(env: Record<string, string | undefined> = process.env) {
   if (env.ADMIN_MODE_V2_ENABLED !== "true") return false;
-  if (env.VERCEL !== undefined && (env.VERCEL_ENV !== "preview" || !/^feature\/admin-mode-v2(?:-|$)/.test(env.VERCEL_GIT_COMMIT_REF || ""))) return false;
+  const target = env.ADMIN_MODE_TARGET_ENV || "qa";
+  if (target !== "qa" && target !== "dev") return false;
+  const allowedBranch = target === "qa" ? /^feature\/admin-mode-v2(?:-|$)/ : /^(promotion\/admin-v2-to-dev|integration\/backyard-current)$/;
+  if (env.VERCEL !== undefined && (env.VERCEL_ENV !== "preview" || !allowedBranch.test(env.VERCEL_GIT_COMMIT_REF || ""))) return false;
   if (env.VERCEL_ENV === "production" || env.NODE_ENV === "production" && env.VERCEL === undefined) return false;
-  const ref = env.ADMIN_MODE_ISOLATED_DB_REF || "";
-  if (!/^[a-z]{20}$/.test(ref) || ["bymeopxkxapfizeeqeyb", "zhqmlpljloumldaczcfp"].includes(ref)) return false;
+  const ref = env.ADMIN_MODE_DB_REF || env.ADMIN_MODE_ISOLATED_DB_REF || "";
+  if (!/^[a-z]{20}$/.test(ref) || ref === "zhqmlpljloumldaczcfp") return false;
+  if (target === "qa" && ref === "bymeopxkxapfizeeqeyb") return false;
+  if (target === "dev" && (ref !== "bymeopxkxapfizeeqeyb" || env.PREVIEW_DB_REF !== ref)) return false;
   try {
     const url = new URL(env.NEXT_PUBLIC_SUPABASE_URL || "");
     return url.protocol === "https:" && url.hostname === `${ref}.supabase.co` && !url.port && !url.username && !url.password && url.pathname === "/" && !url.search && !url.hash;

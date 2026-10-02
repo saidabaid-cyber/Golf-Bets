@@ -41,7 +41,7 @@ export function resolveBrowserSupabaseOrigin(rawUrl: string | undefined, locatio
     return location.protocol === "https:" && origin === CANONICAL_PRODUCTION_SUPABASE_ORIGIN ? origin : null;
   }
   if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]") {
-    if(validAdminPreviewRef(binding.ref)&&origin===`https://${binding.ref}.supabase.co`)return origin;
+    if(validAdminPreviewRef(binding.ref,binding.target)&&origin===`https://${binding.ref}.supabase.co`)return origin;
     if (origin === CANONICAL_PREVIEW_SUPABASE_ORIGIN) return origin;
     const target = new URL(origin);
     return (target.hostname === "localhost" || target.hostname === "127.0.0.1" || target.hostname === "[::1]")
