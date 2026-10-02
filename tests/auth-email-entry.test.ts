@@ -1,7 +1,39 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { processEmailOtpEntry } from "../lib/auth-email-entry";
+import { processEmailOtpEntry, emailOtpFailure, EMAIL_RATE_LIMIT_MESSAGE } from "../lib/auth-email-entry";
+import { requestEmailOtp, EmailOtpRequestError, otpRetrySeconds, OtpSendGate } from "../lib/auth-flow";
+
+test("provider 429 and email rate-limit code retain semantics without exposing diagnostics", () => {
+  for (const error of [{ status: 429, message: "private diagnostic" }, { code: "over_email_send_rate_limit" }, { code: "over_request_rate_limit" }]) {
+    assert.deepEqual(emailOtpFailure(error), { status: 429, code: "RATE_LIMITED", message: EMAIL_RATE_LIMIT_MESSAGE });
+  }
+  assert.equal(emailOtpFailure({ status: 500 }).status, 502);
+});
+
+test("browser receives 429 cooldown and cannot duplicate a send during the wait", async () => {
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ code: "RATE_LIMITED", error: EMAIL_RATE_LIMIT_MESSAGE }),
+    { status: 429, headers: { "retry-after": "120", "content-type": "application/json" } });
+  try {
+    await assert.rejects(() => requestEmailOtp("qa@example.invalid", "login"), (error: unknown) => {
+      assert.ok(error instanceof EmailOtpRequestError);
+      assert.equal(error.status, 429);
+      assert.equal(error.retryAfterSeconds, 120);
+      const gate = new OtpSendGate();
+      gate.nextSendAt = 1_000 + error.retryAfterSeconds * 1_000;
+      assert.equal(otpRetrySeconds(gate.nextSendAt, 1_000), 120);
+      assert.equal(gate.begin(120_000), false);
+      assert.equal(gate.begin(121_000), true);
+      return true;
+    });
+  } finally { globalThis.fetch = previousFetch; }
+});
+
+test("invalid or missing retry headers use a bounded cooldown", () => {
+  for (const value of [0, -1, NaN]) assert.equal(new EmailOtpRequestError("Wait", "RATE_LIMITED", 429, value).retryAfterSeconds, 60);
+  assert.equal(new EmailOtpRequestError("Wait", "RATE_LIMITED", 429, 1e9).retryAfterSeconds, 86_400);
+});
 
 test("cuenta existente en Login envía OTP sin crear usuario", async () => {
   const calls: string[] = [];

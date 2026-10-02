@@ -3,7 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { authCallbackUrl } from "../../../../lib/auth-flow";
-import { processEmailOtpEntry, type EmailEntryIntent } from "../../../../lib/auth-email-entry";
+import { processEmailOtpEntry, emailOtpFailure, EMAIL_RATE_LIMIT_MESSAGE, type EmailEntryIntent } from "../../../../lib/auth-email-entry";
 import { isValidEmail } from "../../../../lib/account-state";
 import { resolveBrowserAppOrigin } from "../../../../lib/app-origin";
 import {
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
   const limit = limiter.consume(safeKey(request, email));
   if (!limit.allowed) {
     const retryAfter = Math.max(1, Math.ceil(limit.retryAfterMs / 1_000));
-    return json({ code: "RATE_LIMITED", error: "Espera antes de volver a intentarlo." }, 429, { "retry-after": String(retryAfter) });
+    return json({ code: "RATE_LIMITED", error: EMAIL_RATE_LIMIT_MESSAGE }, 429, { "retry-after": String(retryAfter) });
   }
 
   const admin = getSupabaseAdmin("cloud", 10_000);
@@ -93,6 +93,8 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const safe = safeError(error);
     console.error("[email-otp] command_failed", { intent, code: safe.code, upstreamStatus: safe.status });
-    return json({ code: "OTP_SEND_FAILED", error: "No pudimos enviar el código. Intenta nuevamente." }, 502);
+    const failure = emailOtpFailure(error);
+    return json({ code: failure.code, error: failure.message }, failure.status,
+      failure.status === 429 ? { "retry-after": "60" } : {});
   }
 }
