@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   const offset=request.nextUrl.searchParams.get("offset");const state=request.nextUrl.searchParams.get("state")||"all";const search=request.nextUrl.searchParams.get("q")||"";
   try{adminCatalogPage([],search,state,offset);}catch{return json({error:"Página no válida."},400);}
   if(section==="competitions"){
-    const result=await access.client.from("admin_catalog_revisions").select("id,entity_id,status,payload,version").eq("entity_type","COMPETITION").in("status",["DRAFT","REVIEWED","VERIFIED","PUBLISHED"]).order("version",{ascending:false}).limit(1000);if(result.error)return json({error:"No pudimos cargar las competiciones."},503);
+    const result=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload,version").eq("entity_type","COMPETITION").in("status",["DRAFT","REVIEWED","VERIFIED","PUBLISHED"]).order("version",{ascending:false}).limit(1000);if(result.error)return json({error:"No pudimos cargar las competiciones."},503);
     const definitions=await access.client.from("competition_definitions").select("id,status").limit(1000);
     if(definitions.error)return json({error:"No pudimos confirmar los estados."},503);
     const lifecycle=await catalogLifecycle();const deleted=new Set(lifecycle.filter(row=>row.entity_type==="COMPETITION"&&row.state==="DELETED").map(row=>row.entity_id));
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       const values=body.values as Record<string,unknown>;if(!values||typeof values!=="object"||Array.isArray(values))throw new Error("Revisa la competición.");
       const id=typeof body.id==="string"&&body.id?body.id:crypto.randomUUID();
       const existing=body.id?await access.client.from("admin_catalog_revisions").select("payload").eq("entity_type","COMPETITION").eq("entity_id",id).eq("status","PUBLISHED").order("version",{ascending:false}).limit(1).maybeSingle():null;
-      const resume=typeof body.baseRevisionId==="string"?await access.client.from("admin_catalog_revisions").select("payload,entity_id").eq("id",body.baseRevisionId).eq("entity_type","COMPETITION").eq("status","DRAFT").single():null;
+      const resume=typeof body.baseRevisionId==="string"?await access.client.from("admin_catalog_revisions").select("payload,entity_id").eq("id",body.baseRevisionId).eq("entity_type","COMPETITION").in("status",["DRAFT","REVIEWED","VERIFIED"]).single():null;
       if(resume&&resume.data?.entity_id!==id)return json({error:"Borrador no disponible."},403);
       if(body.id&&!existing?.data&&!resume?.data)return json({error:"Competición no disponible."},403);
       const copy=typeof body.copyFromId==="string"?await access.client.from("admin_catalog_revisions").select("payload").eq("entity_type","COMPETITION").eq("entity_id",body.copyFromId).eq("status","PUBLISHED").order("version",{ascending:false}).limit(1).maybeSingle():null;
@@ -101,12 +101,14 @@ export async function POST(request: NextRequest) {
       const kind=body.kind as AdminEntityType;if(!(section==="balls"?["BALL"]:["CLUB_EQUIPMENT","SHAFT"]).includes(kind)||!body.values||typeof body.values!=="object"||Array.isArray(body.values))throw new Error("Revisa el equipo seleccionado.");
       const id=typeof body.id==="string"&&body.id?body.id:`equipment-${crypto.randomUUID()}`;
       const existing=(await simpleEquipment(access.memberships,section==="balls")).find(i=>i.id===id&&i.kind===kind);
-      if(body.id&&!existing)return json({error:"Este equipo no está disponible para tu cuenta."},403);
+      const resume=typeof body.baseRevisionId==="string"?await access.client.from("admin_catalog_revisions").select("payload").eq("id",body.baseRevisionId).eq("entity_type",kind).eq("entity_id",id).in("status",["DRAFT","REVIEWED","VERIFIED"]).single():null;
+      if(resume&&!resume.data)return json({error:"Borrador no disponible."},403);
+      if(body.id&&!existing&&!resume?.data)return json({error:"Este equipo no está disponible para tu cuenta."},403);
       const copy=typeof body.copyFromId==="string"?(await simpleEquipment(access.memberships,section==="balls")).find(i=>i.id===body.copyFromId&&i.kind===kind):null;
       if(body.copyFromId&&!copy)return json({error:"No puedes duplicar este registro."},403);
       const original=await access.client.from("admin_catalog_revisions").select("payload").eq("entity_type",kind).eq("entity_id",existing?.id||copy?.id||id).eq("status","PUBLISHED").order("version",{ascending:false}).limit(1).maybeSingle();
       if(original.error)throw new Error("No pudimos confirmar la evidencia actual.");
-      const payload=buildEquipmentPayload(adminEditingBase(original.data?.payload||{},existing?.values||copy?.values||{},id),body.values as Record<string,unknown>,kind);const issues=equipmentPayloadIssues(payload,kind,id);if(issues.length)throw new Error(issues.join(" "));
+      const payload=buildEquipmentPayload(resume?.data?.payload||adminEditingBase(original.data?.payload||{},existing?.values||copy?.values||{},id),body.values as Record<string,unknown>,kind);const issues=equipmentPayloadIssues(payload,kind,id);if(issues.length)throw new Error(issues.join(" "));
       const result=await access.client.rpc("admin_create_revision_v1",{target_entity_type:kind,target_entity_id:id,target_scope_type:"CATALOG",target_scope_id:"equipment",target_payload:{...payload,dataEnvironment:"PRODUCTION"},target_source_type:payload.sourceType,target_source_name:payload.sourceName,target_source_url:payload.sourceUrl,target_provenance_status:payload.verifiedAt?"VERIFIED":"REPORTED",target_verified_at:payload.verifiedAt,target_confidence:null,target_notes:null});
       if(result.error)throw new Error("No se guardó el borrador de equipo.");
       if(body.requestId){const link=await access.client.rpc("admin_link_request_revision_v3",{feedback_id:body.requestId,revision_key:result.data.id});if(link.error)return json({error:"El borrador se guardó, pero no se vinculó. Revisa la solicitud y vuelve a intentarlo."},409);}
@@ -116,11 +118,13 @@ export async function POST(request: NextRequest) {
       if (!body.values || typeof body.values!=="object" || Array.isArray(body.values)) throw new Error("Revisa el formulario.");
       const id = typeof body.id==="string" && body.id ? body.id : `course-${crypto.randomUUID()}`;
       const existing = (await simpleCourses(access.client,access.memberships)).find(i=>i.id===id);
-      if (body.id && !existing) return json({error:"El campo no está disponible para tu cuenta."},403);
+      const resume=typeof body.baseRevisionId==="string"?await access.client.from("admin_catalog_revisions").select("payload").eq("id",body.baseRevisionId).eq("entity_type","COURSE").eq("entity_id",id).in("status",["DRAFT","REVIEWED","VERIFIED"]).single():null;
+      if(resume&&!resume.data)return json({error:"Borrador no disponible."},403);
+      if (body.id && !existing && !resume?.data) return json({error:"El campo no está disponible para tu cuenta."},403);
       if (!access.memberships.some(m=>membershipAllows(m,{entityType:"COURSE",scopeType:"COURSE",scopeId:id},"CREATE_DRAFT"))) return json({error:"No puedes agregar este campo."},403);
       const original=existing?await access.client.from("admin_catalog_revisions").select("payload").eq("entity_type","COURSE").eq("entity_id",id).eq("status","PUBLISHED").order("version",{ascending:false}).limit(1).maybeSingle():null;
       if(original?.error)throw new Error("No pudimos confirmar la versión actual.");
-      const base:Record<string,unknown> = existing?adminEditingBase(original?.data?.payload||{},existing.values,id):{club:{id:`club-${crypto.randomUUID()}`},course:{id},tees:[],holes:[],teeHoleYardages:[]};
+      const base:Record<string,unknown> = resume?.data?.payload||(existing?adminEditingBase(original?.data?.payload||{},existing.values,id):{club:{id:`club-${crypto.randomUUID()}`},course:{id},tees:[],holes:[],teeHoleYardages:[]});
       const payload=buildCoursePayload(base,body.values as Record<string,unknown>);
       const issues=coursePayloadIssues(payload,id); if (issues.length) throw new Error(issues.join(" "));
       const values=body.values as Record<string,unknown>; const sourceName=String(values.sourceName || "").trim(); const sourceUrl=String(values.sourceUrl || "").trim() || null; const selectedDate=String(values.verifiedAt || "").trim(); const verifiedAt=selectedDate===String(base.verifiedAt||"").slice(0,10)?String(base.verifiedAt||"")||null:selectedDate||null;

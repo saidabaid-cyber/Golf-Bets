@@ -22,8 +22,8 @@ export function catalogFields(kind:AdminEntityType):AdminField[]{
 }
 export function preserveVerificationTime(previous:unknown,selected:unknown){return selected&&String(previous||"").slice(0,10)===String(selected)?previous:selected||null;}
 export function adminEditingBase(original:Record<string,unknown>,canonical:Record<string,unknown>,id:string):Record<string,unknown>{
- const result:Record<string,unknown>={...original,...Object.fromEntries(Object.entries(canonical).filter(([,value])=>value!==undefined)),id};
- for(const key of ["club","course"])if(original[key]||canonical[key])result[key]={...(original[key]||{}) as Record<string,unknown>,...Object.fromEntries(Object.entries((canonical[key]||{}) as Record<string,unknown>).filter(([,value])=>value!==undefined))};
+ const result:Record<string,unknown>={...Object.fromEntries(Object.entries(canonical).filter(([,value])=>value!==undefined)),...original,id};
+ for(const key of ["club","course"])if(original[key]||canonical[key])result[key]={...Object.fromEntries(Object.entries((canonical[key]||{}) as Record<string,unknown>).filter(([,value])=>value!==undefined)),...(original[key]||{}) as Record<string,unknown>};
  return result;
 }
 export function buildCompetitionPayload(base:Record<string,unknown>,input:Record<string,unknown>,draft=false):Record<string,unknown>{
@@ -36,6 +36,12 @@ export function buildCompetitionPayload(base:Record<string,unknown>,input:Record
   return {...base,...values,id:base.id,courseId:input.courseId,sourceName:input.sourceName,sourceUrl:input.sourceUrl||null,verifiedAt:preserveVerificationTime(base.verifiedAt,input.verifiedAt),rules:newRules};
 }
 export function competitionFormValues(payload:Record<string,unknown>){return {...payload,sourceName:payload.sourceName||"Verificación administrativa",ruleBody:(Array.isArray(payload.rules)?payload.rules as Record<string,unknown>[]:[]).find(rule=>rule.title==="Información del evento")?.body||""};}
+export function catalogDraftFormValues(kind:AdminEntityType,payload:Record<string,unknown>):Record<string,unknown>{
+ if(kind==="COMPETITION")return competitionFormValues(payload);
+ if(kind==="COURSE"){const club=(payload.club||{}) as Record<string,unknown>,course=(payload.course||{}) as Record<string,unknown>;return {...payload,name:course.name,clubName:club.name,city:club.city||"",stateRegion:club.stateRegion||"",country:club.country||"",address:club.address||"",latitude:club.latitude,longitude:club.longitude,holeCount:String(course.holes||18),active:course.active===true};}
+ const list=(key:string)=>Array.isArray(payload[key])?payload[key] as unknown[]:[];
+ return {...payload,aliasesText:list("aliases").join(", "),handsText:list("handedness"),loftsText:list("lofts"),weightsText:list("weightOptions"),flexesText:list("flexOptions").join(", "),torqueText:list("torqueRange")};
+}
 export function buildEquipmentPayload(base:Record<string,unknown>,input:Record<string,unknown>,kind:AdminEntityType):Record<string,unknown>{
   input={...input};
   for(const [key,min,max] of [["loftsText",0,90],["weightsText",1,300],["torqueText",0,30]] as const)if(Array.isArray(input[key]))input[key]=structuredNumbers(input[key] as unknown[],min,max).join(",");
