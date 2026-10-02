@@ -140,3 +140,41 @@ test('promotion SQL contains no project binding or install-time catalog/account 
   assert.doesNotMatch(installation,/\b(?:insert\s+into|update\s+public\.|delete\s+from|truncate|call\s+|select\s+public\.)/i,name);
  }
 });
+
+test('prepared deletion filter preserves the frozen player projection contract and history', async t => {
+ const db = await promotionDatabase(true, true);
+ try {
+  await asUser(db, IDS.admin);
+  await publishCourse(db, 'delete-readback-fixture', 'Original offline course');
+  const retiredRevision = await publishCourse(db, 'delete-readback-fixture', 'Edited offline course');
+  await db.query("select admin_catalog_lifecycle_v3('COURSE','delete-readback-fixture','delete','Offline disposable fixture cleanup')");
+  await assert.rejects(db.query("select admin_transition_revision_v1($1,'ARCHIVED','Offline cleanup',gen_random_uuid())", [retiredRevision]), /ENTITY_PERMANENTLY_RETIRED/);
+  await asUser(db, IDS.player);
+  const activeRows = () => db.query("select entity_id from player_published_catalog_v1(array['COURSE']) where entity_id='delete-readback-fixture' and status='PUBLISHED'");
+  assert.equal((await activeRows()).rows.length, 1, 'reproduces the frozen reader returning an already deleted course');
+  await asOperator(db);
+  const auditCount = (await db.query<{n:number}>('select count(*)::int n from admin_audit_log')).rows[0].n;
+  const patch = readFileSync('supabase/promotion-patches/catalog-delete-publication-filter.sql', 'utf8');
+  await db.exec(patch);
+  assert.equal((await db.query<{n:number}>('select count(*)::int n from admin_audit_log')).rows[0].n, auditCount, 'installing the read filter performs no data or audit writes');
+  await db.exec('set role anon');
+  assert.equal((await activeRows()).rows.length, 0, 'anonymous frozen reader no longer exposes the deleted current version');
+  assert.equal((await db.query("select entity_id from player_published_catalog_v1(array['COURSE']) where entity_id='delete-readback-fixture' and status='SUPERSEDED'")).rows.length, 1, 'historical versions remain available');
+  await asUser(db, IDS.player);
+  assert.equal((await activeRows()).rows.length, 0, 'authenticated frozen reader follows the same contract');
+  await asUser(db, IDS.admin);
+  await db.query("select admin_transition_revision_v1($1,'ARCHIVED','Offline retired metadata cleanup',gen_random_uuid())", [retiredRevision]);
+  await assert.rejects(publishCourse(db, 'delete-readback-fixture', 'Forbidden resurrection'), /ENTITY_PERMANENTLY_RETIRED/);
+  await assert.rejects(db.query("update admin_catalog_revisions set payload=jsonb_set(payload,'{course,name}','\"Forbidden metadata edit\"') where id=$1", [retiredRevision]), /PUBLISHED_REVISION_IMMUTABLE|ENTITY_PERMANENTLY_RETIRED/);
+  await asOperator(db);
+  assert.equal((await db.query<{n:number}>("select count(*)::int n from admin_audit_log where entity_id='delete-readback-fixture' and action='TRANSITION_ARCHIVED'")).rows[0].n, 1, 'status-only archival stays audited');
+  await privateCourse(db, 'projection-private');
+  assert.equal((await db.query("update golf_courses set name='Own private edit preserved' where id='projection-private' returning id")).rows.length, 1);
+  await asUser(db, IDS.other);
+  assert.equal((await db.query("update golf_courses set name='Forbidden edit' where id='projection-private' returning id")).rows.length, 0);
+  await assert.rejects(db.query("select admin_catalog_lifecycle_v3('COURSE','projection-private','archive','Forbidden Admin endpoint')"), /ADMIN_REQUIRED/);
+  t.diagnostic('Before filter: 1 deleted current version; after filter: 0; historical version: 1. No install-time writes.');
+ } finally {
+  await db.close();
+ }
+});
