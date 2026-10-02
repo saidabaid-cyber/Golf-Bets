@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { ModalCloseButton } from "./modal-shell";
 import styles from "./profile-data-dialogs.module.css";
@@ -8,7 +8,7 @@ import styles from "./profile-data-dialogs.module.css";
 export type AccountDataPolicy = "delete_golf_data" | "retain_history";
 type Common = { confirmation: string; onConfirmation: (value: string) => void; busy: boolean; error: string; onClose: () => void; onConfirm: () => void };
 
-function Dialog({ titleId, busy, onClose, children }: { titleId: string; busy: boolean; onClose: () => void; children: ReactNode }) {
+function Dialog({ titleId, busy, onClose, children, account = false }: { titleId: string; busy: boolean; onClose: () => void; children: ReactNode; account?: boolean }) {
   const ref = useRef<HTMLElement>(null);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
@@ -25,7 +25,7 @@ function Dialog({ titleId, busy, onClose, children }: { titleId: string; busy: b
     element?.addEventListener("keydown", trap);
     return () => { element?.removeEventListener("keydown", trap); previous?.focus(); };
   }, []);
-  return createPortal(<div className="modalBackdrop"><section ref={ref} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} tabIndex={-1}>
+  return createPortal(<div className={`modalBackdrop ${account ? styles.accountBackdrop : ""}`}><section ref={ref} className={`${styles.dialog} ${account ? styles.accountDialog : ""}`} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy} tabIndex={-1}>
     <ModalCloseButton onClose={onClose} disabled={busy} />{children}
   </section></div>, document.body);
 }
@@ -43,16 +43,28 @@ export function StatisticsResetDialog(props: Common) {
 }
 
 export function AccountDataDialog(props: Common & { policy: AccountDataPolicy | null; onPolicy: (value: AccountDataPolicy) => void; syncBusy?: boolean }) {
-  return <Dialog titleId="delete-account-title" busy={props.busy} onClose={props.onClose}>
-    <span className="destructiveEyebrow">CUENTA Y DATOS</span><h2 id="delete-account-title">¿Qué quieres hacer con tus datos de golf?</h2>
-    <fieldset className={styles.choices} disabled={props.busy}><legend className="sr-only">Política de datos</legend>
-      <button type="button" aria-pressed={props.policy === "delete_golf_data"} onClick={() => props.onPolicy("delete_golf_data")}><b>ELIMINAR TAMBIÉN MIS DATOS</b><span>Eliminar tus rondas, estadísticas y datos personales asociados a tu cuenta, sujeto a las obligaciones legales de conservación que correspondan.</span></button>
-      <button type="button" aria-pressed={props.policy === "retain_history"} onClick={() => props.onPolicy("retain_history")}><b>CONSERVAR MI HISTORIAL PARA RECUPERARLO SI REGRESO</b><span>Solicitar la desactivación y conservar los datos permitidos para recuperar el historial según la política de retención y recuperación aprobada.</span></button>
-    </fieldset>
-    <p className={styles.legal}>LEGAL_REVIEW_REQUIRED · Los plazos de conservación y el procedimiento de recuperación requieren aprobación. No prometemos conservación indefinida ni borrado absoluto.</p>
-    {props.policy && <label>Escribe ELIMINAR para confirmar<input aria-label="Confirmación de eliminación de cuenta" value={props.confirmation} disabled={props.busy} onChange={(event) => props.onConfirmation(event.target.value)} placeholder="ELIMINAR" autoComplete="off" /></label>}
-    {props.error && <p role="alert" className={styles.error}>{props.error}</p>}
-    {props.syncBusy && <p role="status">Espera a que termine la sincronización antes de continuar.</p>}
-    <div className={styles.actions}><button type="button" className="secondary" disabled={props.busy} onClick={props.onClose}>Cancelar</button><button type="button" className="dangerButton" disabled={!props.policy || props.confirmation !== "ELIMINAR" || props.busy || props.syncBusy} onClick={props.onConfirm}>{props.busy ? props.policy === "delete_golf_data" ? "Estamos eliminando tu cuenta…" : "Estamos desactivando tu cuenta…" : props.policy === "retain_history" ? "Desactivar y conservar" : "Eliminar cuenta"}</button></div>
+  const [confirming, setConfirming] = useState(false);
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { if (confirming) titleRef.current?.focus(); }, [confirming]);
+  function chooseDeletion() {
+    if (props.busy || props.syncBusy) return;
+    props.onPolicy("delete_golf_data");
+    // Keep the existing lifecycle request contract. The second screen, rather
+    // than typing a word on a mobile keyboard, supplies explicit confirmation.
+    props.onConfirmation("ELIMINAR");
+    setConfirming(true);
+  }
+  return <Dialog account titleId="delete-account-title" busy={props.busy} onClose={props.onClose}>
+    <header className={styles.accountHeader}><span className="destructiveEyebrow">CUENTA</span><h2 ref={titleRef} tabIndex={-1} id="delete-account-title">{confirming ? "¿Seguro que quieres eliminar tu cuenta?" : "¿Qué quieres hacer?"}</h2></header>
+    <div className={styles.accountContent}>
+      {confirming ? <p>Esta acción no se puede deshacer. Algunos datos pueden conservarse o anonimizarse cuando exista una obligación legal de retención.</p> : <fieldset className={styles.choices} disabled={props.busy}><legend className="sr-only">Opciones para tu cuenta</legend>
+        <button type="button" disabled={props.syncBusy} onClick={chooseDeletion}><b>Eliminar mi cuenta y mis datos</b><span>Eliminar o anonimizar los datos asociados a tu cuenta que puedan eliminarse, conservando únicamente la información que deba mantenerse por obligaciones legales.</span></button>
+        <div className={styles.unavailableChoice} aria-disabled="true"><b>Desactivar mi cuenta y conservar mi historial</b><span>Desactivar tu cuenta y conservar la información permitida para poder recuperarla posteriormente, cuando esta opción esté disponible.</span><p>Esta opción todavía no está disponible. Por ahora no puedes desactivar tu cuenta y recuperar el historial después.</p></div>
+      </fieldset>}
+      {props.error && <p role="alert" className={styles.error}>{props.error}</p>}
+      {props.syncBusy && <p role="status">Espera a que termine la sincronización antes de continuar.</p>}
+      {props.busy && <p role="status">Estamos eliminando tu cuenta. Espera un momento.</p>}
+    </div>
+    <footer className={styles.accountActions}><button type="button" className="secondary" disabled={props.busy} onClick={props.onClose}>Cancelar</button>{confirming && <button type="button" className={styles.deleteAccountButton} disabled={props.policy !== "delete_golf_data" || props.confirmation !== "ELIMINAR" || props.busy || props.syncBusy} onClick={props.onConfirm}>{props.busy ? "Eliminando…" : "Eliminar cuenta"}</button>}</footer>
   </Dialog>;
 }

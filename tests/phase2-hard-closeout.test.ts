@@ -200,10 +200,10 @@ test("onboarding, groups and account deletion expose explicit safe choices", () 
   assert.match(invitationUi, /La persona se incorpora al grupo cuando acepta con su cuenta verificada/);
   assert.doesNotMatch(invitationUi, /Invitación local|Math\.random\(/);
   assert.match(account, /<AccountDataDialog[^\n]*policy=\{deletePolicy\}[^\n]*onPolicy=\{setDeletePolicy\}/);
-  assert.match(accountDialog, /¿Qué quieres hacer con tus datos de golf\?/);
-  assert.match(accountDialog, /ELIMINAR TAMBIÉN MIS DATOS/);
-  assert.match(accountDialog, /CONSERVAR MI HISTORIAL PARA RECUPERARLO SI REGRESO/);
-  assert.match(accountDialog, /disabled=\{!props\.policy \|\| props\.confirmation !== "ELIMINAR"/);
+  assert.match(accountDialog, /¿Qué quieres hacer\?/);
+  assert.match(accountDialog, /Eliminar mi cuenta y mis datos/);
+  assert.match(accountDialog, /Desactivar mi cuenta y conservar mi historial/);
+  assert.match(accountDialog, /disabled=\{props\.policy !== "delete_golf_data" \|\| props\.confirmation !== "ELIMINAR"/);
   assert.match(account, /deleteText !== "ELIMINAR" \|\| !deletePolicy/);
   assert.match(account, /accountDeletionRequestBody\(intent\)/);
   assert.match(account, /accountDeletionResponseConfirmed\(result, intent\.dataPolicy\)/);

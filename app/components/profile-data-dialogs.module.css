@@ -4,15 +4,28 @@
 .dialog label { display:grid; gap:8px; margin-top:14px; }
 .dialog input { min-height:44px; min-width:0; width:100%; font-size:16px; }
 .choices { display:grid; gap:8px; border:0; padding:0; margin:12px 0; }
-.choices legend { font-size:18px; font-weight:800; }
-.choices button { min-width:0; padding:12px; text-align:left; border:1px solid #bdcfc4; border-radius:12px; background:#f3f8f5; color:#173c2e; }
+.choices legend { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.choices button,.unavailableChoice { min-width:0; padding:14px; text-align:left; border:1px solid #bdcfc4; border-radius:12px; background:#f3f8f5; color:#173c2e; }
 .choices button[aria-pressed=true] { border:2px solid #17653f; background:#e6f4ec; padding:11px; }
 .choices b,.choices span { display:block; }
-.choices b { font-size:12px; }
+.choices b { font-size:14px; }
 .choices span { margin-top:5px; font-size:12px; line-height:1.4; }
 .actions { display:grid; gap:9px; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr); margin-top:16px; }
 .actions button { min-height:46px; font-size:13px; }
 .note { display:grid; gap:5px; padding:12px; background:#f2f5f3; border-radius:10px; font-size:12px; }
 .error { padding:12px; border:1px solid #dfaca7; border-radius:10px; background:#fff0ef; color:#962c26; overflow-wrap:anywhere; }
-.legal { font-size:11px; color:#735924; }
+.accountBackdrop { top:var(--visual-viewport-top,0px); bottom:auto; height:var(--visual-viewport-height,100dvh); box-sizing:border-box; padding:calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); }
+.accountDialog { display:flex; flex-direction:column; max-height:100%; padding:0; overflow:hidden; }
+.accountHeader { flex:0 0 auto; padding:20px 18px 0; }
+.accountHeader h2 { margin:6px 0 14px; font-size:21px; line-height:1.25; }
+.accountContent { min-height:0; overflow-y:auto; overscroll-behavior:contain; -webkit-overflow-scrolling:touch; padding:0 18px 16px; }
+.accountContent>p { margin:0 0 12px; }
+.accountContent .choices { margin:0; }
+.unavailableChoice { background:var(--soft,#f2f5f3); color:var(--muted,#526257); }
+.unavailableChoice p { margin:10px 0 0; font-weight:700; }
+.accountActions { flex:0 0 auto; display:flex; justify-content:flex-end; gap:12px; padding:14px 18px; border-top:1px solid var(--line,#d6dfd9); background:var(--card,#fff); }
+.accountActions button { min-height:48px; min-width:0; flex:1; font-size:14px; }
+.accountActions .deleteAccountButton { border:1px solid #a32325; border-radius:13px; background:#b52b2d; color:#fff; padding:12px; font-weight:900; }
+.deleteAccountButton:not(:disabled):hover { background:#982123; }
 @media(max-width:430px) { .dialog { padding:18px 14px; } .actions { grid-template-columns:1fr; } }
+@media(max-width:430px) { .accountDialog { padding:0; } }

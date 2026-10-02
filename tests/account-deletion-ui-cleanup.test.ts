@@ -5,6 +5,7 @@ import * as ts from "typescript";
 import { ACCOUNT_DELETION_MARKER_PREFIX, ACCOUNT_STORAGE_KEYS, accountDeletionMarkerKey } from "../lib/account-state";
 import { settleAccountDeletionClient } from "../lib/account-deletion-client";
 import { legalEvidenceStateKey, type LegalEnvironment } from "../lib/legal-evidence-client";
+import { AuthSessionRecoveryError } from "../lib/auth-flow";
 
 const source = readFileSync("app/components/account-provider.tsx", "utf8");
 const parsed = ts.createSourceFile("account-provider.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -19,6 +20,41 @@ function actualHandler(name: string, bindings: Record<string, unknown>) {
   const js = ts.transpileModule(handler, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   return new Function(...Object.keys(bindings), `${js}; return ${name};`)(...Object.values(bindings));
 }
+
+test("a deleted or revoked session cannot restore its cached offline profile", () => {
+  let declaration = "";
+  function visit(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(parsed) === "activateOfflineWorkspace") declaration = node.getText(parsed);
+    ts.forEachChild(node, visit);
+  }
+  visit(parsed);
+  assert.ok(declaration);
+  let activations = 0;
+  const profile = { userId: "deleted-player" };
+  const noop = () => {};
+  const bindings = {
+    useCallback: (callback: unknown) => callback, AuthSessionRecoveryError,
+    localStorage: { getItem: (key: string) => key === "workspace-owner" ? profile.userId : null },
+    WORKSPACE_OWNER_KEY: "workspace-owner", accountDeletionMarkerKey,
+    readOfflineAuthenticatedProfile: () => profile, ownsLocalWorkspace: () => true,
+    activeUserId: { current: null }, cloudProfileFallbackRef: { current: null },
+    cloudProfileFields: () => ({}), migrationDecisionStorageKey: () => "migration",
+    setIdentity: () => { activations++; }, setCloudLinked: noop, setCloudStatus: noop,
+    setLastCloudSync: noop, setCloudConsentChecked: noop, setProfileChecked: noop,
+    setProfileSetupRequired: noop, setEquipmentOnboardingRequired: noop,
+    loadEquipmentProfile: () => ({ ok: false }), equipmentOnboardingReadyKey: () => "equipment",
+    setBetaOnboardingRequired: noop, betaOnboardingIsActive: () => false,
+    readBetaOnboardingProgress: () => null, setReady: noop,
+  };
+  const js = ts.transpileModule(`const ${declaration};`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const restore = new Function(...Object.keys(bindings), `${js}; return activateOfflineWorkspace;`)(...Object.values(bindings)) as (error?: unknown) => boolean;
+  assert.equal(restore(new AuthSessionRecoveryError("invalid", { code: "user_not_found", status: 401 })), false);
+  assert.equal(restore(new AuthSessionRecoveryError("invalid", { code: "refresh_token_not_found", status: 400 })), false);
+  assert.equal(activations, 0);
+  assert.equal(bindings.activeUserId.current, null);
+  assert.equal(restore(new AuthSessionRecoveryError("transient", new TypeError("Network unavailable"))), true);
+  assert.equal(activations, 1, "a recoverable outage still allows the existing offline workspace");
+});
 function fixture(failOffline = false, failWorkspace = false, fallbackOwner = "a") {
   const values = new Map<string, string>();
   const storage = { getItem: (key: string) => values.get(key) ?? null,
@@ -110,7 +146,7 @@ test("confirmed cleanup forgets only the deleted account profile fallback", asyn
 
 test("delete dialog exposes exact progress copy while preserving strong confirmation and busy guard", () => {
   const dialog = readFileSync("app/components/profile-data-dialogs.tsx", "utf8");
-  assert.match(dialog, /Estamos eliminando tu cuenta…/);
+  assert.match(dialog, /Estamos eliminando tu cuenta\. Espera un momento\./);
   assert.match(dialog, /props\.confirmation !== "ELIMINAR" \|\| props\.busy \|\| props\.syncBusy/);
   assert.match(dialog, /disabled=\{props\.busy\}/);
 });

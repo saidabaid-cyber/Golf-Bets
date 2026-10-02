@@ -26,7 +26,7 @@ test("todos los archivos con diálogos interactivos exponen una salida visible",
       // dialog: follow the handler through that component, not a name-only opt-out.
       assert.match(source, /<AccountDataDialog[^\n]*onClose=\{\(\) => \{ setDelete(?:Account)?Open\(false\)/, `${file} no conecta cierre`);
       const dialog = read("app/components/profile-data-dialogs.tsx");
-      assert.match(dialog, /<Dialog titleId="delete-account-title" busy=\{props\.busy\} onClose=\{props\.onClose\}/);
+      assert.match(dialog, /<Dialog account titleId="delete-account-title" busy=\{props\.busy\} onClose=\{props\.onClose\}/);
       assert.match(dialog, /<ModalCloseButton onClose=\{onClose\} disabled=\{busy\}/);
       assert.match(dialog, /disabled=\{props\.busy\} onClick=\{props\.onClose\}>Cancelar<\/button>/);
     } else if (file.endsWith("/equipment-profile-panel.tsx")) {

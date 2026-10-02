@@ -692,7 +692,10 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setShowMigration(localDataExists && !migrationDecision);
   }, [equipmentOnboardingReadyKey, setCloudIssue, setCloudStatus]);
 
-  const activateOfflineWorkspace = useCallback(() => {
+  const activateOfflineWorkspace = useCallback((recoveryError?: unknown) => {
+    // A deleted/revoked account is not a network outage. Its cached profile
+    // must not reactivate an offline identity or leave the consent gate waiting.
+    if (recoveryError instanceof AuthSessionRecoveryError && recoveryError.failure === "invalid") return false;
     const ownerId = localStorage.getItem(WORKSPACE_OWNER_KEY) || "";
     if (ownerId && localStorage.getItem(accountDeletionMarkerKey(ownerId))) return false;
     const profile = readOfflineAuthenticatedProfile(localStorage, ownerId);
@@ -763,7 +766,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     }).catch((error) => {
       if (!mounted || authEventRevision !== 0) return;
       const issue = cloudIssueFromError("auth", error instanceof AuthSessionRecoveryError ? error.cause : error, navigator.onLine);
-      if (activateOfflineWorkspace()) setCloudIssue("auth", issue);
+      if (activateOfflineWorkspace(error)) setCloudIssue("auth", issue);
       else setCloudIssue("auth", issue);
       setReady(true);
     });
@@ -791,7 +794,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         }).catch(error => {
           if (!mounted || revision !== authEventRevision) return;
           const issue = cloudIssueFromError("auth", error instanceof AuthSessionRecoveryError ? error.cause : error, navigator.onLine);
-          if (activateOfflineWorkspace()) setCloudIssue("auth", issue);
+          if (activateOfflineWorkspace(error)) setCloudIssue("auth", issue);
           else setCloudIssue("auth", issue);
           setReady(true);
         });
@@ -812,7 +815,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }).catch(error => {
         if (!mounted) return;
         const issue = cloudIssueFromError("auth", error instanceof AuthSessionRecoveryError ? error.cause : error, navigator.onLine);
-        if (activateOfflineWorkspace()) setCloudIssue("auth", issue);
+        if (activateOfflineWorkspace(error)) setCloudIssue("auth", issue);
         else setCloudIssue("auth", issue);
       });
     };
