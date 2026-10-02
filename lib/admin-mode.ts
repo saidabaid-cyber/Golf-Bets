@@ -30,7 +30,7 @@ export function adminModeDatabaseIsolated(env: Record<string, string | undefined
   if (env.ADMIN_MODE_V2_ENABLED !== "true") return false;
   const target = env.ADMIN_MODE_TARGET_ENV || "qa";
   if (target !== "qa" && target !== "dev") return false;
-  const allowedBranch = target === "qa" ? /^feature\/admin-mode-v2(?:-|$)/ : /^(promotion\/admin-v2-to-dev|integration\/backyard-current)$/;
+  const allowedBranch = target === "qa" ? /^feature\/admin-mode-v2(?:-|$)/ : /^(promotion\/admin-v2-to-dev|integration\/backyard-current|fix\/post-promotion-avatar-ai-ballfit-settings)$/;
   if (env.VERCEL !== undefined && (env.VERCEL_ENV !== "preview" || !allowedBranch.test(env.VERCEL_GIT_COMMIT_REF || ""))) return false;
   if (env.VERCEL_ENV === "production" || env.NODE_ENV === "production" && env.VERCEL === undefined) return false;
   const ref = env.ADMIN_MODE_DB_REF || env.ADMIN_MODE_ISOLATED_DB_REF || "";

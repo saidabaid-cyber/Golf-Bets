@@ -5,6 +5,12 @@ import {previewDatabaseFeaturesAvailable,reviewedCourseDatabaseEnabled} from '..
 import {isAdminPreviewOrigin} from '../lib/admin-preview-binding';
 const qa={ADMIN_MODE_V2_ENABLED:'true',VERCEL:'1',VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'feature/admin-mode-v2',ADMIN_MODE_DB_REF:'abcdefghijklmnopqrst',NEXT_PUBLIC_SUPABASE_URL:'https://abcdefghijklmnopqrst.supabase.co'};
 const dev={...qa,VERCEL_GIT_COMMIT_REF:'promotion/admin-v2-to-dev',ADMIN_MODE_TARGET_ENV:'dev',ADMIN_MODE_DB_REF:'bymeopxkxapfizeeqeyb',PREVIEW_DB_REF:'bymeopxkxapfizeeqeyb',NEXT_PUBLIC_SUPABASE_URL:'https://bymeopxkxapfizeeqeyb.supabase.co'};
+
+test('post-promotion fix Preview requires explicit DEV binding and never accepts QA or production',()=>{
+ const fix={...dev,VERCEL_GIT_COMMIT_REF:'fix/post-promotion-avatar-ai-ballfit-settings'};
+ assert.equal(adminModeDatabaseIsolated(fix),true);
+ for(const patch of [{ADMIN_MODE_TARGET_ENV:'qa'},{PREVIEW_DB_REF:''},{VERCEL_ENV:'production'},{VERCEL_GIT_COMMIT_REF:'fix/unreviewed'},{NEXT_PUBLIC_SUPABASE_URL:qa.NEXT_PUBLIC_SUPABASE_URL}])assert.equal(adminModeDatabaseIsolated({...fix,...patch}),false);
+});
 test('same runtime supports explicitly bound QA and DEV without source changes',()=>{
  for(const env of [qa,dev,{...dev,VERCEL_GIT_COMMIT_REF:'integration/backyard-current'}]){
   assert.equal(adminModeDatabaseIsolated(env),true);assert.equal(previewDatabaseFeaturesAvailable(env),true);assert.equal(reviewedCourseDatabaseEnabled(env),true);
