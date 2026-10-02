@@ -230,7 +230,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
     } catch (error) {
       if (controller.signal.aborted || request !== requestRef.current || (error instanceof DOMException && error.name === "AbortError")) return;
       setStatus("");
-      setMessage(error instanceof PhotoAvatarGenerationError && error.code === "rate_limit"
+      setMessage(error instanceof PhotoAvatarGenerationError && ["rate_limit", "avatar_face_missing", "avatar_face_unclear"].includes(error.code)
         ? error.message
         : "No pudimos crear el avatar. Intenta nuevamente.");
     } finally {

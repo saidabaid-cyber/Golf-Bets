@@ -10,6 +10,7 @@ import {
 import {
   generatePremiumGolfAvatar,
   parsePhotoAvatarSourceDataUrl,
+  photoAvatarFaceErrorMessage,
 } from "../../../../lib/photo-avatar-generation.server";
 import {
   AI_IMAGE_PROCESSING_CONSENT,
@@ -111,6 +112,7 @@ export async function POST(request: NextRequest) {
     const avatarDataUrl = await generatePremiumGolfAvatar({
       apiKey: key,
       model: config.avatarImageModel,
+      faceValidationModel: config.roundSetupModel,
       source: photo,
       variant,
       userHash,
@@ -124,6 +126,8 @@ export async function POST(request: NextRequest) {
     });
     return json({ avatarDataUrl, provider: "openai", model: config.avatarImageModel, variant });
   } catch (error) {
+    const faceMessage = photoAvatarFaceErrorMessage(error);
+    if (faceMessage) return json({ error: faceMessage, code: (error as { code: string }).code }, { status: 422 });
     const failure = classifyBackyardAiFailure(error);
     console.error("Backyard profile avatar provider", {
       provider: "openai",

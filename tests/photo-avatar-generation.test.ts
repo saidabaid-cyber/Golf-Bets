@@ -78,6 +78,7 @@ type ServerHelper = {
   parsePhotoAvatarSourceDataUrl: (value: unknown) => { bytes: Buffer; mimeType: string; extension: string } | null;
   premiumGolfAvatarPrompt: (variant: number) => string;
   generatePremiumGolfAvatar: (input: Record<string, unknown>) => Promise<string>;
+  photoAvatarFaceErrorMessage: (error: unknown) => string | null;
 };
 
 function serverHelper(): ServerHelper {
@@ -118,10 +119,11 @@ test("adaptador OpenAI valida la foto, conserva identidad por prompt y devuelve 
   const avatar = await helper.generatePremiumGolfAvatar({
     apiKey: "server-secret",
     model: "gpt-image-test",
+    faceValidationModel: "vision-test",
     source,
     variant: 2,
     userHash: "opaque-user",
-    client: { images: { edit: async (input: Record<string, unknown>) => { providerInputs.push(input); return { data: [{ b64_json: encoded }], output_format: "webp" }; } } },
+    client: { responses: { create: async (input: Record<string, unknown>) => { assert.equal(input.model, "vision-test"); assert.equal(input.store, false); return { output_text: JSON.stringify({ status: "clear_face", confidence: .97 }) }; } }, images: { edit: async (input: Record<string, unknown>) => { providerInputs.push(input); return { data: [{ b64_json: encoded }], output_format: "webp" }; } } },
   });
   const providerInput = providerInputs[0];
   assert.equal(avatar, `data:image/webp;base64,${encoded}`);
@@ -129,10 +131,41 @@ test("adaptador OpenAI valida la foto, conserva identidad por prompt y devuelve 
   assert.equal(providerInput?.output_format, "webp");
   assert.equal(providerInput?.user, "opaque-user");
   assert.equal("apiKey" in providerInput, false);
+  assert.equal((providerInput.image as { value: Buffer }).value, source.bytes, "image editing must receive the exact validated reference");
   await assert.rejects(helper.generatePremiumGolfAvatar({
-    apiKey: "server-secret", model: "gpt-image-test", source, variant: 1, userHash: "opaque-user",
-    client: { images: { edit: async () => ({ data: [] }) } },
+    apiKey: "server-secret", model: "gpt-image-test", faceValidationModel: "vision-test", source, variant: 1, userHash: "opaque-user",
+    client: { responses: { create: async () => ({ output_text: JSON.stringify({ status: "clear_face", confidence: .97 }) }) }, images: { edit: async () => ({ data: [] }) } },
   }), /invalid_image_output/);
+});
+
+test("face guard never generates a person for absent, ambiguous, low-confidence or invalid faces", async () => {
+  const helper = serverHelper();
+  const source = helper.parsePhotoAvatarSourceDataUrl(jpegDataUrl());
+  let edits = 0;
+  for (const output of [{ status: "no_face", confidence: .99 }, { status: "unclear", confidence: .99 }, { status: "clear_face", confidence: .7 }, { status: "clear_face" }, { status: "unknown", confidence: 1 }]) {
+    await assert.rejects(helper.generatePremiumGolfAvatar({ apiKey: "test", model: "image-test", faceValidationModel: "vision-test", source, variant: 1, userHash: "opaque", client: {
+      responses: { create: async () => ({ output_text: JSON.stringify(output) }) },
+      images: { edit: async () => { edits++; return { data: [] }; } },
+    } }));
+  }
+  assert.equal(edits, 0);
+  assert.match(helper.photoAvatarFaceErrorMessage({ code: "avatar_face_missing" })!, /No detectamos un rostro/);
+  assert.match(helper.photoAvatarFaceErrorMessage({ code: "avatar_face_unclear" })!, /un solo rostro claro/);
+});
+
+test("face provider error fails closed and a later explicit retry can succeed with the same photo", async () => {
+  const helper = serverHelper();
+  const source = helper.parsePhotoAvatarSourceDataUrl(jpegDataUrl());
+  let attempts = 0;
+  let edits = 0;
+  const input = { apiKey: "test", model: "image-test", faceValidationModel: "vision-test", source, variant: 1, userHash: "opaque", client: {
+    responses: { create: async () => { if (++attempts === 1) throw new Error("provider down"); return { output_text: JSON.stringify({ status: "clear_face", confidence: .99 }) }; } },
+    images: { edit: async () => { edits++; return { data: [{ b64_json: Buffer.from("avatar").toString("base64") }] }; } },
+  } };
+  await assert.rejects(helper.generatePremiumGolfAvatar(input), /provider down/);
+  assert.equal(edits, 0);
+  assert.match(await helper.generatePremiumGolfAvatar(input), /^data:image\/webp/);
+  assert.equal(edits, 1);
 });
 
 type RouteExports = { GET: () => Promise<Response>; POST: (request: Request) => Promise<Response> };
@@ -161,6 +194,7 @@ function avatarRoute(input: {
       if (id === "next/server") return { NextResponse: { json: (body: unknown, init?: ResponseInit) => Response.json(body, init) } };
       if (id.endsWith("/photo-avatar-generation")) return { MAX_PHOTO_AVATAR_VARIANTS, PHOTO_AVATAR_GENERATION_STYLE };
       if (id.endsWith("/photo-avatar-generation.server")) return {
+        photoAvatarFaceErrorMessage: serverHelper().photoAvatarFaceErrorMessage,
         parsePhotoAvatarSourceDataUrl: (value: unknown) => typeof value === "string" && value.startsWith("data:image/") ? { bytes: Buffer.from("photo"), mimeType: "image/jpeg", extension: "jpg" } : null,
         generatePremiumGolfAvatar: async (value: Record<string, unknown>) => {
           input.generatedInputs?.push(value);
@@ -169,7 +203,7 @@ function avatarRoute(input: {
       };
       if (id.endsWith("/privacy")) return privacy;
       if (id.endsWith("/config")) return { backyardAiConfig: () => ({
-        enabled: true, configured, providerConfigured: configured, limiterConfigured: true, ready: configured, avatarImageModel: "gpt-image-test",
+        enabled: true, configured, providerConfigured: configured, limiterConfigured: true, ready: configured, avatarImageModel: "gpt-image-test", roundSetupModel: "vision-test",
       }) };
       if (id.endsWith("/http-security")) return security;
       if (id.endsWith("/openai-structured")) return { classifyBackyardAiFailure: (error: unknown) => {
@@ -239,4 +273,16 @@ test("endpoint genera una variante real server-side y convierte fallas del prove
   const failedResponse = await failed.POST(avatarRequest());
   assert.equal(failedResponse.status, 502);
   assert.deepEqual(await failedResponse.json(), { error: "No pudimos crear el avatar. Intenta nuevamente.", code: "provider_error" });
+});
+
+test("endpoint exposes clear face guidance instead of an invented avatar or generic provider error", async () => {
+  for (const code of ["avatar_face_missing", "avatar_face_unclear"]) {
+    const route = avatarRoute({ generate: async () => { throw Object.assign(new Error(code), { code }); } });
+    const response = await route.POST(avatarRequest());
+    assert.equal(response.status, 422);
+    const body = await response.json();
+    assert.equal(body.code, code);
+    assert.equal("avatarDataUrl" in body, false);
+    assert.match(body.error, /rostro/);
+  }
 });
