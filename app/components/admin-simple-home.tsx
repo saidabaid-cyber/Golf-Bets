@@ -34,7 +34,7 @@ export function AdminSimpleHome() {
     void fetch("/api/admin/simple", { headers: { authorization: `Bearer ${token}` }, cache: "no-store", signal: controller.signal }).then(async r => { const body = await r.json(); if (!r.ok) throw new Error(body.error); setModules(body.modules); }).catch(e => { if (!controller.signal.aborted) setError(e.message); });
     return () => controller.abort();
   }, [token]);
-  return <main className="adminV2"><header className="adminV2Header"><Link href="/" aria-label="The Backyard · Inicio"><BackyardWordmark /></Link><AdminModeMenu /></header>{(!selected||!detailViews[selected])&&<div className="adminV2Title"><div>{selected?<button type="button" className="adminV2Back" onClick={()=>setSelected(null)}>‹ Administración</button>:<p className="adminV2Eyebrow">Modo administrador</p>}<h1>{selected ? LABELS[selected][0] : "Administración"}</h1></div></div>}
+  return <main className="adminV2"><header className="adminV2Header"><Link href="/" aria-label="The Backyard · Inicio"><BackyardWordmark /></Link><AdminModeMenu /></header>{(!selected||!detailViews[selected]||selected==="balls"&&ballSection==="fit")&&<div className="adminV2Title"><div>{selected?<button type="button" className="adminV2Back" onClick={()=>setSelected(null)}>‹ Administración</button>:<p className="adminV2Eyebrow">Modo administrador</p>}<h1>{selected ? LABELS[selected][0] : "Administración"}</h1></div></div>}
     {error && <p className="notice bad" role="alert">{error}</p>}
     {!token && <p className="notice">Inicia sesión con una cuenta administradora para continuar.</p>}
     {token && !adminAccess.hasAccess && !error && <p className="notice">Comprobando permisos…</p>}
