@@ -91,7 +91,7 @@ export function premiumGolfAvatarPrompt(variant: number) {
     "Transform the supplied portrait into a premium illustrated golf avatar.",
     "Edit only the human face visible in the supplied image. Never invent a person, substitute a different person, or turn an object into a person. Do not add facial features that are absent or obscured in the reference.",
     "Preserve the same person's recognizable identity: facial structure, skin tone, eyes, hair, age range and distinctive features.",
-    "Create an adult, natural, friendly head-and-shoulders portrait with consistent 2.5D modern illustration, soft lighting and realistic proportions.",
+    "Create a natural, friendly head-and-shoulders portrait with consistent 2.5D modern illustration, soft lighting and realistic proportions. Preserve the age shown in the reference.",
     "A tasteful generic golf polo or quarter-zip is acceptable. Do not add any real brand, logo, text or trademark.",
     "Avoid childish styling, grotesque exaggeration, face distortion, beauty-filter identity changes, extra people, extra limbs or busy scenery.",
     "Center the face with enough safe margin for a circular profile crop. The final image must be a square avatar.",

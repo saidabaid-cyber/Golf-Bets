@@ -183,7 +183,7 @@ export function ProfileImagePicker({ value, onChange, kind = "profile", onBusyCh
       const capability = await readPhotoAvatarGenerationCapability();
       if (controller.signal.aborted || request !== requestRef.current) return;
       if (!capability.available) {
-        setMessage("La generación de avatar todavía no está configurada en DEV. No se envió tu foto.");
+        setMessage("La generación de avatar no está disponible en este momento. Puedes usar tu foto original.");
         setStatus("");
         return;
       }

@@ -20,7 +20,7 @@ function text(value: unknown): string {
   return typeof value === "string" || typeof value === "number" ? String(value) : "";
 }
 
-function imagePicker(initialValue: string, options: { generationError?: boolean; capabilityAvailable?: boolean } = {}) {
+function imagePicker(initialValue: string, options: { generationError?: boolean; capabilityAvailable?: boolean; faceError?: "avatar_face_missing" | "avatar_face_unclear" } = {}) {
   const slots: unknown[] = [];
   let cursor = 0;
   let value = initialValue;
@@ -28,6 +28,9 @@ function imagePicker(initialValue: string, options: { generationError?: boolean;
   const busy: boolean[] = [];
   const crops: Array<Record<string, number>> = [];
   const generationRequests: Array<{ sourceImageDataUrl: string; variant: number; accessToken: string }> = [];
+  class PhotoAvatarGenerationError extends Error {
+    constructor(public status: number, public code: string, message: string) { super(message); }
+  }
   const exports: Record<string, (props: unknown) => Node> = {};
   const jsx = (type: unknown, props: Record<string, unknown>) => ({ type, props });
   const react = {
@@ -63,13 +66,13 @@ function imagePicker(initialValue: string, options: { generationError?: boolean;
     if (name.endsWith("/privacy")) return { AI_IMAGE_PROCESSING_CONSENT: "AI_IMAGE_PROCESSING_CONSENT" };
     if (name.endsWith("/photo-avatar-generation")) return {
       MAX_PHOTO_AVATAR_VARIANTS: 3,
-      PhotoAvatarGenerationError: class PhotoAvatarGenerationError extends Error {
-        code: string; status: number;
-        constructor(status: number, code: string, message: string) { super(message); this.status = status; this.code = code; }
-      },
+      PhotoAvatarGenerationError,
       readPhotoAvatarGenerationCapability: async () => ({ available: options.capabilityAvailable !== false, provider: "openai", model: "gpt-image-test" }),
       requestPhotoAvatarGeneration: async (input: { sourceImageDataUrl: string; variant: number; accessToken: string }) => {
         generationRequests.push(input);
+        if (options.faceError) throw new PhotoAvatarGenerationError(422, options.faceError, options.faceError === "avatar_face_missing"
+          ? "No detectamos un rostro en esta foto. Elige una foto tuya para crear tu avatar."
+          : "Necesitamos una foto con un solo rostro claro. Prueba una foto tuya más cercana y bien iluminada.");
         if (options.generationError) throw new Error("provider failed");
         return { avatarDataUrl: `data:image/webp;base64,provider${input.variant}`, provider: "openai", model: "gpt-image-test", variant: input.variant };
       },
@@ -122,6 +125,28 @@ function buttonWithText(h: ReturnType<typeof imagePicker>, label: string) {
   const button = h.nodes().find((node) => node.type === "button" && text(node).includes(label));
   assert.ok(button, label);
   return button;
+}
+
+for (const faceError of ["avatar_face_missing", "avatar_face_unclear"] as const) {
+  test(`rejected ${faceError} preserves the original and allows a clean retry without an invented avatar`, async () => {
+    const options: { faceError?: typeof faceError } = { faceError };
+    const h = imagePicker("https://images.example/original.jpg", options);
+    h.click("Sube tu foto");
+    const input = h.nodes().find(node => node.type === "input" && node.props["aria-label"] === "Elegir foto de la galería")!;
+    (input.props.onChange as (event: unknown) => void)({ target: { files: [{}] } });
+    h.render(); h.click("CREAR CARICATURA DESDE MI FOTO");
+    await new Promise<void>(resolve => setTimeout(resolve, 0)); h.render();
+    assert.match(h.text(), faceError === "avatar_face_missing" ? /No detectamos un rostro/ : /un solo rostro claro/);
+    assert.doesNotMatch(h.text(), /AVATAR CREADO/);
+    assert.equal(h.value(), "https://images.example/original.jpg");
+    assert.deepEqual(h.changes, []);
+    assert.equal(buttonWithText(h, "USAR ESTA FOTO").props.disabled, false);
+    options.faceError = undefined;
+    h.click("CREAR CARICATURA DESDE MI FOTO");
+    await new Promise<void>(resolve => setTimeout(resolve, 0)); h.render();
+    assert.match(h.text(), /AVATAR CREADO/);
+    assert.deepEqual(h.generationRequests.map(request => request.variant), [1, 1], "invalid input never consumes a generated variant");
+  });
 }
 
 test("Google photo is preserved until the person chooses a different avatar mode", () => {
@@ -353,7 +378,7 @@ test("configuración externa ausente y error del proveedor conservan la foto y p
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     h.render();
     assert.ok(h.nodes().some((node) => node.props["aria-label"] === "Editor de recorte. Arrastra para mover y pellizca para ampliar."));
-    assert.match(h.text(), options.capabilityAvailable === false ? /no está configurada en DEV/ : /No pudimos crear el avatar/);
+    assert.match(h.text(), options.capabilityAvailable === false ? /no está disponible en este momento/ : /No pudimos crear el avatar/);
     assert.equal(h.generationRequests.length, options.capabilityAvailable === false ? 0 : 1);
   }
 });
