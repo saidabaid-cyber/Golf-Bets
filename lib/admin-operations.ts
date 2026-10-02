@@ -1,5 +1,17 @@
 import type { AdminRecord } from "./admin-simple-catalog";
 
+/** Daily editing shows one current draft; immutable prior versions remain in the ledger. */
+export function adminLatestDrafts<T extends {entity_id:string;entity_type?:string;version:number}>(rows:readonly T[]):T[]{
+ const latest=new Map<string,T>();
+ for(const row of rows){const key=`${row.entity_type||""}:${row.entity_id}`;if(row.version>(latest.get(key)?.version??-1))latest.set(key,row);}
+ return [...latest.values()];
+}
+export function adminCurrentDrafts<T extends {entity_id:string;entity_type?:string;version:number}>(drafts:readonly T[],published:readonly {entity_id:string;entity_type?:string;version:number}[]):T[]{
+ const key=(row:{entity_id:string;entity_type?:string})=>`${row.entity_type||""}:${row.entity_id}`;
+ const current=new Map(adminLatestDrafts(published).map(row=>[key(row),row.version]));
+ return adminLatestDrafts(drafts).filter(row=>row.version>(current.get(key(row))??0));
+}
+
 /** Group for display only. Every underlying course/card keeps its identity. */
 export function adminCourseFamilies(items: readonly AdminRecord[]) {
   const groups = new Map<string, AdminRecord[]>();

@@ -1,7 +1,7 @@
 import {buildCoursePayload} from "../lib/admin-simple-catalog";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { adminCourseFamilies, adminListSummary, filterAdminCatalog, structuredNumbers } from "../lib/admin-operations";
+import { adminCurrentDrafts, adminLatestDrafts, adminCourseFamilies, adminListSummary, filterAdminCatalog, structuredNumbers } from "../lib/admin-operations";
 import type { AdminRecord } from "../lib/admin-simple-catalog";
 import { buildEquipmentPayload } from "../lib/admin-simple-catalog";
 const item=(id:string,title:string,values:Record<string,unknown>):AdminRecord=>({id,title,values,subtitle:"Puebla · 18 hoyos",kind:"COURSE",active:true});
@@ -21,3 +21,7 @@ test("new course preserves its parent club for persistent publication",()=>{
  const payload=buildCoursePayload({club:{id:"new-club"},course:{id:"new-course"},tees:[],holes:[]},{name:"New",clubName:"New club",holeCount:"9",active:true});
  assert.equal(payload.course.clubId,"new-club");
 });
+
+test("daily draft list selects the latest version and retains the immutable history",()=>{const rows=[{entity_type:"COURSE",entity_id:"a",version:1},{entity_type:"COURSE",entity_id:"a",version:3},{entity_type:"BALL",entity_id:"a",version:2}];assert.deepEqual(adminLatestDrafts(rows),[rows[1],rows[2]]);assert.equal(rows.length,3);});
+
+test("published versions suppress obsolete drafts without archiving or deleting them",()=>{const drafts=[{entity_type:"BALL",entity_id:"a",version:2},{entity_type:"BALL",entity_id:"b",version:4}];assert.deepEqual(adminCurrentDrafts(drafts,[{entity_type:"BALL",entity_id:"a",version:3}]),[drafts[1]]);assert.equal(drafts.length,2);});

@@ -5,6 +5,13 @@ import { isOperationalAdminData } from "./admin-data-environment";
 import { membershipAllows, type AdminMembership } from "./admin-control-center";
 import type { AdminRecord } from "./admin-simple-catalog";
 import { loadLayeredEquipmentCatalogs } from "./equipment-catalog-provider.server";
+import {adminCurrentDrafts} from "./admin-operations";
+export async function simpleCurrentDrafts<T extends {entity_id:string;entity_type:string;version:number}>(client:SupabaseClient,drafts:T[]){
+ if(!drafts.length)return drafts;
+ const current=await client.from("admin_catalog_revisions").select("entity_id,entity_type,version").eq("status","PUBLISHED").in("entity_id",[...new Set(drafts.map(row=>row.entity_id))]).in("entity_type",[...new Set(drafts.map(row=>row.entity_type))]);
+ if(current.error)throw new Error("No pudimos confirmar los borradores actuales.");
+ return adminCurrentDrafts(drafts,current.data||[]);
+}
 export async function simpleEquipment(memberships:AdminMembership[],balls=false){
   const catalogs=await loadLayeredEquipmentCatalogs();
   const rows=balls?catalogs.balls: [...catalogs.clubs,...catalogs.shafts];

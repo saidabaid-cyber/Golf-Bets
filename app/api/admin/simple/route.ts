@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminMode } from "../../../../lib/admin-mode.server";
 import { SIMPLE_ADMIN_MODULES, type SimpleAdminModule } from "../../../../lib/admin-mode";
-import { simpleCourses, simpleEquipment } from "../../../../lib/admin-simple-catalog.server";
+import { simpleCourses, simpleEquipment, simpleCurrentDrafts } from "../../../../lib/admin-simple-catalog.server";
 import { adminEditingBase, adminCatalogPage, buildCoursePayload, buildEquipmentPayload, buildCompetitionPayload, competitionFormValues, humanChanges } from "../../../../lib/admin-simple-catalog";
 import { coursePayloadIssues, equipmentPayloadIssues, competitionPayloadIssues } from "../../../../lib/admin-payload-validation";
 import { getCourseCatalog } from "../../../../lib/course-catalog-provider.server";
 import { membershipAllows, type AdminEntityType } from "../../../../lib/admin-control-center";
 import {catalogLifecycle} from "../../../../lib/admin-catalog-lifecycle.server";
 import { isOperationalAdminData } from "../../../../lib/admin-data-environment";
-import { adminCourseFamilies, adminCatalogFacets, adminListSummary, filterAdminCatalog } from "../../../../lib/admin-operations";
+import { adminCurrentDrafts, adminCourseFamilies, adminCatalogFacets, adminListSummary, filterAdminCatalog } from "../../../../lib/admin-operations";
 export const dynamic = "force-dynamic";
 const json = (body: unknown, status = 200) => NextResponse.json(body, { status, headers: { "cache-control": "private, no-store" } });
 export async function GET(request: NextRequest) {
@@ -30,17 +30,17 @@ export async function GET(request: NextRequest) {
       return [{id:row.entity_id,title:p.name,subtitle:status==="PUBLISHED"?"Publicado":status==="COMPLETED"?"Finalizado":status==="ARCHIVED"?"Archivado":"Sin publicar",active:status!=="ARCHIVED",kind:"COMPETITION" as const,values:{...competitionFormValues(p),competitionStatus:status},version:row.version}];
     });
     const id=request.nextUrl.searchParams.get("id");if(id)return json({item:items.find(item=>item.id===id)||null});
-    return json({...adminCatalogPage(items,search,state,offset),drafts:(result.data||[]).filter(isOperationalAdminData).filter(row=>row.status!=="PUBLISHED"),courses:(await getCourseCatalog(access.client)).courses.filter(course=>course.active&&isOperationalAdminData(course)).map(course=>({id:course.id,title:course.name}))});
+    return json({...adminCatalogPage(items,search,state,offset),drafts:adminCurrentDrafts((result.data||[]).filter(isOperationalAdminData).filter(row=>row.status!=="PUBLISHED"),(result.data||[]).filter(row=>row.status==="PUBLISHED")),courses:(await getCourseCatalog(access.client)).courses.filter(course=>course.active&&isOperationalAdminData(course)).map(course=>({id:course.id,title:course.name}))});
   }
   if(section==="equipment"||section==="balls"){
     const items=await simpleEquipment(access.memberships,section==="balls");const q=(request.nextUrl.searchParams.get("q")||"").toLowerCase();
     const id=request.nextUrl.searchParams.get("id");
     if(id)return json({item:items.find(item=>item.id===id)||null});
-    const drafts=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload").in("entity_type",section==="balls"?["BALL"]:["CLUB_EQUIPMENT","SHAFT"]).in("status",["DRAFT","REVIEWED","VERIFIED"]).order("created_at",{ascending:false}).limit(40);
+    const drafts=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload,version").in("entity_type",section==="balls"?["BALL"]:["CLUB_EQUIPMENT","SHAFT"]).in("status",["DRAFT","REVIEWED","VERIFIED"]).order("created_at",{ascending:false}).limit(40);
     if(drafts.error)return json({error:"No pudimos cargar los borradores."},503);
     const filtered=filterAdminCatalog(items,Object.fromEntries(["brand","category","year"].map(key=>[key,request.nextUrl.searchParams.get(key)||""])));
     const page=adminCatalogPage(filtered,q,state,offset);
-    return json({...page,items:page.items.map(adminListSummary),facets:adminCatalogFacets(items),drafts:(drafts.data||[]).filter(isOperationalAdminData)});
+    return json({...page,items:page.items.map(adminListSummary),facets:adminCatalogFacets(items),drafts:await simpleCurrentDrafts(access.client,(drafts.data||[]).filter(isOperationalAdminData))});
   }
   if (section === "courses") {
     const items = await simpleCourses(access.client, access.memberships);
@@ -50,10 +50,10 @@ export async function GET(request: NextRequest) {
       const family=adminCourseFamilies(items).find(group=>(group.values.family as {id:string}[]).some(child=>child.id===id));
       return json({item:item?{...item,values:{...item.values,family:family?.values.family}}:null});
     }
-    const drafts=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload").eq("entity_type","COURSE").in("status",["DRAFT","REVIEWED","VERIFIED"]).order("created_at",{ascending:false}).limit(40);
+    const drafts=await access.client.from("admin_catalog_revisions").select("id,entity_id,entity_type,status,payload,version").eq("entity_type","COURSE").in("status",["DRAFT","REVIEWED","VERIFIED"]).order("created_at",{ascending:false}).limit(40);
     if(drafts.error)return json({error:"No pudimos cargar los borradores."},503);
     const page=adminCatalogPage(adminCourseFamilies(items),query,state,offset);
-    return json({ ...page,items:page.items.map(adminListSummary), drafts:(drafts.data||[]).filter(isOperationalAdminData) });
+    return json({ ...page,items:page.items.map(adminListSummary), drafts:await simpleCurrentDrafts(access.client,(drafts.data||[]).filter(isOperationalAdminData)) });
   }
   if (section === "users") {
     const result = await access.client.rpc("admin_user_directory_v2", { search_text: search.slice(0,160), page_offset: Number(offset||0) });

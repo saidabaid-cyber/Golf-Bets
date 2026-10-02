@@ -23,12 +23,12 @@ export function catalogFields(kind:AdminEntityType):AdminField[]{
 export function preserveVerificationTime(previous:unknown,selected:unknown){return selected&&String(previous||"").slice(0,10)===String(selected)?previous:selected||null;}
 export function adminEditingBase(original:Record<string,unknown>,canonical:Record<string,unknown>,id:string):Record<string,unknown>{
  const result:Record<string,unknown>={...original,...Object.fromEntries(Object.entries(canonical).filter(([,value])=>value!==undefined)),id};
- for(const key of ["club","course"])if(original[key]||canonical[key])result[key]={...(original[key]||{}) as Record<string,unknown>,...(canonical[key]||{}) as Record<string,unknown>};
+ for(const key of ["club","course"])if(original[key]||canonical[key])result[key]={...(original[key]||{}) as Record<string,unknown>,...Object.fromEntries(Object.entries((canonical[key]||{}) as Record<string,unknown>).filter(([,value])=>value!==undefined))};
  return result;
 }
 export function buildCompetitionPayload(base:Record<string,unknown>,input:Record<string,unknown>,draft=false):Record<string,unknown>{
   const values=safeFields(input,catalogFields("COMPETITION").map(field=>draft?{...field,required:false}:field));
-  for(const key of ["startsAt","endsAt"])if(values[key]){if(!Number.isFinite(Date.parse(String(values[key]))))throw new Error("Revisa las fechas.");values[key]=new Date(String(values[key])).toISOString();}
+  for(const key of ["startsAt","endsAt"])if(values[key]){const text=String(values[key]);const utc=/Z$|[+-]\d{2}:\d{2}$/i.test(text)?text:text+"Z";if(!Number.isFinite(Date.parse(utc)))throw new Error("Revisa las fechas.");values[key]=new Date(utc).toISOString();}
   const rules=Array.isArray(base.rules)?base.rules as Record<string,unknown>[]:[];
   const informational=rules.findIndex(r=>r.category==="OTHER"&&r.title==="Información del evento");
   const next={category:"OTHER",title:"Información del evento",body:values.ruleBody,active:true};const newRules=[...rules];if(informational>=0)newRules[informational]={...newRules[informational],...next};else if(values.ruleBody)newRules.push(next);

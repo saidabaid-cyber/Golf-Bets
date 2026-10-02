@@ -15,3 +15,5 @@ test("resume and duplicate preserve safe settings and reject new engine data",()
  assert.deepEqual(payload.engineContract,original.engineContract);
  assert.equal(competitionFormValues(payload).ruleBody,"Information");assert.equal((payload.rules as unknown[]).length,2);
 });
+
+test("wizard dates serialize persistently and survive a resumed draft",()=>{const original={id:"event",startsAt:"2026-10-03T14:00:00.000Z",endsAt:"2026-10-03T20:00:00.000Z"};const form=competitionFormValues(original);const result=buildCompetitionPayload(original,{...form,startsAt:"2026-10-03T14:00",endsAt:"2026-10-03T20:00",name:"QA",type:"TOURNAMENT",visibility:"PRIVATE"},true);assert.equal(result.startsAt,original.startsAt);assert.equal(result.endsAt,original.endsAt);assert.throws(()=>buildCompetitionPayload(original,{startsAt:"invalid"},true));});
