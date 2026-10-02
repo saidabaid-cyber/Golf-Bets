@@ -43,7 +43,7 @@ test("todos los archivos con diálogos interactivos exponen una salida visible",
       assert.match(source, /function cancelDeleteIntent\(\) \{\s*setDeleteIntent\(null\);\s*\}/);
       assert.match(source, /onClick=\{cancelDeleteIntent\}/, "destructive confirmation retains cancel");
     } else {
-      assert.match(source, /ModalCloseButton|modalClose|helpClose|holeSummaryClose/, `${file} no expone cierre`);
+      assert.match(source, /ModalCloseButton|ModalShell|modalClose|helpClose|holeSummaryClose/, `${file} no expone cierre`);
     }
   }
   const globalStyles = read("app/globals.css");

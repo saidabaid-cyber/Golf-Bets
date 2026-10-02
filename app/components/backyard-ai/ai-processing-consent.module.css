@@ -3,6 +3,25 @@
   gap: 10px;
 }
 
+.consentDialog {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: min(100%, 460px);
+  max-height: calc(min(100dvh, var(--visual-viewport-height, 100dvh)) - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  padding: 0;
+  overflow: hidden;
+}
+.consentHeader { flex: 0 0 auto; padding: 24px 56px 12px 20px; }
+.consentHeader h2 { margin: 0; font-size: 24px; line-height: 1.2; }
+.consentBody { display: grid; gap: 12px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 20px 16px; }
+.consentDialog .consentBody p { font-size: 14px; line-height: 1.6; color: var(--ink); overflow-wrap: anywhere; }
+.consentDialog .consentBody :global(.legalLead) { font-size: 12px; line-height: 1.6; }
+.consentBody label { line-height: 1.5; }
+.consentBody input { flex: 0 0 auto; }
+.consentActions { flex: 0 0 auto; margin: 0; padding: 14px 20px max(14px, env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--card, #fff); }
+.consentActions button { min-height: 48px; white-space: normal; }
+
 .setting {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(92px, .7fr);
@@ -23,14 +42,14 @@
 }
 
 .settingCopy b {
-  font-size: 13px;
-  line-height: 1.35;
+  font-size: 14px;
+  line-height: 1.4;
 }
 
 .setting small {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.45;
+  color: #465c50;
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .settingActions {

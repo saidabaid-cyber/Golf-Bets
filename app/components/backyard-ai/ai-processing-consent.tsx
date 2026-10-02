@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ModalCloseButton } from "../modal-shell";
+import { ModalShell } from "../modal-shell";
 import styles from "./ai-processing-consent.module.css";
 
 import {
@@ -129,9 +129,8 @@ export type AiProcessingConsentPromptProps = {
 };
 
 /**
- * Explicit authorization in account settings, or for a guest without an account.
- * Authenticated feature entry points never render this prompt. Their choices
- * are collected during onboarding and can subsequently be changed in settings.
+ * One canonical authorization flow for onboarding, settings and contextual
+ * first use. Transport resumes only after explicit, persisted authorization.
  */
 export function AiProcessingConsentPrompt({ userId, accessToken, requiresRemoteConsent, scope, onAccepted, onCancel }: AiProcessingConsentPromptProps) {
   const [confirmed, setConfirmed] = useState(false);
@@ -259,25 +258,24 @@ export function AiProcessingConsentPrompt({ userId, accessToken, requiresRemoteC
   }
 
   const copy = SCOPE_COPY[scope];
-  return <div className="modalBackdrop">
-    <section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="ai-processing-consent-title" aria-busy={checking || busy}>
-      <ModalCloseButton onClose={onCancel} disabled={busy} />
-      <h2 id="ai-processing-consent-title">Autorizar procesamiento con IA</h2>
+  return <ModalShell open onClose={onCancel} closeDisabled={busy} labelledBy="ai-processing-consent-title" className={`confirmDialog ${styles.consentDialog}`}>
+      <header className={styles.consentHeader}><h2 id="ai-processing-consent-title">{scope === AI_LAUNCH_MONITOR_PROCESSING_CONSENT ? "Leer tus mediciones con IA" : "Autorizar esta función de IA"}</h2></header>
+      <div className={styles.consentBody} aria-busy={checking || busy}>
       <p><b>{copy.title}.</b> {copy.detail}</p>
       <p>El proveedor procesa únicamente el contenido que envíes al usar esta función. No autoriza datos de apuestas, memoria personal ni uso para entrenamiento global.</p>
       <label className="consentCheck">
         <input type="checkbox" checked={confirmed} disabled={checking || busy} onChange={(event) => setConfirmed(event.target.checked)} />
-        <span>Acepto el procesamiento descrito para esta función bajo la versión {BACKYARD_AI_PROVIDER_CONSENT_VERSION}.</span>
+        <span>Acepto el procesamiento descrito para esta función.</span>
       </label>
       <p className="legalLead">Puedes revocar esta autorización en Perfil → Privacidad / IA. Consulta el <Link href="/legal/privacy">Aviso de Privacidad</Link>.</p>
       {checking && <p role="status">Verificando tu autorización…</p>}
       {error && <div className="notice bad" role="alert">{error}</div>}
-      <div className="dialogActions">
+      </div>
+      <div className={`dialogActions ${styles.consentActions}`}>
         <button type="button" className="secondary" disabled={busy} onClick={onCancel}>Ahora no</button>
         <button type="button" className="primary" disabled={!confirmed || checking || busy || (requiresRemoteConsent && !accessToken)} onClick={() => void accept()}>{busy ? "Guardando…" : "Aceptar y continuar"}</button>
       </div>
-    </section>
-  </div>;
+  </ModalShell>;
 }
 
 export type AiProcessingConsentSettingsProps = {

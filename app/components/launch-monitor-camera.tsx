@@ -5,11 +5,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { requestBackyardAi } from "../../lib/backyard-ai/client-api";
 import { resolveAuthoritativeAiProcessingConsent } from "../../lib/backyard-ai/consent-client";
 import { prepareLaunchMonitorPhotos, MAX_LAUNCH_MONITOR_PHOTOS } from "../../lib/backyard-ai/launch-monitor/client";
-import { browserAiProcessingConsentStorage, hasActiveAiProcessingConsent } from "../../lib/backyard-ai/processing-consent";
+import { aiProcessingConsentAllowsTransport, browserAiProcessingConsentStorage, hasActiveAiProcessingConsent } from "../../lib/backyard-ai/processing-consent";
 import { AI_LAUNCH_MONITOR_PROCESSING_CONSENT, backyardAiProviderConsent } from "../../lib/backyard-ai/privacy";
 import { LAUNCH_MONITOR_VISION_CONFIDENCE, launchMonitorVisionShotToDraft, normalizeLaunchMonitorVisionExtraction, type LaunchMonitorVisionExtraction } from "../../lib/backyard-ai/schemas/launch-monitor";
 import { LAUNCH_MONITOR_METRICS, type LaunchMonitorClub, type LaunchMonitorMetric, type LaunchMonitorShot } from "../../lib/golf-equipment";
-import { AiProcessingConsentPrompt, AiProcessingConsentRequired } from "./backyard-ai/ai-processing-consent";
+import { AiProcessingConsentPrompt } from "./backyard-ai/ai-processing-consent";
 import styles from "./equipment.module.css";
 
 type LocalPhoto = { id: string; file: File; previewUrl: string };
@@ -55,7 +55,7 @@ function metricNeedsReview(shot: LaunchMonitorVisionExtraction["shots"][number],
   return Boolean(shot.club && CRITICAL_METRICS[shot.club].includes(metric) && reading.value === null);
 }
 
-export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent, onConfirm, onOpenPrivacy, onAnalysisStateChange, targetClub, capturedCount }: {
+export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent, onConfirm, onAnalysisStateChange, targetClub, capturedCount }: {
   userId: string;
   accessToken?: string | null;
   requiresRemoteConsent: boolean;
@@ -70,7 +70,6 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showConsent, setShowConsent] = useState(false);
-  const [accountConsentRequired, setAccountConsentRequired] = useState(false);
   const [editingShots, setEditingShots] = useState<string[]>([]);
   const [appliedPhotoIds, setAppliedPhotoIds] = useState<string[]>([]);
   const [reviewPhotoIds, setReviewPhotoIds] = useState<string[]>([]);
@@ -140,7 +139,6 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
       setError("Selecciona de 1 a 4 fotos de la pantalla del launch monitor.");
       return;
     }
-    setAccountConsentRequired(false);
     let allowed = false;
     if (accessToken) {
       inFlight.current = true;
@@ -163,7 +161,6 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
     }
     if (!mounted.current) return;
     if (!allowed) {
-      if (requiresRemoteConsent || accessToken) { setAccountConsentRequired(true); return; }
       setShowConsent(true);
       return;
     }
@@ -260,8 +257,7 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
     <button type="button" className="primary" onClick={() => void analyze()} disabled={busy || pendingPhotos.length < 1}>{busy ? "Leyendo mediciones…" : pendingPhotos.length < 1 && photos.length > 0 ? "Fotos analizadas" : "Analizar fotos"}</button>
     {resultMessage && <p className={styles.autoApplied} role="status">✓ {resultMessage}</p>}
     {error && <p className={styles.formMessage} role="alert">{error}</p>}
-    {accountConsentRequired && <AiProcessingConsentRequired scope={AI_LAUNCH_MONITOR_PROCESSING_CONSENT} onOpenPrivacy={onOpenPrivacy} />}
-    {showConsent && !requiresRemoteConsent && !accessToken && <AiProcessingConsentPrompt userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} scope={AI_LAUNCH_MONITOR_PROCESSING_CONSENT} onAccepted={() => void analyzeWithConsent()} onCancel={() => setShowConsent(false)} />}
+    {showConsent && <AiProcessingConsentPrompt userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} scope={AI_LAUNCH_MONITOR_PROCESSING_CONSENT} onAccepted={(_consent, persistence) => { if (aiProcessingConsentAllowsTransport(persistence)) void analyzeWithConsent(); }} onCancel={() => setShowConsent(false)} />}
     {extraction && <div className={styles.launchReview}>
       <div className={styles.statusRow}><div><h3>Corrige sólo lo necesario</h3><p>{extraction.shots.length} golpe(s) detectados · {ambiguousCount} dato(s) requieren atención. El resto ya está aplicado.</p></div></div>
       {extraction.shots.map((shot, index) => { const editing = editingShots.includes(shot.id); const knownMetrics = LAUNCH_MONITOR_METRICS.filter((metric) => shot.metrics[metric].value !== null && !metricNeedsReview(shot, metric)); const reviewMetrics = LAUNCH_MONITOR_METRICS.filter((metric) => editing || metricNeedsReview(shot, metric)); return <article className={styles.reviewShot} key={shot.id}>

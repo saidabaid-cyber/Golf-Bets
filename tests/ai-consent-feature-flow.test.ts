@@ -326,8 +326,17 @@ for (const active of [true, false]) {
     assert.deepEqual(h.checkedScopes, [LAUNCH]);
     assert.equal(h.providerCalls(), active ? 1 : 0);
     const tree = h.render("LaunchMonitorCamera");
-    assert.equal(nodes(tree).some(node => node.type === "ConsentPrompt"), false);
-    assert.equal(nodes(tree).some(node => node.type === "ConsentRequired"), !active);
+    assert.equal(nodes(tree).some(node => node.type === "ConsentPrompt"), !active);
+    assert.equal(nodes(tree).some(node => node.type === "ConsentRequired"), false);
+    if (!active) {
+      const prompt = find(tree, node => node.type === "ConsentPrompt");
+      invoke(prompt, "onAccepted", {}, { accountPersisted: false, localPersisted: false });
+      await flush();
+      assert.equal(h.providerCalls(), 0, "failed persistence must not send selected photos");
+      invoke(prompt, "onAccepted", {}, { accountPersisted: true, localPersisted: false });
+      await flush();
+      assert.equal(h.providerCalls(), 1, "remote persistence resumes the selected photos, even in Safari private mode");
+    }
   });
 }
 
