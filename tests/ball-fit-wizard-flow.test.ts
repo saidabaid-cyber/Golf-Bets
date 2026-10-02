@@ -97,7 +97,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
       return { label: track.props["aria-label"], active: nodes(track).filter((node) => node.type === "span" && node.props["data-active"] === true).length };
     },
     buttonProps(label: string) {
-      const button = nodes(tree).find((node) => node.type === "button" && text(node.props.children).trim().startsWith(label)); assert.ok(button, `button ${label}`);
+      const button = nodes(tree).find((node) => node.type === "button" && (node.props["aria-label"] === label || text(node.props.children).trim().startsWith(label))); assert.ok(button, `button ${label}`);
       return button.props;
     },
     bottomBackProps() {
@@ -138,7 +138,7 @@ function wizard(profileIndex: number | null = null, profileSource: handicap.Ball
   }, radioLabels() {
     return nodes(tree).filter((node) => node.type === "input" && node.props.type === "radio").map((node) => String(node.props["aria-label"]));
   }, releaseFetch() { assert.ok(releaseFetch, "deferred fetch resolver"); releaseFetch(); }, async click(label: string) {
-    const button = nodes(tree).find((node) => node.type === "button" && text(node.props.children).trim().startsWith(label)); assert.ok(button, `button ${label}`);
+    const button = nodes(tree).find((node) => node.type === "button" && (node.props["aria-label"] === label || text(node.props.children).trim().startsWith(label))); assert.ok(button, `button ${label}`);
     assert.notEqual(button.props.disabled, true); await (button.props.onClick as () => unknown)(); render();
   }, number(min: number) { return nodes(tree).find((node) => node.type === "input" && node.props.min === min)?.props.value; }, changeNumber(value: string, min = -20) {
     const field = nodes(tree).find((node) => node.type === "input" && node.props.min === min); assert.ok(field);
@@ -151,22 +151,20 @@ const BALL_FIT_INTRO_COPY = /Encuentra la pelota ideal para tu juego|Balance en 
 test("Ball Fit keeps the full hero on Step 1 and progressively discloses Steps 2 through 6", async () => {
   const h = wizard(null, null);
   const steps = [
-    { title: "Tu juego actual", progress: "17% del fitting" },
-    { title: "¿Cómo quieres continuar?", progress: "33% del fitting" },
-    { title: "Feel y vuelo", progress: "50% del fitting" },
-    { title: "Approach y green", progress: "67% del fitting" },
-    { title: "¿Qué quieres mejorar?", progress: "83% del fitting" },
-    { title: "Precio y color", progress: "100% del fitting" },
+    { title: "Tu juego actual", progress: "Paso 1 de 6: Tu juego" },
+    { title: "¿Cómo quieres continuar?", progress: "Paso 2 de 6: Driver y mediciones" },
+    { title: "Feel y vuelo", progress: "Paso 3 de 6: Sensación y vuelo" },
+    { title: "Approach y green", progress: "Paso 4 de 6: Approach y green" },
+    { title: "¿Qué quieres mejorar?", progress: "Paso 5 de 6: Tus prioridades" },
+    { title: "Precio y color", progress: "Paso 6 de 6: Precio y color" },
   ];
 
   for (const [index, expected] of steps.entries()) {
     const copy = h.text();
     assert.match(copy, new RegExp(`Paso ${index + 1} de 6`));
     assert.match(copy, new RegExp(expected.title.replace(/[?]/g, "\\?")));
-    for (const [otherIndex, other] of steps.entries()) {
-      if (otherIndex !== index) assert.doesNotMatch(copy, new RegExp(other.title.replace(/[?]/g, "\\?")));
-    }
-    assert.match(copy, /Guardar y regresar/);
+    assert.equal(h.classCount("questionBlock"), 1, "only the current question section is rendered; the header can describe the next step");
+    assert.match(copy, /Guardar y salir/);
     assert.deepEqual(h.progress(), { label: expected.progress, active: index + 1 });
     assert.equal(h.classCount("ballFitLead"), index === 0 ? 1 : 0);
     assert.equal(h.classCount("ballFitHero"), index === 0 ? 1 : 0);
@@ -190,7 +188,7 @@ test("Ball Fit keeps the full hero on Step 1 and progressively discloses Steps 2
   assert.match(h.text(), /Tu mejor grupo de bolas/);
   assert.doesNotMatch(h.text(), /Paso 7 de 6/);
   assert.doesNotMatch(h.text(), BALL_FIT_INTRO_COPY);
-  assert.deepEqual(h.progress(), { label: "100% del fitting", active: 6 });
+  assert.deepEqual(h.progress(), { label: "Ball Fit completo", active: 6 });
 
   await h.click("← Anterior");
   assert.equal(h.scrollResetKeys.at(-1), "5:false:true:false");
@@ -226,7 +224,7 @@ test("Ball Fit keeps save-and-return and resets scroll only when the displayed s
   assert.equal(h.scrollResetKeys.at(-1), "3:false:true:false");
 
   h.clearStorageWrites();
-  const topExit = h.buttonProps("Guardar y regresar");
+  const topExit = h.buttonProps("Guardar y salir");
   const bottomExit = h.bottomBackProps();
   assert.equal(topExit.onClick, bottomExit.onBack);
   (bottomExit.onBack as () => void)();
@@ -385,12 +383,12 @@ test("launch monitor choice precedes the manual driver questionnaire", async () 
   const separator = copy.indexOf("O CONTINÚA MANUALMENTE");
   const manual = copy.indexOf("Tu juego con driver");
   assert.ok(currentGame >= 0 && currentGame < choice && choice < launch && launch < separator && separator < manual);
-  assert.match(copy, /TrackMan, FlightScope, Garmin, GCQuad, Rapsodo u otro/);
+  assert.match(copy, /TrackMan · FlightScope · Garmin · GCQuad · Rapsodo/);
   assert.doesNotMatch(h.text(), /Selecciona tu palo/);
   await h.click("Agregar mediciones de launch monitor");
   assert.match(h.text(), /Captura y analiza tus golpes/);
   assert.match(h.text(), /Sube fotos de tu monitor de lanzamiento/);
-  assert.equal(h.buttonProps("Guardar y regresar").onClick, h.bottomBackProps().onBack);
+  assert.equal(h.buttonProps("Guardar y salir").onClick, h.bottomBackProps().onBack);
 });
 
 test("the active GHIN value is shown before choosing launch monitor or manual entry", async () => {

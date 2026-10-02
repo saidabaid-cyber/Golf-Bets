@@ -224,7 +224,7 @@ export function EquipmentOnboarding({ userId, accessToken, defaultHandicap, defa
   if (ballEditorOpen) return <main className={styles.onboardingScreen} data-equipment-screen="onboarding-ball-editor"><BallEditor userId={userId} catalog={ballCatalog.items} existing={null} presentation="page" onCancel={() => setBallEditorOpen(false)} onSave={saveBall} /></main>;
 
   return <main className={styles.onboardingScreen} data-equipment-step={step}><section className={styles.onboardingCard}>
-    {step !== "clubs-build" && <div className={styles.onboardingTop}><BrandLockup compact /><span className={styles.brandPromise} aria-hidden="true">GOLF<br />FOR A<br />BETTER YOU</span><button type="button" className="textButton" onClick={onSaveAndExit}>Guardar y continuar después</button></div>}
+    {step !== "clubs-build" && step !== "fit" && <div className={styles.onboardingTop}><BrandLockup compact /><span className={styles.brandPromise} aria-hidden="true">GOLF<br />FOR A<br />BETTER YOU</span><button type="button" className="textButton" onClick={onSaveAndExit}>Guardar y continuar después</button></div>}
     {step === "clubs-prompt" && <>
       <div className="eyebrow">TUS BASTONES</div><h1>¿Quieres agregar los bastones que juegas actualmente?</h1><p>Esto nos ayudará a personalizar tu perfil y futuras estadísticas.</p>
       <div className={styles.onboardingActions}><button type="button" className="primary" onClick={() => { update((current) => setEquipmentOnboardingStatus(current, "IN_PROGRESS")); setStep("clubs-build"); }}>Agregar mis bastones</button><button type="button" className="secondary" onClick={() => finishClubs("SKIPPED")}>Omitir por ahora</button></div>

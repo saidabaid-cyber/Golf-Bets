@@ -137,7 +137,7 @@ test("cerrar el Ball Fit no afirma guardar cuando localStorage falla", () => {
   assert.match(wizard, /function saveAndClose\(\)/);
   assert.match(wizard, /if \(!saveBallFitDraft\(localStorage, input,/);
   assert.match(wizard, /setMessage\(DRAFT_SAVE_ERROR\);\s*return;/);
-  assert.match(wizard, /onClick=\{saveAndClose\}>Guardar y regresar/);
+  assert.match(wizard, /onClick=\{saveAndClose\}>Guardar y salir/);
   assert.match(wizard, /message === DRAFT_SAVE_ERROR/);
   assert.match(wizard, /onClick=\{exitWithoutSaving\}>Salir sin guardar/);
 });

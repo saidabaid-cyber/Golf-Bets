@@ -66,6 +66,24 @@ const PRIORITY_LABELS: Record<BallFitPriority, string> = {
   PUTTER_FEEL: "Sensación con putter",
 };
 
+const FIT_STEPS = ["Tu juego", "Driver y mediciones", "Sensación y vuelo", "Approach y green", "Tus prioridades", "Precio y color"] as const;
+
+function LaunchMonitorVisual() {
+  return <svg viewBox="0 0 240 160" className={styles.launchEntryVisual} aria-hidden="true" focusable="false">
+    <defs><linearGradient id="launch-device" x2="1" y2="1"><stop stopColor="#f4ead1" /><stop offset="1" stopColor="#c6a655" /></linearGradient></defs>
+    <ellipse cx="116" cy="143" rx="99" ry="9" fill="#062e24" opacity=".4" />
+    <path d="M78 125Q125 18 215 32" fill="none" stroke="#d8bd77" strokeWidth="2" strokeDasharray="4 6" />
+    <path d="M78 125Q130 67 217 97" fill="none" stroke="#fff" strokeWidth="1.5" opacity=".3" />
+    <rect x="28" y="54" width="67" height="83" rx="14" fill="url(#launch-device)" />
+    <rect x="36" y="63" width="51" height="53" rx="7" fill="#113c31" />
+    <circle cx="61" cy="88" r="14" fill="none" stroke="#c3a766" strokeWidth="1.5" />
+    <circle cx="61" cy="88" r="7" fill="#051f19" /><circle cx="65" cy="84" r="3" fill="#e7eee6" />
+    <rect x="49" y="124" width="26" height="3" rx="1.5" fill="#526750" />
+    <circle cx="136" cy="130" r="12" fill="#fffdf5" /><path d="M129 123l4 3m7-3-3 4m-7 5 4-1m8 1-3 3" stroke="#ced8cd" strokeWidth="1.5" />
+    <circle cx="215" cy="32" r="5" fill="#fffdf5" />
+  </svg>;
+}
+
 const PRIORITY_ICONS: Record<BallFitPriority, BackyardIconName> = {
   DRIVER_DISTANCE: "driverDistance",
   LESS_DRIVER_SPIN: "lessDriverSpin",
@@ -453,7 +471,6 @@ export function BallFitWizard({ initialLaunchMonitor = false, userId, accessToke
     if (completed !== false) removeBallFitDraft(localStorage, userId);
   }
 
-  const progress = result ? 100 : Math.round(((step + 1) / 6) * 100);
   const completeness = getBallFitInputCompleteness(input);
   const unresolvedDraftBall = Boolean(savedDraft?.input.currentBallId
     && currentBall?.catalogBallId !== savedDraft.input.currentBallId
@@ -462,7 +479,7 @@ export function BallFitWizard({ initialLaunchMonitor = false, userId, accessToke
 
   if (!hydrated) return <div className={styles.loadingState} role="status">Recuperando tu Ball Fit…</div>;
 
-  if (draftChoicePending && savedDraft) return <div className={styles.wizard}>
+  if (draftChoicePending && savedDraft) return <div className={`${styles.wizard} ${styles.ballFitFlow}`}>
     <div className={styles.wizardHeader}><div><div className="eyebrow">THE BACKYARD BALL FIT</div><h2>Tienes un fitting en progreso</h2><p>Guardado {new Date(savedDraft.updatedAt).toLocaleString("es-MX")}</p></div><button type="button" className="textButton" onClick={onCancel}>Cerrar</button></div>
     <section className={styles.questionBlock}><h3>¿Quieres continuar o empezar de nuevo?</h3><p>Reanudar conserva exactamente tus respuestas anteriores. Empezar nuevo precarga el HCP y la bola actuales del perfil.</p></section>
     {message && <div className={styles.formMessage} role="alert">{message}</div>}
@@ -471,10 +488,10 @@ export function BallFitWizard({ initialLaunchMonitor = false, userId, accessToke
     <BottomBackAction label="Cerrar" onBack={onCancel} />
   </div>;
 
-  if (launchOpen && !result) return <div className={`${styles.wizard} ${styles.launchWizard}`}>
+  if (launchOpen && !result) return <div className={`${styles.wizard} ${styles.ballFitFlow} ${styles.launchWizard}`}>
     <div className={styles.launchWizardHeader}>
       <div><span>MEDICIONES OPCIONALES</span><h2>Captura y analiza tus golpes</h2><p>Sube fotos de tu monitor de lanzamiento y obtén tus datos automáticamente.</p></div>
-      <button type="button" className="textButton" onClick={saveAndClose}>Guardar y regresar</button>
+      <button type="button" className="textButton" onClick={saveAndClose}>Guardar y salir</button>
     </div>
     <LaunchMonitorCapture
       userId={userId}
@@ -485,12 +502,12 @@ export function BallFitWizard({ initialLaunchMonitor = false, userId, accessToke
       onOpenPrivacy={onOpenPrivacy}
       onDone={finishLaunchCapture}
     />
-    <BottomBackAction label="Guardar y regresar" onBack={saveAndClose} />
+    <BottomBackAction label="Guardar y salir" onBack={saveAndClose} />
   </div>;
 
-  return <div className={styles.wizard}>
-    <div className={styles.wizardHeader}><div><div className="eyebrow">THE BACKYARD BALL FIT</div><h2>{result ? "Tu mejor grupo de bolas" : `Paso ${step + 1} de 6`}</h2><p>{result ? "Recomendaciones según tus preferencias" : "2–4 minutos · puedes guardar y regresar"}</p></div><button type="button" className="textButton" onClick={saveAndClose}>Guardar y regresar</button></div>
-    <div className={styles.progressTrack} aria-label={`${progress}% del fitting`}>{[0, 1, 2, 3, 4, 5].map((item) => <span key={item} data-active={result !== null || item <= step} />)}</div>
+  return <div className={`${styles.wizard} ${styles.ballFitFlow}`}>
+    <div className={styles.wizardHeader}><div><div className="eyebrow">THE BACKYARD BALL FIT</div><p className={styles.fitStepLabel}>{result ? "Fitting completo" : `Paso ${step + 1} de 6`}</p><h2>{result ? "Tu mejor grupo de bolas" : FIT_STEPS[step]}</h2><p>{result ? "Recomendaciones según tus preferencias" : step === 5 ? "Último paso antes de ver tus recomendaciones" : `Después: ${FIT_STEPS[step + 1]}. Puedes guardar y retomar después.`}</p></div><button type="button" className="textButton" onClick={saveAndClose}>Guardar y salir</button></div>
+    <div className={styles.progressTrack} role="progressbar" aria-valuemin={1} aria-valuemax={6} aria-valuenow={result ? 6 : step + 1} aria-label={result ? "Ball Fit completo" : `Paso ${step + 1} de 6: ${FIT_STEPS[step]}`}>{FIT_STEPS.map((label, item) => <span key={label} data-active={result !== null || item <= step} data-current={!result && item === step} />)}</div>
     {!result && step === 0 && <BallFitIntroHero currentBall={currentBall} />}
 
     {!result && step === 0 && <section className={styles.questionBlock}>
@@ -511,8 +528,8 @@ export function BallFitWizard({ initialLaunchMonitor = false, userId, accessToke
     {!result && step === 1 && <section className={styles.questionBlock}>
       <div className={styles.currentGameSource}><small>TU JUEGO ACTUAL</small><b>{currentGameIndexLabel(input.handicapSource, input.handicap)}</b></div>
       <h3>¿Cómo quieres continuar?</h3>
-      <button type="button" className={styles.launchEntry} onClick={() => setLaunchOpen(true)}>
-        <span><BackyardIcon name="score" size={25} /></span><span><b>Agregar mediciones de launch monitor</b><small>TrackMan, FlightScope, Garmin, GCQuad, Rapsodo u otro.</small></span><strong aria-hidden="true">›</strong>
+      <button type="button" aria-label="Agregar mediciones de launch monitor" className={`${styles.launchEntry} ${styles.launchEntryPremium}`} onClick={() => setLaunchOpen(true)}>
+        <LaunchMonitorVisual /><span className={styles.launchEntryCopy}><small>DALE MÁS PRECISIÓN A TU FIT</small><b>Agregar mediciones de launch monitor</b><span>Usa tus golpes reales para afinar la recomendación. Fotos de pantalla o captura manual.</span><small>TrackMan · FlightScope · Garmin · GCQuad · Rapsodo</small><strong>Agregar mediciones <span aria-hidden="true">→</span></strong></span>
       </button>
       <div className={styles.manualQuestionnaireSeparator}><span>— O CONTINÚA MANUALMENTE —</span></div>
       <h3>Tu juego con driver</h3>
@@ -590,7 +607,7 @@ export function BallFitWizard({ initialLaunchMonitor = false, userId, accessToke
       {!result && step === 5 && <button type="button" className="primary" onClick={() => calculate()} disabled={calculating}>{calculating ? "Evaluando…" : "Ver mi Top 3"}</button>}
       {result && result.recommendations.length > 0 && <button type="button" className="primary" onClick={finish} disabled={!resultChoice}>Guardar elección y terminar</button>}
     </div>
-    <BottomBackAction label="Guardar y regresar" onBack={saveAndClose} />
+    <BottomBackAction label="Guardar y salir" onBack={saveAndClose} />
   </div>;
 }
 
