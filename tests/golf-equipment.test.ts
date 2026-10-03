@@ -567,6 +567,25 @@ test("el último resultado de fitting se incorpora al mismo perfil versionado", 
   assert.equal(profile.lastBallFit?.recommendations[0]?.matchScore, 91);
 });
 
+test("Ball Fit conserva avisos y explicaciones completos al guardar y reabrir", () => {
+  const warning = "Los golpes del launch monitor se resumen con medianas y promedios resistentes; todavía no se aplican ventanas propietarias de ningún fabricante.";
+  const explanation = "Esta comparación utiliza exclusivamente los atributos disponibles de las bolas y tus preferencias, sin inventar resultados de laboratorio ni métricas que no hayas capturado.";
+  const profile = required(setLastBallFit(emptyProfile(), {
+    id: "fit-readable-notices",
+    completedAt: UPDATED_AT,
+    currentBallId: null,
+    inputCompleteness: 75,
+    recommendations: [{ catalogBallId: "ball-one", matchScore: 91, why: [explanation], comparisonToCurrent: [explanation] }],
+    warnings: [warning, warning, "x".repeat(600)],
+  }, UPDATED_AT));
+  const reopened = required(decodeEquipmentProfile(required(encodeEquipmentProfile(profile)), USER_ID));
+  assert.equal(reopened.lastBallFit?.warnings[0], warning);
+  assert.equal(reopened.lastBallFit?.warnings.length, 2);
+  assert.equal(reopened.lastBallFit?.warnings[1].length, 500);
+  assert.deepEqual(reopened.lastBallFit?.recommendations[0].why, [explanation]);
+  assert.deepEqual(reopened.lastBallFit?.recommendations[0].comparisonToCurrent, [explanation]);
+});
+
 test("la elección final de Ball Fit conserva su metadata opcional al codificar y reabrir", () => {
   const profile = required(setLastBallFit(emptyProfile(), {
     id: "fit-selection",

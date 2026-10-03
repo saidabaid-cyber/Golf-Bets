@@ -453,12 +453,12 @@ function memberOf<const T extends readonly string[]>(value: unknown, values: T):
   return typeof value === "string" && (values as readonly string[]).includes(value) ? value as T[number] : null;
 }
 
-function uniqueTextArray(value: unknown, maximumItems = 30): string[] {
+function uniqueTextArray(value: unknown, maximumItems = 30, maximumTextLength = 100): string[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   const result: string[] = [];
   for (const candidate of value) {
-    const cleaned = text(candidate, 100);
+    const cleaned = text(candidate, maximumTextLength);
     if (!cleaned) continue;
     const key = cleaned.toLocaleLowerCase("es-MX");
     if (seen.has(key)) continue;
@@ -971,7 +971,7 @@ function normalizeBallFitSummary(value: unknown, expectedUserId: string): Equipm
       model: text(item.model),
       generation: text(item.generation),
       dataCoverage: nullableNumber(item.dataCoverage, 0, 100),
-      why: uniqueTextArray(item.why, 8),
+      why: uniqueTextArray(item.why, 8, 500),
       attributes: attributes ? {
         flight: memberOf(attributes.flight, QUALITATIVE_LEVELS),
         feel: memberOf(attributes.feel, QUALITATIVE_LEVELS),
@@ -980,7 +980,7 @@ function normalizeBallFitSummary(value: unknown, expectedUserId: string): Equipm
         shortGameSpin: memberOf(attributes.shortGameSpin, QUALITATIVE_LEVELS),
         priceTier: memberOf(attributes.priceTier, BALL_PRICE_TIERS),
       } : null,
-      comparisonToCurrent: uniqueTextArray(item.comparisonToCurrent, 6),
+      comparisonToCurrent: uniqueTextArray(item.comparisonToCurrent, 6, 500),
     }];
   });
   const selectionAction = memberOf(source.selectionAction, ["RECOMMENDATION", "KEEP_CURRENT"] as const);
@@ -998,7 +998,7 @@ function normalizeBallFitSummary(value: unknown, expectedUserId: string): Equipm
     status: memberOf(source.status, ["COMPLETE", "PARTIAL"] as const),
     input: normalizeBallFitInputSnapshot(source.input, expectedUserId),
     recommendations,
-    warnings: uniqueTextArray(source.warnings, 12),
+    warnings: uniqueTextArray(source.warnings, 12, 500),
     ...(selection || {}),
   };
 }
