@@ -1152,6 +1152,11 @@ function GolfBetsApp() {
     const changed = (left: unknown, right: unknown) => JSON.stringify(stableValue(left)) !== JSON.stringify(stableValue(right));
     const draftPlan = cloudDraftApplyPlan(local.activeDraft, reconciled.activeDraft);
     if (draftPlan.changed) {
+      // The reconciled checkpoint becomes durable below before React installs
+      // its next persistence effect. Fence the previous render's timer and sync
+      // flush so neither can restore pre-commit scores or pending edits.
+      localPersistRevision.current += 1;
+      flushLocalState.current = () => true;
       if (draftPlan.preservePrevious) {
         preserveDraftConflict(localStorage, local.activeDraft);
         setFeedback("Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.");
