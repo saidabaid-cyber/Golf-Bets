@@ -13,11 +13,16 @@ function fixture() {
   let social: Record<string,unknown>=Object.fromEntries(["shareRounds","shareAchievements","shareEquipment","shareCourses","notifyLike","notifyComment","notifyAttest","notifyFriendAchievement","notifyEquipment","notifyFriendRequest","enabledForFriends"].map(key=>[key,false]));
   const requests: Array<{path:string;method:string;body:Record<string,unknown>}> = [];
   let failSocial=false;
+  const media: Record<"camera" | "photos", { version: 1; value: "enabled" | "disabled"; changedAt: string } | null> = { camera: null, photos: null };
   const transport: typeof fetch=async(input,init)=>{
     const path=String(input),method=init?.method||"GET",body=init?.body?JSON.parse(String(init.body)):{};
     requests.push({path,method,body});
     assert.equal(new Headers(init?.headers).get("authorization"),"Bearer qa-session");
     const result=(value:unknown,status=200)=>Response.json(structuredClone(value),{status});
+    if(path==="/api/account/device-permission-preferences?media=true") {
+      if(method==="PATCH") media[body.preference as "camera" | "photos"]={version:1,value:body.enabled?"enabled":"disabled",changedAt:AT};
+      return result(media);
+    }
     if(path==="/api/account/optional-authorizations") {
       if(method==="PATCH") {
         state.eligible=false; const scope=body.scope as keyof typeof state.scopes;
@@ -53,7 +58,14 @@ function fixture() {
     }
     throw new Error(`Unexpected request ${path}`);
   };
-  return {state,transport,requests,failSocial:(value:boolean)=>{failSocial=value;}};
+  return {state,media,transport,requests,failSocial:(value:boolean)=>{failSocial=value;},authorizeAll:()=>{
+    state.resolved=true; state.eligible=false; state.receipt={action:"authorize_all",idempotencyKey:"550e8400-e29b-41d4-a716-446655440000",decidedAt:AT};
+    for(const scope of OPTIONAL_AUTHORIZATION_SCOPES) state.scopes[scope]={active:true,status:"accepted",policyVersion:OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope],source:"onboarding_authorize_all",decidedAt:AT};
+    for(const subject of ["financial_data","marketing"] as const)state.legal![subject]={active:true,status:"accepted",policyVersion:legalEvidenceDefinition(subject,"accepted")!.version,decidedAt:AT};
+    Object.keys(state.notifications).forEach(key=>{state.notifications[key as keyof typeof state.notifications]=true;});
+    Object.keys(state.sharing).forEach(key=>{state.sharing[key as keyof typeof state.sharing]=true;});
+    social=Object.fromEntries(Object.keys(social).map(key=>[key,true]));
+  }};
 }
 async function withFixture(run:(f:ReturnType<typeof fixture>)=>Promise<void>) {const f=fixture();const previous=globalThis.fetch;globalThis.fetch=f.transport;try{await run(f);}finally{globalThis.fetch=previous;}}
 
@@ -94,4 +106,37 @@ test("changing an existing AI decision uses accept/revoke instead of the missing
   await saveOnboardingPrivacy("qa-session",OWNER,{...EMPTY_PRIVACY_CHOICES,images:true},keys);
   await saveOnboardingPrivacy("qa-session",OWNER,{...EMPTY_PRIVACY_CHOICES,ai:true,images:false},keys);
   assert.deepEqual((await readOnboardingPrivacy("qa-session")).choices,{...EMPTY_PRIVACY_CHOICES,ai:true,images:false});
+}));
+
+test("previous authorize-all hydrates its real purposes but does not invent camera/photo consent",()=>withFixture(async f=>{
+  f.authorizeAll(); const result=await readOnboardingPrivacy("qa-session");
+  for(const [purpose,checked] of Object.entries(result.choices))assert.equal(checked,purpose!=="camera"&&purpose!=="photos",purpose);
+  assert.ok(f.requests.every(request=>request.method==="GET"));
+}));
+
+test("camera/photos hydrate only explicit internal decisions and stay independent of AI",()=>withFixture(async f=>{
+  f.media.camera={version:1,value:"enabled",changedAt:AT};f.media.photos={version:1,value:"enabled",changedAt:AT};
+  const result=await readOnboardingPrivacy("qa-session");assert.equal(result.choices.camera,true);assert.equal(result.choices.photos,true);
+  assert.equal(result.choices.images,false);assert.equal(result.choices.ai,false);
+}));
+
+test("latest revocations survive reload and another login despite an older authorize-all receipt",()=>withFixture(async f=>{
+  f.authorizeAll(); const initial=(await readOnboardingPrivacy("qa-session")).choices;
+  const choices={...initial,camera:true,photos:true};await saveOnboardingPrivacy("qa-session",OWNER,choices,new Map());
+  const revoked={...choices,camera:false,photos:false,reminders:false,location:false,push:false,images:false,financial:false,marketing:false};
+  await saveOnboardingPrivacy("qa-session",OWNER,revoked,new Map());
+  assert.deepEqual((await readOnboardingPrivacy("qa-session")).choices,revoked,"fresh read after reload");
+  assert.deepEqual((await readOnboardingPrivacy("qa-session")).choices,revoked,"fresh authenticated client reads owner decisions");
+  assert.equal(f.state.receipt?.action,"authorize_all");
+  assert.equal(f.state.legal!.financial_data.active,false);assert.equal(f.state.legal!.marketing.active,false);
+}));
+
+test("camera retry IDs do not restore stale acceptance after partial saves and subsequent changes",()=>withFixture(async f=>{
+  const keys=new Map<string,string>();f.failSocial(true);
+  await assert.rejects(saveOnboardingPrivacy("qa-session",OWNER,{...EMPTY_PRIVACY_CHOICES,camera:true},keys));
+  await assert.rejects(saveOnboardingPrivacy("qa-session",OWNER,{...EMPTY_PRIVACY_CHOICES,camera:false},keys));
+  f.failSocial(false);await saveOnboardingPrivacy("qa-session",OWNER,{...EMPTY_PRIVACY_CHOICES,camera:true},keys);
+  const attempts=f.requests.filter(request=>request.path.includes("?media=true")&&request.method==="PATCH"&&request.body.preference==="camera");
+  assert.notEqual(attempts[0].body.idempotencyKey,attempts[2].body.idempotencyKey);
+  assert.equal((await readOnboardingPrivacy("qa-session")).choices.camera,true);
 }));

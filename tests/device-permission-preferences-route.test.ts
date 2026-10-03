@@ -24,8 +24,14 @@ function harness(failRead = false) {
     sharing: { enabledForFriends: true, rounds: true, achievements: true, equipment: true, courses: true },
     notifications: { internal: true, master: true, push: true, email: true, rounds: true, reminders: true },
   });
+  const media: preferences.AccountDeviceMediaPreferences = {camera:null,photos:null};
   const client = { rpc: async (name: string, args?: Record<string, unknown>) => {
     calls.push({ name, args });
+    if(name === "get_optional_device_media_preferences_v1")return {data:media,error:null};
+    if(name === "set_optional_device_media_preference_v1") {
+      const purpose=args?.requested_scope==="CAMERA_INTERNAL"?"camera":"photos";
+      media[purpose]={version:1,value:args?.requested_enabled?"enabled":"disabled",changedAt:AT};return {data:media,error:null};
+    }
     if (name === "set_optional_authorization_scope_v1") {
       const scope = String(args?.requested_scope);
       scopes[scope] = { ...scopes[scope], active: Boolean(args?.requested_enabled),
@@ -53,8 +59,8 @@ function harness(failRead = false) {
       throw Error(`Unexpected import: ${id}`);
     },
   });
-  const request = (method: string, body?: unknown) => {
-    const r = new Request("https://dev.thebackyard.com.mx/api/account/device-permission-preferences", {
+  const request = (method: string, body?: unknown, query = "") => {
+    const r = new Request("https://dev.thebackyard.com.mx/api/account/device-permission-preferences"+query, {
       method, headers: { "content-type": "application/json" },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     }) as Request & { nextUrl: URL };
@@ -97,4 +103,27 @@ test("device permission failed canonical read stays a recoverable error, not a f
     preference: "location", version: 1, value: "disabled", changedAt: AT,
   }))).status, 503);
   assert.ok(h.calls.every((call) => call.name !== "set_optional_authorization_scope_v1"));
+});
+
+test("media extension starts undecided and never alters location/notification contracts", async () => {
+  const h=harness();const response=await h.exports.GET(h.request("GET",undefined,"?media=true"));
+  assert.deepEqual(await response.json(),{camera:null,photos:null});
+  assert.deepEqual(h.calls.map(call=>call.name),["get_optional_device_media_preferences_v1"]);
+});
+for(const preference of ["camera","photos"] as const)test(`media ${preference} persists an internal decision with canonical read-back`,async()=>{
+  const h=harness();const idempotencyKey="550e8400-e29b-41d4-a716-446655440000";
+  const saved=await h.exports.PATCH(h.request("PATCH",{preference,enabled:true,idempotencyKey},"?media=true"));
+  assert.equal(saved.status,200);assert.equal((await saved.json())[preference].value,"enabled");
+  const revoked=await h.exports.PATCH(h.request("PATCH",{preference,enabled:false,idempotencyKey:"550e8400-e29b-41d4-a716-446655440001"},"?media=true"));
+  assert.equal(revoked.status,200);assert.equal((await revoked.json())[preference].value,"disabled");
+  assert.equal((await (await h.exports.GET(h.request("GET",undefined,"?media=true"))).json())[preference].value,"disabled");
+  assert.ok(h.calls.every(call=>call.name.includes("device_media")));
+});
+test("media extension rejects invented scopes, grant claims, malformed IDs and extra query parameters",async()=>{
+  const h=harness();
+  for(const body of [{preference:"marketing",enabled:true,idempotencyKey:"550e8400-e29b-41d4-a716-446655440000"},{preference:"camera",enabled:true,idempotencyKey:"invalid"},{preference:"photos",enabled:true,idempotencyKey:"550e8400-e29b-41d4-a716-446655440000",systemPermission:"granted"}]) {
+    assert.equal((await h.exports.PATCH(h.request("PATCH",body,"?media=true"))).status,400);
+  }
+  assert.equal((await h.exports.GET(h.request("GET",undefined,"?media=true&owner=other"))).status,400);
+  assert.equal(h.calls.length,0);
 });

@@ -3,10 +3,13 @@ import { acceptRemoteAiProcessingConsent, revokeRemoteAiProcessingConsent, saveR
 import { requestAccountNotificationPreferences } from "./account-notification-preferences";
 import { legalEvidenceDefinition } from "./legal-evidence";
 import { socialRequest } from "./social-activity-client";
+import { requestAccountDeviceMediaPreferences, type AccountDeviceMediaPreferences } from "./account-device-permission-preferences";
 
 export const PRIVACY_GROUPS = [
   { title: "Funciones del dispositivo", choices: [
     ["location", "Ubicación", "Buscar campos cercanos. El permiso del dispositivo se solicita por separado."],
+    ["camera", "Cámara", "Permite tomar fotos o videos cuando tú decidas usar una función que lo requiera. El permiso del sistema se solicitará al usarla."],
+    ["photos", "Fotos / Fototeca", "Elige únicamente las fotos o videos que quieras compartir con The Backyard. Se abrirá el selector cuando tú decidas elegirlos."],
     ["notifications", "Avisos en The Backyard", "Permitir avisos de cuenta; no garantiza entrega push o correo."],
     ["push", "Push", "Preferencia de cuenta. Requiere permiso del dispositivo y proveedor disponible."],
     ["email", "Email de cuenta", "Avisos operativos, separados del marketing."],
@@ -44,8 +47,9 @@ const ai = { ai: "AI_PROVIDER_PROCESSING_CONSENT", images: "AI_IMAGE_PROCESSING_
 const socialKeys = ["notifyLike", "notifyComment", "notifyAttest", "notifyFriendAchievement", "notifyEquipment", "notifyFriendRequest"] as const;
 type SocialState = { data: Record<string, unknown> };
 
-export function choicesFromCanonical(state: OptionalAuthorizationState, social: SocialState): PrivacyChoices {
+export function choicesFromCanonical(state: OptionalAuthorizationState, social: SocialState, media: AccountDeviceMediaPreferences): PrivacyChoices {
   return { location: state.scopes.LOCATION_INTERNAL.active, notifications: state.scopes.NOTIFICATION_INTERNAL.active,
+    camera: media.camera?.value === "enabled", photos: media.photos?.value === "enabled",
     push: state.notifications.push, email: state.notifications.email, rounds: state.notifications.rounds, reminders: state.notifications.reminders,
     sharing: state.sharing.enabledForFriends, shareRounds: state.sharing.rounds, shareAchievements: state.sharing.achievements, shareEquipment: state.sharing.equipment, shareCourses: state.sharing.courses,
     ...Object.fromEntries(socialKeys.map(key => [key, social.data[key] === true])) as Record<typeof socialKeys[number], boolean>,
@@ -56,8 +60,8 @@ export function choicesFromCanonical(state: OptionalAuthorizationState, social: 
 }
 
 export async function readOnboardingPrivacy(token: string, signal?: AbortSignal) {
-  const [state, social] = await Promise.all([requestOptionalAuthorizationState(token, signal), socialRequest<SocialState>("/api/social/preferences", token, { signal })]);
-  return { state, social, choices: choicesFromCanonical(state, social) };
+  const [state, social, media] = await Promise.all([requestOptionalAuthorizationState(token, signal), socialRequest<SocialState>("/api/social/preferences", token, { signal }), requestAccountDeviceMediaPreferences(token, undefined, signal)]);
+  return { state, social, media, choices: choicesFromCanonical(state, social, media) };
 }
 
 /** Each purpose retains its existing ledger. This is deliberately NOT a broad
@@ -66,7 +70,13 @@ export async function readOnboardingPrivacy(token: string, signal?: AbortSignal)
 export async function saveOnboardingPrivacy(token: string, userId: string, choices: PrivacyChoices, keys: Map<string, string>, signal?: AbortSignal, transport: typeof fetch = fetch) {
   signal = signal ? AbortSignal.any([signal, AbortSignal.timeout(90_000)]) : AbortSignal.timeout(90_000);
   const key = (purpose: string) => { if (!keys.has(purpose)) keys.set(purpose, crypto.randomUUID()); return keys.get(purpose)!; };
-  const { state, social } = await readOnboardingPrivacy(token, signal);
+  const { state, social, media } = await readOnboardingPrivacy(token, signal);
+  for (const preference of ["camera", "photos"] as const) {
+    if (!media[preference] || (media[preference].value === "enabled") !== choices[preference]) {
+      await requestAccountDeviceMediaPreferences(token, { preference, enabled: choices[preference], idempotencyKey: key(`${preference}:${choices[preference]}`) }, signal);
+      keys.delete(`${preference}:${choices[preference]}`);
+    }
+  }
   for (const [name, scope] of Object.entries(settings) as Array<[keyof typeof settings, typeof settings[keyof typeof settings]]>) {
     if (state.scopes[scope].status === "missing" || state.scopes[scope].active !== choices[name])
       await saveOptionalAuthorizationScope(token, scope, choices[name], key(`${scope}:${choices[name]}`), signal);

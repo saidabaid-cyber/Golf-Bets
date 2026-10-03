@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   parseAccountPermissionRecord,
+  parseAccountDeviceMediaPreferences,
   type AccountPermissionPreferenceKind,
   type AccountPermissionRecord,
 } from "../../../../lib/account-device-permission-preferences";
@@ -21,7 +22,41 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_BODY_BYTES = 1_024;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const json = (body: unknown, status = 200) => Response.json(body, { status, headers: BACKYARD_AI_PRIVATE_HEADERS });
+
+// A scoped extension of the existing device-preferences endpoint. Normal
+// location/notification requests retain their existing contract and behavior.
+async function mediaPreferences(request: NextRequest, write = false) {
+  if (request.nextUrl.search !== "?media=true") return json({ error: "Solicitud no válida." }, 400);
+  try {
+    const account = await authenticatedRequest(request);
+    if (!account.ok) return json({ error: account.error }, account.status);
+    let decision: { preference: "camera" | "photos"; enabled: boolean; idempotencyKey: string } | null = null;
+    if (write) {
+      const body = await readJsonBodyWithLimit(request, MAX_BODY_BYTES);
+      const input = body.ok && body.value && typeof body.value === "object" && !Array.isArray(body.value) ? body.value as Record<string, unknown> : null;
+      if (!input || !hasOnlyKeys(input, ["preference", "enabled", "idempotencyKey"])
+        || (input.preference !== "camera" && input.preference !== "photos") || typeof input.enabled !== "boolean"
+        || typeof input.idempotencyKey !== "string" || !UUID.test(input.idempotencyKey)) return json({ error: "Preferencia no válida." }, 400);
+      decision = { preference: input.preference, enabled: input.enabled, idempotencyKey: input.idempotencyKey };
+      const { error } = await account.client.rpc("set_optional_device_media_preference_v1", {
+        requested_scope: decision.preference === "camera" ? "CAMERA_INTERNAL" : "PHOTO_LIBRARY_INTERNAL",
+        requested_enabled: decision.enabled,
+        requested_idempotency_key: decision.idempotencyKey,
+      });
+      if (error) return json({ error: "No pudimos guardar tu decisión de Cámara o Fotos / Fototeca." }, 503);
+    }
+    const { data, error } = await account.client.rpc("get_optional_device_media_preferences_v1");
+    const saved = parseAccountDeviceMediaPreferences(data);
+    if (error || !saved || (decision && saved[decision.preference]?.value !== (decision.enabled ? "enabled" : "disabled"))) {
+      return json({ error: "No pudimos confirmar tus decisiones de Cámara y Fotos / Fototeca." }, 503);
+    }
+    return json(saved);
+  } catch {
+    return json({ error: "No pudimos consultar tus decisiones de Cámara y Fotos / Fototeca." }, 503);
+  }
+}
 
 function response(state?: ReturnType<typeof parseOptionalAuthorizationState>) {
   const canonical = (preference: AccountPermissionPreferenceKind) => {
@@ -63,6 +98,7 @@ async function stableIdempotencyKey(userId: string, preference: AccountPermissio
 }
 
 export async function GET(request: NextRequest) {
+  if (request.nextUrl.search === "?media=true") return mediaPreferences(request);
   if (request.nextUrl.search) return json({ error: "Solicitud no válida." }, 400);
   try {
     const account = await authenticatedRequest(request);
@@ -77,6 +113,10 @@ export async function GET(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   if (isCrossSiteRequest(request)) return json({ error: "Solicitud no permitida." }, 403);
+  if (request.nextUrl.search === "?media=true") {
+    if (!isJsonRequest(request)) return json({ error: "Solicitud no válida." }, 415);
+    return mediaPreferences(request, true);
+  }
   if (request.nextUrl.search || !isJsonRequest(request)) return json({ error: "Solicitud no válida." }, request.nextUrl.search ? 400 : 415);
   try {
     const account = await authenticatedRequest(request);

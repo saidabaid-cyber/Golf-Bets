@@ -66,6 +66,39 @@ export function parseAccountDevicePermissionPreferences(value: unknown): Account
   return { location, notifications };
 }
 
+// These are internal product choices in the existing optional authorization
+// ledger. They never represent a browser grant or access to a photo library.
+export type AccountDeviceMediaPreferences = Record<"camera" | "photos", AccountPermissionRecord | null>;
+
+export function parseAccountDeviceMediaPreferences(value: unknown): AccountDeviceMediaPreferences | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const camera = candidate.camera === null ? null : parseAccountPermissionRecord(candidate.camera);
+  const photos = candidate.photos === null ? null : parseAccountPermissionRecord(candidate.photos);
+  if ((camera === null && candidate.camera !== null) || (photos === null && candidate.photos !== null)) return null;
+  return { camera, photos };
+}
+
+export async function requestAccountDeviceMediaPreferences(
+  accessToken: string,
+  decision?: { preference: keyof AccountDeviceMediaPreferences; enabled: boolean; idempotencyKey: string },
+  signal?: AbortSignal,
+  transport: typeof fetch = fetch,
+) {
+  const response = await transport("/api/account/device-permission-preferences?media=true", {
+    method: decision ? "PATCH" : "GET",
+    headers: { authorization: `Bearer ${accessToken}`, ...(decision ? { "content-type": "application/json" } : {}) },
+    ...(decision ? { body: JSON.stringify(decision) } : {}),
+    cache: "no-store",
+    signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : AbortSignal.timeout(20_000),
+  });
+  const parsed = parseAccountDeviceMediaPreferences(await response.json().catch(() => null));
+  if (!response.ok || !parsed || (decision && parsed[decision.preference]?.value !== (decision.enabled ? "enabled" : "disabled"))) {
+    throw new Error("No pudimos confirmar tus decisiones de Cámara y Fotos / Fototeca.");
+  }
+  return parsed;
+}
+
 function readServerDecisionClock(storage: PreferenceStorage, userId: string): ServerDecisionClock {
   const volatile = volatileServerClocks.get(storage)?.get(userId);
   return {

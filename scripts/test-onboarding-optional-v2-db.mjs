@@ -84,5 +84,28 @@ try {
   const granular=await get();assert.ok(Object.values(granular.scopes).every(s=>s.active));assert.ok(Object.values(granular.notifications).every(Boolean));assert.ok(Object.values(granular.sharing).every(Boolean));assert.ok(Object.values(granular.legal).every(s=>s.active));assert.equal(granular.receipt,null);assert.equal(granular.resolved,false);assert.equal(granular.eligible,false);pass("granular acceptance persists all purposes with no fabricated bundle receipt");
   await user(B);await user(D);assert.deepEqual(await get(),granular);pass("another authenticated client reads the same granular choices");
   await value("select public.set_optional_authorization_scope_v1('PERSONAL_MEMORY',false,$1)",[crypto.randomUUID()]);assert.equal((await get()).scopes.PERSONAL_MEMORY.active,false);assert.equal((await get()).scopes.AI_IMAGE_PROCESSING_CONSENT.active,true);pass("granular revocation closes only the selected purpose");
+
+  const getMedia=()=>value("select public.get_optional_device_media_preferences_v1()");
+  const setMedia=(scope,enabled,id)=>value("select public.set_optional_device_media_preference_v1($1,$2,$3)",[scope,enabled,id]);
+  await user(A);const beforeMedia=await get();
+  assert.deepEqual(await getMedia(),{camera:null,photos:null});pass("previous authorize-all does not fabricate camera/photo consent outside its bundle");
+  const cameraId=crypto.randomUUID(),photosId=crypto.randomUUID();
+  assert.equal((await setMedia("CAMERA_INTERNAL",true,cameraId)).camera.value,"enabled");
+  assert.equal((await setMedia("PHOTO_LIBRARY_INTERNAL",true,photosId)).photos.value,"enabled");
+  const media=await getMedia();assert.deepEqual(await get(),beforeMedia);pass("camera/photos reuse existing evidence without changing other purposes or bundle receipt");
+  await setMedia("CAMERA_INTERNAL",true,cameraId);
+  assert.equal(await value("select count(*)::int from public.optional_authorization_events where user_id=$1 and scope='CAMERA_INTERNAL'",[A]),1);
+  await setMedia("CAMERA_INTERNAL",false,crypto.randomUUID());
+  const latest=await getMedia();assert.equal(latest.camera.value,"disabled");assert.equal(latest.photos.value,"enabled");
+  assert.equal((await setMedia("CAMERA_INTERNAL",true,cameraId)).camera.value,"disabled");pass("idempotent replay reads latest revocation and cannot restore an old acceptance");
+  await user(B);assert.deepEqual(await getMedia(),{camera:null,photos:null});
+  await user(A);assert.deepEqual(await getMedia(),latest);assert.equal(media.photos.value,"enabled");pass("reload and logout/login preserve owner media decisions and isolate other accounts");
+  await assert.rejects(()=>setMedia("MARKETING",true,crypto.randomUUID()),/invalid_device_media_decision/);
+  await assert.rejects(()=>setMedia("LOCATION_INTERNAL",true,crypto.randomUUID()),/invalid_device_media_decision/);
+  await assert.rejects(()=>setMedia("PHOTO_LIBRARY_INTERNAL",false,photosId),/idempotency_conflict/);pass("media writer cannot accept legal/other device purposes or reuse a conflicting request");
+  await db.exec("reset role; reset request.jwt.claim.sub; set role anon;");
+  await assert.rejects(getMedia,/permission denied/);
+  await assert.rejects(()=>setMedia("CAMERA_INTERNAL",true,crypto.randomUUID()),/permission denied/);
+  await user(A);await assert.rejects(()=>q("insert into public.optional_authorization_events(user_id,scope,decision_status,policy_version,source,idempotency_key,decided_at) values($1,'CAMERA_INTERNAL','accepted','device-media-2026-10-03-v1','settings',$2,now())",[B,crypto.randomUUID()]),/permission denied/);pass("anonymous access and direct client evidence forgery remain blocked");
   console.log(JSON.stringify({status:"PASS",checks,database:"isolated PostgreSQL WASM"}));
 } finally { await db.close(); }
