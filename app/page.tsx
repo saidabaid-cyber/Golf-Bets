@@ -1077,7 +1077,10 @@ function GolfBetsApp() {
     persistRoundResumeContext(localStorage, identity.userId, { ...normalizeRoundResumeContext(roundResumeContext, roundId, players.map((player) => player.id), ownerId, roundHoles), currentIndex });
   }, [hydrated, hydratedWorkspaceOwner, identity.userId, draftAvailable, roundClosed, roundResumeContext, roundId, players, ownerId, roundHoles, currentIndex]);
 
-  useEffect(() => {
+  // Install this render's persistence closure before a capture click can write
+  // a newer checkpoint. A delayed passive effect could capture the NEW fence
+  // revision with OLD scores, making its 250 ms timer look current again.
+  useLayoutEffect(() => {
     if (!hydrated) return;
     setSaveStatus("saving");
     const revision = localPersistRevision.current;

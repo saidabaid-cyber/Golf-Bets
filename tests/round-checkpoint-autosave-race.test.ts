@@ -100,3 +100,48 @@ test("cloud reconciliation fences a queued React autosave before the next render
   assert.equal(staleAutosave(), false);
   assert.deepEqual(JSON.parse(storage.getItem(STORAGE_KEYS.draft)!), confirmedDraft);
 });
+
+test("the autosave installer captures its render revision before a confirmed click", () => {
+  const page = readFileSync("app/page.tsx", "utf8").replaceAll("\r\n", "\n");
+  const bodyStart = page.indexOf('    if (!hydrated) return;\n    setSaveStatus("saving");');
+  const start = page.lastIndexOf("  use", bodyStart);
+  const end = page.indexOf("\n\n  useEffect(() =>", bodyStart);
+  const effect = page.slice(start, end);
+  assert.ok(start >= 0 && end > start);
+  const source = ts.transpileModule(effect, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => { values.set(key, value); } };
+  const oldScores = { 1: { qa: 4 } };
+  const confirmedScores = { ...oldScores, 2: { qa: 5 } };
+  const revision = { current: 0 };
+  let delayedInstaller: (() => void) | undefined;
+  let delayedAutosave: (() => unknown) | undefined;
+  const noOp = () => undefined;
+  const names = ["course", "courseSelected", "pendingCourseIdentity", "playerTeeAssignments", "startHole", "roundHoles", "roundHandicapBasis", "roundPresentation", "players", "ownerId", "bets", "segments", "personalBets", "supplementalBets", "manualBets", "scorecardPhotoIds", "putts", "scoreCaptureMode", "advancedStats", "shots", "unitEvents", "counterBetEvents", "counterBetKeepers", "lobaHoles", "ballFriendSetup", "expenses", "roundId", "roundDate", "roundStartedAt", "roundTemplateOrigin", "currentIndex", "courses", "favoriteCourseIds", "recentCourseIds", "history", "savedPersonalRivals", "frequentPlayers", "frequentGroups", "highContrast", "notificationsEnabled", "roundReviewPending"];
+  runInNewContext(source, { ...Object.fromEntries(names.map(name => [name, null])),
+    useEffect: (install: () => void) => { delayedInstaller = install; },
+    useLayoutEffect: (install: () => void) => install(),
+    window: { setTimeout: (save: () => unknown) => { delayedAutosave = save; return 1; }, clearTimeout: noOp },
+    localStorage: storage, STORAGE_KEYS, hydrated: true, roundClosed: false,
+    scores: oldScores, scoreEdits: { 2: { qa: 5 } }, identity: { userId: "qa-owner", defaultHandicap: null },
+    localPersistRevision: revision, flushLocalState: { current: noOp },
+    accountDeletionMarkerKey: () => "qa-marker", ownsLocalWorkspace: () => true,
+    withDerivedRoundLifecycle: (draft: unknown) => draft, normalizeRoundPresentation: (value: unknown) => value,
+    trackLocalCloudEdits: noOp, serializeFrequentGroups: JSON.stringify,
+    coursePreferenceStorageKey: (key: string) => key, hasRoundProgress: () => true,
+    setSaveStatus: noOp, setDraftAvailable: noOp, collectLocalCloudData: () => ({}),
+    hadLocalPreferences: { current: true }, offlineDeviceId: { current: "qa-device" },
+    cloudLinked: true, persistOfflineBundle: async () => undefined,
+  });
+  // React can delay passive effects until after a click writes the durable
+  // checkpoint. A layout effect must already have captured the older revision.
+  storage.setItem(STORAGE_KEYS.draft, JSON.stringify({ scores: confirmedScores, scoreEdits: {} }));
+  revision.current += 1;
+  delayedInstaller?.();
+  assert.ok(delayedAutosave);
+  assert.equal(delayedAutosave(), false);
+  assert.deepEqual(JSON.parse(storage.getItem(STORAGE_KEYS.draft)!).scores, confirmedScores);
+});
