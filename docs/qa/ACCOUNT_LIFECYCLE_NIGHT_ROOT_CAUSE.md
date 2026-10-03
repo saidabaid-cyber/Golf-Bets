@@ -101,10 +101,10 @@ contents, lease tokens, credentials or Auth secrets.
 | Namespace | account_json_container_namespace | rounds~117, one lookup/version | owner indexes; coalesce(local_id,local_round_id) may scan small table | not cancellation frame | unchanged |
 | Snapshot selection | prepare previous_snapshot::text LIKE UUID | versions265 /73 | seq scan; owner index cannot find embedded UUID |41.019ms read-only | unchanged |
 | Candidate identity | account_scrub_deleted_snapshot ILIKE UUID OR token | state/jobs239 | repeated conversion and string scan per state |~85ms residual/document | lowercase once; position; hash only if deleted- prefix occurs |
-| Collision/UUID | count/distinct replacement keys; recursive scrub | score/putt/player JSON maps | aggregate on ephemeral keys; no useful relational index |74x101-key local aggregate1353ms→47ms | cached token, native regex, same pre-recursion collision gate |
-| Subject/provenance | anonymize_account_json | course/hole/player trees | traversal with inherited local-player aliases |74 docs3255ms→555ms | skip only if neither UUID nor ANY inherited local key occurs |
-| Marker-only PII | account_scrub_marked_deleted_json | JSON subtree | boolean/string identityDeleted search |74 docs2000ms→153ms | skip branches lacking either accepted marker |
-| Combined document | account_anonymize_json_document | unchanged three-pass pipeline | repeated traversal |74 docs9734ms→1500ms | optimize internals, same data policy |
+| Collision/UUID | count/distinct replacement keys; recursive scrub | score/putt/player JSON maps | aggregate on ephemeral keys; no useful relational index | 74 x 101-key local aggregate 1,144ms→39ms | cached token, native regex, same pre-recursion collision gate |
+| Subject/provenance | anonymize_account_json | course/hole/player trees | traversal with inherited local-player aliases | 74 docs 3,704ms→653ms | skip only if neither UUID nor ANY inherited raw/JSON-encoded local key occurs |
+| Marker-only PII | account_scrub_marked_deleted_json | JSON subtree | boolean/string identityDeleted search | 74 docs 2,465ms→254ms | skip branches lacking either accepted marker |
+| Combined document | account_anonymize_json_document | unchanged three-pass pipeline | repeated traversal | 74 docs 10,099ms→1,565ms | optimize internals, same data policy |
 | Final integrity | prepare remaining FKs; rekey/reconcile | Auth FKs, round references, storage manifests | existing relational indexes | actual full graph assertions pass | unchanged |
 
 ## Full chain audited
@@ -143,7 +143,10 @@ remain unchanged.
 - One namespace token per document, passed through recursion.
 - Same case-insensitive UUID/tombstone transform; 23505 collisions detected
   BEFORE recursion; no silent duplicate-key overwrite.
-- General pruning includes inherited aliases, empty IDs and Unicode.
+- General pruning includes inherited aliases, empty IDs, Unicode and JSON-escaped
+  quotes/backslashes/control characters. A final synthetic regression exposed
+  a false negative in the prepared raw-text alias gate; checking its encoded
+  JSON string too repairs it. This candidate was never installed remotely.
 - Marker pruning recognizes the existing boolean and case-insensitive string
   true contracts. Subject/provenance boundaries and marker-only PII stay.
 - Surviving players, scores, putts, history, namespaces and retry stay.
@@ -169,16 +172,17 @@ one immutable evaluation as74 calls. Earlier constant-folded samples discarded.
 
 | Measurement | Before | After |
 |---|---:|---:|
-|Small UUID pass,1 version /1636 bytes|33ms|5ms|
-|Medium UUID pass,20 versions /8280 bytes each|1006ms|115ms|
-|Historical UUID pass,74 versions /22329 bytes each|4091ms|718ms|
-|Actual collision aggregate,74 objects x101 keys|1353ms|47ms|
-|General anonymizer,74 docs|3255ms|555ms|
-|Marker pass,74 docs|2000ms|153ms|
-|Full document pipeline,74 docs|9734ms|1500ms|
-|Full prepare,74 versions +243 lifecycle states|28725ms|1660ms|
+| Small UUID pass, 1 version / 1,636 bytes | 19ms | 6ms |
+| Medium UUID pass, 20 versions / 8,280 bytes each | 964ms | 171ms |
+| Historical UUID pass, 74 versions / 22,329 bytes each | 3,808ms | 661ms |
+| Actual collision aggregate, 74 objects x 101 keys | 1,144ms | 39ms |
+| General anonymizer, 74 docs | 3,704ms | 653ms |
+| Marker pass, 74 docs | 2,465ms | 254ms |
+| Full document pipeline, 74 docs | 10,099ms | 1,565ms |
+| Full prepare, 74 versions + 243 lifecycle states | 27,210ms | 1,734ms |
 
-These are actual local measurements, **not a remote 1.66-second guarantee**.
+Final measurements above were run without other test runners in parallel.
+These are actual local measurements, **not a remote 1.734-second guarantee**.
 Earlier intermediate candidate without the two remaining pass optimizations
 was33599→9075ms and is not the final migration.
 

@@ -121,7 +121,8 @@ test("bounded identity work preserves deployed JSON/collision/security contracts
       }
     });
     await t.test("local aliases, empty aliases and boolean/string deletion markers survive pruning", async () => {
-      for (const alias of ["local-qa-player", "", "玩家-qa", "CaseSensitiveAlias"]) {
+      for (const alias of ["local-qa-player", "", "玩家-qa", "CaseSensitiveAlias",
+        'quoted-"-player', "path\\player", "line\nbreak", "tab\tplayer", "control\bplayer"]) {
         await compare({ players: [{ id: alias, accountUserId: target, name: "QA private" }],
           scores: { [alias]: 4 }, history: [{ playerId: alias, name: "QA private", email: "qa@example.invalid" }],
           owner: { ownerId: alias, ownerName: "QA owner" } });

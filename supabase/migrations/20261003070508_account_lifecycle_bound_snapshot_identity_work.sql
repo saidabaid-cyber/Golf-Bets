@@ -245,11 +245,14 @@ declare
 begin
   -- The legacy pass also propagates local player IDs. A UUID-only gate would
   -- miss those aliases in sibling scores/player objects, so retain branches
-  -- containing ANY inherited local key (including an empty key).
+  -- containing ANY inherited local key (including an empty key). JSONB text
+  -- escapes quotes, backslashes and control characters, so check the encoded
+  -- string too: its decoded id/ownerId may still match the legacy policy.
   value_text:=value::text;
   if position(target_text in lower(value_text))=0 and not exists(
     select 1 from unnest(player_keys) player_key
     where position(player_key in value_text)>0
+      or position(to_jsonb(player_key)::text in value_text)>0
   ) then
     return value;
   end if;
