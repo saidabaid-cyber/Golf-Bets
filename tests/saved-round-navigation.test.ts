@@ -1,0 +1,88 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
+import * as navigation from "../lib/app-navigation";
+
+type Hook = { tab: navigation.AppTab; historyDetailId: string | null; setTab: (tab: navigation.AppTab, options?: { roundId?: string | null }) => void; setNavigationGuard: (guard: (tab: navigation.AppTab) => navigation.AppTab) => void };
+
+/** Execute the real navigation hook with browser history and React state
+ * boundaries, without loading unrelated providers or a remote database. */
+function browserAt(search: string) {
+  const listeners = new Map<string, () => void>();
+  const entries = [{ url: `/${search}`, state: {} as Record<string, unknown> }];
+  let position = 0;
+  const location = { pathname: "/", search };
+  const history = {
+    state: entries[0].state,
+    replaceState(state: Record<string, unknown>, _title: string, url: string) { entries[position] = { state, url }; update(); },
+    pushState(state: Record<string, unknown>, _title: string, url: string) { entries.splice(position + 1); entries.push({ state, url }); position++; update(); },
+    back() { if (position > 0) { position--; update(); listeners.get("popstate")?.(); } },
+  };
+  function update() { const parsed = new URL(entries[position].url, "https://qa.example.invalid"); location.pathname = parsed.pathname; location.search = parsed.search; history.state = entries[position].state; }
+  const window = { location, history, scrollY: 0, addEventListener: (event: string, handler: () => void) => listeners.set(event, handler), removeEventListener: (event: string) => listeners.delete(event) };
+  return window;
+}
+
+function mount(window: ReturnType<typeof browserAt>) {
+  let cursor = 0;
+  let initial = true;
+  const slots: unknown[] = [];
+  const effects: Array<() => void> = [];
+  const react = {
+    useState(value: unknown) { const index = cursor++; if (!(index in slots)) slots[index] = value; return [slots[index], (next: unknown) => { slots[index] = next; }]; },
+    useRef(value: unknown) { const index = cursor++; if (!(index in slots)) slots[index] = { current: value }; return slots[index]; },
+    useEffect(effect: () => void) { if (initial) effects.push(effect); },
+    useCallback(callback: unknown) { return callback; },
+  };
+  const source = ts.transpileModule(readFileSync("app/components/use-screen-navigation.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exported = {} as { useScreenNavigation: () => Hook };
+  new Function("require", "exports", "window", source)((name: string) => name === "react" ? react : name.includes("app-navigation") ? navigation : { useViewScrollReset() {} }, exported, window);
+  function render() { cursor = 0; const result = exported.useScreenNavigation(); initial = false; return result; }
+  render(); effects.forEach(effect => effect());
+  return render;
+}
+
+test("saved round URL survives reload without reconstructing an empty active round", () => {
+  const browser = browserAt("?screen=results&friend=existing-invite");
+  let render = mount(browser);
+  render().setTab("historyDetail", { roundId: "qa-saved-round-9" });
+  assert.equal(render().historyDetailId, "qa-saved-round-9");
+  assert.equal(new URLSearchParams(browser.location.search).get("friend"), "existing-invite");
+  render = mount(browser);
+  assert.equal(render().tab, "historyDetail");
+  assert.equal(render().historyDetailId, "qa-saved-round-9");
+});
+
+test("opening another historical round and browser Back restore the respective selections", () => {
+  const browser = browserAt("?screen=history");
+  const render = mount(browser);
+  render().setTab("historyDetail", { roundId: "qa-round-a" });
+  render().setTab("historyDetail", { roundId: "qa-round-b" });
+  assert.equal(render().historyDetailId, "qa-round-b");
+  browser.history.back();
+  assert.equal(render().historyDetailId, "qa-round-a");
+  render().setTab("play");
+  assert.equal(render().historyDetailId, null);
+  assert.equal(new URLSearchParams(browser.location.search).has("round"), false);
+});
+
+test("navigation guard does not carry an inaccessible historical selection into another screen", () => {
+  const browser = browserAt("?screen=play");
+  const render = mount(browser);
+  render().setNavigationGuard(() => "setup");
+  render().setTab("historyDetail", { roundId: "private-foreign-id" });
+  assert.equal(render().tab, "setup");
+  assert.equal(render().historyDetailId, null);
+  assert.equal(browser.location.search, "?screen=setup");
+});
+
+test("round references are screen scoped and reject malformed or oversized URL values", () => {
+  assert.equal(navigation.historicalRoundIdFromSearch("?screen=historyDetail&round=2vj25cjj"), "2vj25cjj");
+  for (const value of ["", "<script>", "../another", "x".repeat(129)]) {
+    const href = navigation.screenHref("historyDetail", "", value);
+    assert.equal(navigation.historicalRoundIdFromSearch(href.slice(1)), null);
+    assert.equal(href.includes("round="), false);
+  }
+  assert.equal(navigation.historicalRoundIdFromSearch("?screen=results&round=qa-round"), null);
+});

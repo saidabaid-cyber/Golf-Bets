@@ -463,7 +463,7 @@ function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
   const ghinControl = useGhinReadOnlyProfile(identity.mode === "authenticated" ? identity.accessToken : null);
-  const { tab, setTab, goBack, setNavigationGuard } = useScreenNavigation();
+  const { tab, setTab, goBack, setNavigationGuard, historyDetailId } = useScreenNavigation();
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const [profileCompletionTarget, setProfileCompletionTarget] = useState<CompletionSection | null>(null);
   const [profileRootRevision, setProfileRootRevision] = useState(0);
@@ -496,7 +496,6 @@ function GolfBetsApp() {
   const [rulesVisited, setRulesVisited] = useState(false);
   useEffect(() => { if (tab === "rules") setRulesVisited(true); }, [tab]);
   const [personalDetailId] = useState<string | null>(null);
-  const [historyDetailId, setHistoryDetailId] = useState<string | null>(null);
   const [editingRound, setEditingRound] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [copyFallback, setCopyFallback] = useState("");
@@ -1764,8 +1763,7 @@ function GolfBetsApp() {
   }
 
   function openHistoricalRound(roundToOpenId: string) {
-    setHistoryDetailId(roundToOpenId);
-    setTab("historyDetail");
+    setTab("historyDetail", { roundId: roundToOpenId });
   }
 
   function newManualBet() {
@@ -2277,8 +2275,7 @@ function GolfBetsApp() {
         setFeedback("Ronda guardada ✓");
       }
       recordScorecardResultReached();
-      if (snapshot.presentation?.playMode === "score_only") { setHistoryDetailId(snapshot.id); setTab("historyDetail"); }
-      else setTab("results");
+      openHistoricalRound(snapshot.id);
     } catch {
       updateBackyardAiMetrics(localStorage, identity.userId, (current) => recordRoundCompletionMetric(current, false));
       setSaveStatus("error");
@@ -2973,7 +2970,7 @@ function GolfBetsApp() {
     if (snapshot.players?.[0]?.accountUserId !== identity.userId || snapshot.cloudReadOnly) throw new Error("Esta ronda no pertenece a tu cuenta.");
     const saved = await saveRoundHistoryLocalFirst({ storage: localStorage, ownerId: identity.userId, snapshot: captureCompletedRoundIndex(snapshot, identity.userId, indexControl.preference, history.find(r => r.id === snapshot.id)), deviceId: offlineDeviceId.current, defaultHandicap: identity.defaultHandicap, hasLocalPreferenceState: hadLocalPreferences.current, queueForCloud: identity.mode === "authenticated" && cloudLinked, preserveActiveDraft: true });
     setHistory(saved.history.map(normalizeHistorySnapshot));
-    requestCloudSync.current?.(); setHistoryDetailId(snapshot.id); setTab("historyDetail");
+    requestCloudSync.current?.(); openHistoricalRound(snapshot.id);
     setFeedback("Ronda guardada en el mismo Histórico. Sincronización cloud según conexión.");
   }
 
@@ -4449,7 +4446,7 @@ function GolfBetsApp() {
       </ResultAccordion>
 
       <section className="card summaryCard"><div><span>Apuestas</span><b className={ownerBetResult >= 0 ? "good" : "bad"}>{money(ownerBetResult)}</b></div><div><span>Gastos</span><b className="bad">{money(-ownerExpenseTotal)}</b></div><div className="grand"><span>NETO DEL DÍA</span><b className={ownerNet >= 0 ? "good" : "bad"}>{money(ownerNet)}</b></div></section>
-<div className="roundActions">{(roundReviewPending || roundClosed) && <button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir resultado</button>}{!roundReviewPending && <button className="secondary big" onClick={requestNewRound}>Nueva ronda</button>}{roundClosed && <button className="secondary big" onClick={() => { const snapshot = currentSnapshot(); if (snapshot) { setHistoryDetailId(snapshot.id); setTab("historyDetail"); } }}>Compartir con jugadores</button>}{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : roundReviewPending ? <button className="primary big" disabled={saveStatus === "saving"} onPointerDown={commitFocusedNumericCapture} onClick={requestRoundHistorySave}>Guardar en Histórico</button> : <button className="primary big" onClick={openActiveRound}>Volver a la ronda</button>}</div>
+<div className="roundActions">{(roundReviewPending || roundClosed) && <button className="secondary big" onClick={async () => { const snapshot = currentSnapshot(); if (snapshot) await shareRound(snapshot); }}>Compartir resultado</button>}{!roundReviewPending && <button className="secondary big" onClick={requestNewRound}>Nueva ronda</button>}{roundClosed && <button className="secondary big" onClick={() => { const snapshot = currentSnapshot(); if (snapshot) { openHistoricalRound(snapshot.id); } }}>Compartir con jugadores</button>}{roundClosed ? <button className="primary big" onClick={() => setTab("history")}>Abrir Histórico</button> : roundReviewPending ? <button className="primary big" disabled={saveStatus === "saving"} onPointerDown={commitFocusedNumericCapture} onClick={requestRoundHistorySave}>Guardar en Histórico</button> : <button className="primary big" onClick={openActiveRound}>Volver a la ronda</button>}</div>
     </>}
 
     {tab === "history" && <>
@@ -4466,8 +4463,8 @@ function GolfBetsApp() {
           const financials = recap.financials;
           const holeLabel = recap.meta.holeCount ? `${recap.meta.holeCount} hoyos` : "hoyos no registrados";
           const sharedReadOnly = r.cloudReadOnly || r.id.startsWith("shared:");
-          if (r.presentation?.playMode === "score_only") return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{recap.meta.courseName || "Campo no disponible"}</b><span>{recap.meta.date} · {holeLabel} · {r.totalScoreCapture && !r.totalScoreCapture.holesCompletedAt ? "Sólo total capturado" : "Scores por hoyo"} · Sin apuestas</span></div>{r.totalScoreCapture && <strong>{r.totalScoreCapture.grossTotal} golpes</strong>}</div><div className="historyActions"><button onClick={() => { setHistoryDetailId(r.id); setTab("historyDetail"); }}>Abrir ronda</button>{!sharedReadOnly && <button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button>}</div></div>;
-          return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{recap.meta.courseName || "Campo no disponible"}</b><span>{recap.meta.date || "Fecha no disponible"} · {holeLabel} · apuestas {financials?.betResult === undefined ? "—" : money(financials.betResult)} · gastos {financials?.expenseTotal === undefined ? "—" : money(financials.expenseTotal)}</span></div><strong className={financials?.netResult === undefined ? "" : financials.netResult >= 0 ? "good" : "bad"}>{financials?.netResult === undefined ? "—" : money(financials.netResult)}</strong></div><div className="historyActions"><button onClick={() => { setHistoryDetailId(r.id); setTab("historyDetail"); }}>Abrir ronda</button><button onClick={() => downloadRoundCsv(r)}>CSV</button><button onClick={() => downloadRoundPdf(r)}>PDF</button><button onClick={() => downloadRoundImage(r)}>Imagen</button><button onClick={() => shareRound(r)}>Compartir resultado</button>{!sharedReadOnly && <label className="uploadButton">{r.photoId ? "Cambiar foto" : "Agregar foto de tarjeta"}<input type="file" accept="image/*" capture="environment" onChange={(event) => attachScorecardPhoto(r, event.target.files?.[0])} /></label>}{r.photoId && <button onClick={() => viewScorecardPhoto(r)}>Ver tarjeta original</button>}{!sharedReadOnly && <button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button>}</div></div>;
+          if (r.presentation?.playMode === "score_only") return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{recap.meta.courseName || "Campo no disponible"}</b><span>{recap.meta.date} · {holeLabel} · {r.totalScoreCapture && !r.totalScoreCapture.holesCompletedAt ? "Sólo total capturado" : "Scores por hoyo"} · Sin apuestas</span></div>{r.totalScoreCapture && <strong>{r.totalScoreCapture.grossTotal} golpes</strong>}</div><div className="historyActions"><button onClick={() => { openHistoricalRound(r.id); }}>Abrir ronda</button>{!sharedReadOnly && <button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button>}</div></div>;
+          return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{recap.meta.courseName || "Campo no disponible"}</b><span>{recap.meta.date || "Fecha no disponible"} · {holeLabel} · apuestas {financials?.betResult === undefined ? "—" : money(financials.betResult)} · gastos {financials?.expenseTotal === undefined ? "—" : money(financials.expenseTotal)}</span></div><strong className={financials?.netResult === undefined ? "" : financials.netResult >= 0 ? "good" : "bad"}>{financials?.netResult === undefined ? "—" : money(financials.netResult)}</strong></div><div className="historyActions"><button onClick={() => { openHistoricalRound(r.id); }}>Abrir ronda</button><button onClick={() => downloadRoundCsv(r)}>CSV</button><button onClick={() => downloadRoundPdf(r)}>PDF</button><button onClick={() => downloadRoundImage(r)}>Imagen</button><button onClick={() => shareRound(r)}>Compartir resultado</button>{!sharedReadOnly && <label className="uploadButton">{r.photoId ? "Cambiar foto" : "Agregar foto de tarjeta"}<input type="file" accept="image/*" capture="environment" onChange={(event) => attachScorecardPhoto(r, event.target.files?.[0])} /></label>}{r.photoId && <button onClick={() => viewScorecardPhoto(r)}>Ver tarjeta original</button>}{!sharedReadOnly && <button className="dangerGhost" onClick={() => setHistoricalRoundToDelete(r)}>Eliminar ronda</button>}</div></div>;
         })}
       </section>
     </>}

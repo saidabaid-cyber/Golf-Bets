@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { screenFromSearch, screenHref, type AppTab } from "../../lib/app-navigation";
+import { historicalRoundIdFromSearch, screenFromSearch, screenHref, type AppTab } from "../../lib/app-navigation";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 
 type NavigationGuard = (next: AppTab) => AppTab;
@@ -8,6 +8,7 @@ type NavigationGuard = (next: AppTab) => AppTab;
 /** App-local history preserves screens; every new view starts at the top. */
 export function useScreenNavigation() {
   const [tab, showTab] = useState<AppTab>("welcome");
+  const [historyDetailId, selectHistoricalRound] = useState<string | null>(null);
   useViewScrollReset(tab);
   const current = useRef<AppTab>("welcome");
   const trail = useRef<Array<{ tab: AppTab; scroll: number }>>([]);
@@ -17,6 +18,7 @@ export function useScreenNavigation() {
       const stateTab = window.history.state?.backyardTab as string | undefined;
       const requested = screenFromSearch(stateTab ? `?screen=${encodeURIComponent(stateTab)}` : window.location.search);
       const target = guard.current(requested);
+      selectHistoricalRound(target === "historyDetail" ? historicalRoundIdFromSearch(window.location.search) : null);
       window.history.replaceState({ ...window.history.state, backyardTab: target }, "", screenHref(target, window.location.search));
       if (target === current.current) return;
       trail.current.pop();
@@ -24,17 +26,20 @@ export function useScreenNavigation() {
       showTab(target);
     };
     const initial = guard.current(screenFromSearch(window.location.search));
+    selectHistoricalRound(initial === "historyDetail" ? historicalRoundIdFromSearch(window.location.search) : null);
     current.current = initial;
     showTab(initial);
     window.history.replaceState({ ...window.history.state, backyardTab: initial }, "", screenHref(initial, window.location.search));
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
   }, []);
-  const setTab = useCallback((next: AppTab) => {
+  const setTab = useCallback((next: AppTab, options?: { roundId?: string | null }) => {
     const target = guard.current(next);
-    if (target === current.current) return;
+    const href = screenHref(target, window.location.search, options?.roundId);
+    if (target === current.current && href === `${window.location.pathname}${window.location.search}`) return;
     trail.current.push({ tab: current.current, scroll: window.scrollY });
-    window.history.pushState({ ...window.history.state, backyardTab: target }, "", screenHref(target, window.location.search));
+    window.history.pushState({ ...window.history.state, backyardTab: target }, "", href);
+    selectHistoricalRound(historicalRoundIdFromSearch(href.slice(1)));
     current.current = target;
     showTab(target);
   }, []);
@@ -45,5 +50,5 @@ export function useScreenNavigation() {
     if (trail.current.length) window.history.back();
     else setTab("welcome");
   }, [setTab]);
-  return { tab, setTab, goBack, setNavigationGuard };
+  return { tab, setTab, goBack, setNavigationGuard, historyDetailId };
 }

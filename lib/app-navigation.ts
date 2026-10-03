@@ -31,10 +31,22 @@ export function isPrimaryTab(tab: AppTab) {
 const SCREEN_TABS = new Set<string>([...Object.values(BOTTOM_NAV_TARGETS), ...PLAY_TABS, "stats", "history", "historyDetail", "personals", "profile", "account", "social"]);
 
 /** One URL per view, retaining the existing app instance and round state. */
-export function screenHref(tab: AppTab, search = "") {
+const ROUND_REFERENCE = /^[A-Za-z0-9:_-]{1,128}$/;
+
+/** A URL is only a selection; the round must still exist in accessible history. */
+export function historicalRoundIdFromSearch(search: string) {
   const params = new URLSearchParams(search);
+  const id = params.get("round");
+  return params.get("screen") === "historyDetail" && id && ROUND_REFERENCE.test(id) ? id : null;
+}
+
+export function screenHref(tab: AppTab, search = "", roundId?: string | null) {
+  const params = new URLSearchParams(search);
+  const selectedRound = roundId === undefined ? historicalRoundIdFromSearch(search) : roundId;
   params.delete("screen");
+  params.delete("round");
   if (tab !== "welcome") params.set("screen", tab);
+  if (tab === "historyDetail" && selectedRound && ROUND_REFERENCE.test(selectedRound)) params.set("round", selectedRound);
   return `/${params.size ? `?${params.toString()}` : ""}`;
 }
 
