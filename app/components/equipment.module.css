@@ -1157,11 +1157,33 @@
 
 .shotRow {
   display: grid;
-  grid-template-columns: minmax(70px, .8fr) repeat(3, minmax(65px, 1fr)) auto;
-  align-items: end;
-  gap: 6px;
+  grid-template-columns: minmax(120px, .8fr) repeat(3, minmax(65px, 1fr)) auto;
+  align-items: start;
+  gap: 10px;
   border-top: 1px solid var(--line);
-  padding-top: 8px;
+  padding: 12px;
+}
+
+.shotRow > div:not(.shotActions) {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.shotRow small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.shotRow b {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.shotRow p {
+  margin: 0;
 }
 
 .shotRow button {
@@ -1240,6 +1262,10 @@
 
   .shotRow {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .shotRow > div:first-child {
+    grid-column: 1 / -1;
   }
 
   .shotRow button {
