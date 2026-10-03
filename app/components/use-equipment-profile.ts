@@ -244,7 +244,11 @@ export function useEquipmentProfile(userId: string, accessToken: string | null) 
         return;
       }
 
-      const merged = saveLocal(reconciliation.profile);
+      // An unchanged cloud read must not rewrite the local envelope: its new
+      // savedAt would notify another tab, which would read and write it again.
+      const merged = reconciliation.needsLocalWrite
+        ? saveLocal(reconciliation.profile)
+        : reconciliation.profile;
       recordEquipmentSyncBase(localStorage, scope.userId, remote ? cloudBase(remote) : null);
       if (remote && !reconciliation.needsUpload) {
         clearEquipmentSyncOutbox(localStorage, scope.userId);
