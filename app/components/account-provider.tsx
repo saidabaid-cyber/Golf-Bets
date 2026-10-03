@@ -1155,6 +1155,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (identity?.mode !== "authenticated" || !identity.accessToken || !currentConsent
+      || !activeAccountConfirmed
       || localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return;
     const syncingUserId = identity.userId;
     const saved = acceptances.filter((item) => item.userId === syncingUserId);
@@ -1182,13 +1183,16 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       });
     });
     return () => { mounted = false; };
-  }, [identity?.mode, identity?.userId, identity?.accessToken, currentConsent, acceptances, legalRetryRevision, flushLegalAcceptances, issueWithMessage, setCloudIssue]);
+  }, [identity?.mode, identity?.userId, identity?.accessToken, activeAccountConfirmed, currentConsent, acceptances, legalRetryRevision, flushLegalAcceptances, issueWithMessage, setCloudIssue]);
 
   useEffect(() => {
     if (!identity) {
       setLegalEvidenceState(null);
       return;
     }
+    // A legitimate OTP can authenticate a deactivated account. Protected
+    // evidence hydration must wait for activation, just like profile data.
+    if (identity.mode === "authenticated" && !activeAccountConfirmed) return;
     const owner = { mode: identity.mode, userId: identity.userId } as const;
     let actorKey = "";
     try {
@@ -1260,10 +1264,11 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       });
     });
     return () => { mounted = false; };
-  }, [identity, legalEnvironment, legalRetryRevision, setCloudIssue, accountMutationStillActive]);
+  }, [identity, activeAccountConfirmed, legalEnvironment, legalRetryRevision, setCloudIssue, accountMutationStillActive]);
 
   useEffect(() => {
     if (!identity) return;
+    if (identity.mode === "authenticated" && !activeAccountConfirmed) return;
     const mode = identity.mode;
     const userId = identity.userId;
     const accessToken = identity.accessToken;
@@ -1309,7 +1314,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener(OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT, refreshOnFocus);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
-  }, [identity, legalEnvironment, accountMutationStillActive]);
+  }, [identity, activeAccountConfirmed, legalEnvironment, accountMutationStillActive]);
 
   function recordLegalChoices(
     choices: Array<{ subject: LegalEvidenceSubject; action: LegalEvidenceAction }>,
