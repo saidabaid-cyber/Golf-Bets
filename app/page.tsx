@@ -3725,7 +3725,9 @@ function GolfBetsApp() {
     window.scrollTo({ top: 0, behavior: "instant" });
   };
   const continueActiveRound = () => {
-    const target = activeRoundContinueTarget(activeRoundSummary?.status, courseSelected);
+    const pendingEditIndex = order.findIndex(number => players.some(player => Object.hasOwn(scoreEdits[number] || {}, player.id)));
+    const target = activeRoundContinueTarget(activeRoundSummary?.status, courseSelected, pendingEditIndex >= 0);
+    if (target === "round" && pendingEditIndex >= 0) setCurrentIndex(pendingEditIndex);
     if (target === "round") openActiveRound();
     else setTab(target);
   };

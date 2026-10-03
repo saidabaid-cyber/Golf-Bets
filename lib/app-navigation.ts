@@ -60,7 +60,10 @@ export function resolveActiveRoundStatus(input: { reviewPending: boolean; course
   return input.courseSelected && input.playerCount > 0 && input.scoreStarted ? "live" : "setup";
 }
 
-export function activeRoundContinueTarget(status: ActiveRoundStatus | null | undefined, courseSelected: boolean): AppTab {
+export function activeRoundContinueTarget(status: ActiveRoundStatus | null | undefined, courseSelected: boolean, hasPendingScoreEdits = false): AppTab {
+  // A finished card can still contain a correction awaiting hole confirmation.
+  // Resume capture before showing totals calculated from the confirmed scores.
+  if (hasPendingScoreEdits && courseSelected) return "round";
   if (status === "review") return "results";
   if (status === "live" && courseSelected) return "round";
   return "setup";

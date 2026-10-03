@@ -83,6 +83,13 @@ test("continuing a draft never opens score before field, players and score progr
   assert.equal(activeRoundContinueTarget("review", false), "results");
 });
 
+test("continuing a completed card with a pending correction returns to capture before settlement", () => {
+  assert.equal(activeRoundContinueTarget("review", true, true), "round");
+  assert.equal(activeRoundContinueTarget("review", true, false), "results");
+  assert.equal(activeRoundContinueTarget("live", true, true), "round");
+  assert.equal(activeRoundContinueTarget("setup", false, true), "setup");
+});
+
 test("an invalid active bet draft can only be opened in setup, without blocking independent history", () => {
   for (const tab of ["round", "standings", "personalDetail", "results"] as AppTab[]) {
     assert.equal(activeBetSafeDestination(tab, true), "setup");
