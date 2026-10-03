@@ -181,8 +181,9 @@ test("onboarding authorizes app intent while OS permission and delivery remain s
   assert.match(consent, /el permiso del dispositivo y la entrega se muestran y solicitan por separado/);
   assert.match(onboarding, /<OnboardingPrivacyChoices/);
   const step2 = readFileSync("app/components/onboarding-privacy-choices.tsx", "utf8");
-  assert.doesNotMatch(step2, /InitialDevicePermissions|requestInitialLocation|requestInitialNotifications|getUserMedia|type="file"/);
-  assert.match(step2, /await saveOnboardingPrivacy[\s\S]*onContinue\(\)/);
+  assert.doesNotMatch(step2, /requestInitialLocation|requestInitialNotifications|getUserMedia|type="file"/);
+  assert.match(step2, /await saveOnboardingPrivacy[\s\S]*hydrateOptionalDevicePermissionPreferences[\s\S]*setDeviceChoices/);
+  assert.match(step2, /InitialDevicePermissions[^\n]*onboardingChoices=\{deviceChoices\}/);
   assert.match(settings, /requestInitialLocation/);
   assert.match(settings, /requestInitialNotifications/);
   assert.match(settings, /devicePermissionReviewStatus/);

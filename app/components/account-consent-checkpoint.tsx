@@ -6,7 +6,6 @@ import {
   isCompleteBundleResolution,
   OPTIONAL_AUTHORIZATIONS_CHANGED_EVENT,
   requestOptionalAuthorizationState,
-  resolveOptionalAuthorizationBundle,
   type OptionalAuthorizationState,
 } from "../../lib/account-optional-authorizations";
 import { cacheAccountLearningConsent, ACCOUNT_LEARNING_CONSENT_HYDRATED_EVENT } from "../../lib/account-learning-consent-cache";
@@ -14,12 +13,13 @@ import { hydrateOptionalDevicePermissionPreferences } from "../../lib/account-de
 import { LEGAL_EVIDENCE_DEFINITIONS } from "../../lib/legal-evidence";
 import { STORAGE_KEYS } from "../../lib/round-utils";
 import styles from "./account-consent-checkpoint.module.css";
+import { resolveOnboardingOptionalBundle } from "../../lib/onboarding-privacy";
 
 type Decision = "pending" | "accepted" | "skipped";
 
 /** Required documents and optional product functions are separate explicit
- * decisions. The optional bundle is committed by one server transaction; UI
- * success is shown only after the complete canonical snapshot is verified. */
+ * decisions. The core optional bundle uses its existing server transaction;
+ * media uses its existing ledger endpoint. Both are verified before success. */
 export function InitialOnboardingConsents({
   userId,
   accessToken,
@@ -46,6 +46,7 @@ export function InitialOnboardingConsents({
   const lifetime = useRef<AbortController | null>(null);
   const authorizationRequestKey = useRef<string | null>(null);
   const declineRequestKey = useRef<string | null>(null);
+  const mediaRequestKeys = useRef(new Map<string, string>());
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,8 +111,7 @@ export function InitialOnboardingConsents({
     setBusy("optional"); setError("");
     try {
       const action = accepted ? "authorize_all" as const : "decline_all" as const;
-      const saved = await resolveOptionalAuthorizationBundle(accessToken, action, key, lifetime.current?.signal);
-      if (!isCompleteBundleResolution(saved, action)) throw new Error("incomplete_optional_authorization");
+      const saved = await resolveOnboardingOptionalBundle(accessToken, action, key, mediaRequestKeys.current, lifetime.current?.signal);
       mirrorAcceptedBundle(saved);
       if (!lifetime.current?.signal.aborted) {
         setRemote(saved);
@@ -129,14 +129,14 @@ export function InitialOnboardingConsents({
           const latest = await requestOptionalAuthorizationState(accessToken, lifetime.current?.signal);
           if (lifetime.current?.signal.aborted) return;
           setRemote(latest);
-          if (latest.resolved && latest.receipt) {
+          if (latest.resolved && latest.receipt && latest.receipt.idempotencyKey !== key) {
             mirrorAcceptedBundle(latest);
             setOptional(latest.receipt.action === "authorize_all" ? "accepted" : "skipped");
             setBusy("continue");
             onContinue();
             return;
           }
-          if (!latest.eligible) {
+          if (!latest.eligible && latest.receipt?.idempotencyKey !== key) {
             mirrorAcceptedBundle(latest);
             setOptional("skipped");
             setError("Otra decisión explícita ya fue registrada. La conservamos sin ampliarla; puedes continuar y revisarla después en Configuración.");
@@ -173,6 +173,7 @@ export function InitialOnboardingConsents({
         <li>Memoria personal privada y learning global futuro con datos desidentificados y revisados.</li>
         <li>Actividad compartida con la audiencia y relaciones actuales de Social. Tu perfil nace público; puedes cambiarlo después en Configuración.</li>
         <li>Uso interno de ubicación y notificaciones; el permiso del dispositivo y la entrega se muestran y solicitan por separado.</li>
+        <li>Uso de Cámara cuando elijas una función que la requiera y selección de Fotos / Fototeca cuando decidas enviar contenido. No se solicita acceso a la cámara ni a toda tu fototeca al autorizar.</li>
         <li>{LEGAL_EVIDENCE_DEFINITIONS.financial_data.statements.accepted}</li>
         <li>{LEGAL_EVIDENCE_DEFINITIONS.marketing.statements.accepted}</li>
       </ul>

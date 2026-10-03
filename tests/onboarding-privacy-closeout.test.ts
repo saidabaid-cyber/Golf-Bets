@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EMPTY_PRIVACY_CHOICES, readOnboardingPrivacy, saveOnboardingPrivacy, type PrivacyChoices } from "../lib/onboarding-privacy";
+import { EMPTY_PRIVACY_CHOICES, readOnboardingPrivacy, resolveOnboardingOptionalBundle, saveOnboardingPrivacy, type PrivacyChoices } from "../lib/onboarding-privacy";
 import { OPTIONAL_AUTHORIZATION_BUNDLE_VERSION, OPTIONAL_AUTHORIZATION_POLICY_VERSIONS, OPTIONAL_AUTHORIZATION_SCOPES, type OptionalAuthorizationState } from "../lib/account-optional-authorizations";
 import { legalEvidenceDefinition } from "../lib/legal-evidence";
 
 const OWNER="11111111-1111-4111-8111-111111111111", AT="2026-10-03T12:00:00.000Z";
-function fixture() {
+function fixture(allowBundle = false) {
   const state: OptionalAuthorizationState={bundleVersion:OPTIONAL_AUTHORIZATION_BUNDLE_VERSION,resolved:false,eligible:true,receipt:null,
     scopes:Object.fromEntries(OPTIONAL_AUTHORIZATION_SCOPES.map(scope=>[scope,{active:false,status:"missing",policyVersion:OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope],source:null,decidedAt:null}])) as OptionalAuthorizationState["scopes"],
     legal:{financial_data:{active:false,status:"missing",policyVersion:legalEvidenceDefinition("financial_data","accepted")!.version,decidedAt:null},marketing:{active:false,status:"missing",policyVersion:legalEvidenceDefinition("marketing","accepted")!.version,decidedAt:null}},
@@ -14,13 +14,18 @@ function fixture() {
   const requests: Array<{path:string;method:string;body:Record<string,unknown>}> = [];
   let failSocial=false;
   const media: Record<"camera" | "photos", { version: 1; value: "enabled" | "disabled"; changedAt: string } | null> = { camera: null, photos: null };
+  const mediaIds = new Set<string>();
+  let failPhoto = false;
   const transport: typeof fetch=async(input,init)=>{
     const path=String(input),method=init?.method||"GET",body=init?.body?JSON.parse(String(init.body)):{};
     requests.push({path,method,body});
     assert.equal(new Headers(init?.headers).get("authorization"),"Bearer qa-session");
     const result=(value:unknown,status=200)=>Response.json(structuredClone(value),{status});
     if(path==="/api/account/device-permission-preferences?media=true") {
-      if(method==="PATCH") media[body.preference as "camera" | "photos"]={version:1,value:body.enabled?"enabled":"disabled",changedAt:AT};
+      if(method==="PATCH") {
+        if (body.preference === "photos" && failPhoto) return result({error:"QA failure"},503);
+        if (!mediaIds.has(body.idempotencyKey)) { mediaIds.add(body.idempotencyKey); media[body.preference as "camera" | "photos"]={version:1,value:body.enabled?"enabled":"disabled",changedAt:AT}; }
+      }
       return result(media);
     }
     if(path==="/api/account/optional-authorizations") {
@@ -29,7 +34,19 @@ function fixture() {
         state.scopes[scope]={active:body.enabled,status:body.enabled?"accepted":"declined",source:"settings",decidedAt:AT,policyVersion:OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope]};
         if(scope==="NOTIFICATION_INTERNAL")state.notifications.internal=state.notifications.master=body.enabled;
       }
-      assert.notEqual(method,"POST","granular onboarding must not silently use authorize_all"); return result(state);
+      if(method === "POST") {
+        assert.ok(allowBundle,"granular onboarding must not silently use authorize_all");
+        if (!state.receipt) {
+          const accepted = body.action === "authorize_all";
+          state.resolved=true;state.eligible=false;state.receipt={action:body.action,idempotencyKey:body.idempotencyKey,decidedAt:AT};
+          for(const scope of OPTIONAL_AUTHORIZATION_SCOPES)state.scopes[scope]={active:accepted,status:accepted?"accepted":"declined",policyVersion:OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope],source:`onboarding_${body.action}`,decidedAt:AT};
+          for(const subject of ["financial_data","marketing"] as const)state.legal![subject]={active:accepted,status:accepted?"accepted":"rejected",policyVersion:legalEvidenceDefinition(subject,"accepted")!.version,decidedAt:AT};
+          Object.keys(state.notifications).forEach(key=>{state.notifications[key as keyof typeof state.notifications]=accepted;});
+          Object.keys(state.sharing).forEach(key=>{state.sharing[key as keyof typeof state.sharing]=accepted;});
+          state.socialPrivacy=accepted?"FRIENDS":"PRIVATE";social=Object.fromEntries(Object.keys(social).map(key=>[key,accepted]));
+        }
+      }
+      return result(state);
     }
     if(path==="/api/backyard-ai/consent") {
       if (body.scope) {
@@ -58,7 +75,7 @@ function fixture() {
     }
     throw new Error(`Unexpected request ${path}`);
   };
-  return {state,media,transport,requests,failSocial:(value:boolean)=>{failSocial=value;},authorizeAll:()=>{
+  return {state,media,transport,requests,failPhoto:(value:boolean)=>{failPhoto=value;},failSocial:(value:boolean)=>{failSocial=value;},authorizeAll:()=>{
     state.resolved=true; state.eligible=false; state.receipt={action:"authorize_all",idempotencyKey:"550e8400-e29b-41d4-a716-446655440000",decidedAt:AT};
     for(const scope of OPTIONAL_AUTHORIZATION_SCOPES) state.scopes[scope]={active:true,status:"accepted",policyVersion:OPTIONAL_AUTHORIZATION_POLICY_VERSIONS[scope],source:"onboarding_authorize_all",decidedAt:AT};
     for(const subject of ["financial_data","marketing"] as const)state.legal![subject]={active:true,status:"accepted",policyVersion:legalEvidenceDefinition(subject,"accepted")!.version,decidedAt:AT};
@@ -67,7 +84,7 @@ function fixture() {
     social=Object.fromEntries(Object.keys(social).map(key=>[key,true]));
   }};
 }
-async function withFixture(run:(f:ReturnType<typeof fixture>)=>Promise<void>) {const f=fixture();const previous=globalThis.fetch;globalThis.fetch=f.transport;try{await run(f);}finally{globalThis.fetch=previous;}}
+async function withFixture(run:(f:ReturnType<typeof fixture>)=>Promise<void>, allowBundle = false) {const f=fixture(allowBundle);const previous=globalThis.fetch;globalThis.fetch=f.transport;try{await run(f);}finally{globalThis.fetch=previous;}}
 
 test("granular onboarding starts OFF without issuing writes",()=>withFixture(async f=>{
   assert.ok(Object.values(EMPTY_PRIVACY_CHOICES).every(value=>value===false));
@@ -140,3 +157,36 @@ test("camera retry IDs do not restore stale acceptance after partial saves and s
   assert.notEqual(attempts[0].body.idempotencyKey,attempts[2].body.idempotencyKey);
   assert.equal((await readOnboardingPrivacy("qa-session")).choices.camera,true);
 }));
+
+for (const action of ["authorize_all", "decline_all"] as const) test(`new explicit ${action} includes both media decisions and canonical hydration`,()=>withFixture(async f=>{
+  const keys=new Map<string,string>();
+  await resolveOnboardingOptionalBundle("qa-session",action,crypto.randomUUID(),keys);
+  const choices=(await readOnboardingPrivacy("qa-session")).choices;
+  assert.ok(Object.values(choices).every(value=>value === (action === "authorize_all")));
+  const writes=f.requests.filter(r=>r.path.includes("?media=true")&&r.method==="PATCH");
+  assert.deepEqual(writes.map(r=>[r.body.preference,r.body.enabled]),[["camera",action==="authorize_all"],["photos",action==="authorize_all"]]);
+}, true));
+
+test("a media write failure does not complete authorize-all; retries keep the same IDs",()=>withFixture(async f=>{
+  const keys=new Map<string,string>(),id=crypto.randomUUID();f.failPhoto(true);
+  await assert.rejects(resolveOnboardingOptionalBundle("qa-session","authorize_all",id,keys));
+  f.failPhoto(false);await resolveOnboardingOptionalBundle("qa-session","authorize_all",id,keys);
+  assert.equal((await readOnboardingPrivacy("qa-session")).choices.photos,true);
+  const writes=f.requests.filter(r=>r.method==="PATCH"&&r.path.includes("?media=true"));
+  assert.equal(writes[0].body.idempotencyKey,writes[2].body.idempotencyKey);
+  assert.equal(writes[1].body.idempotencyKey,writes[3].body.idempotencyKey);
+},true));
+
+test("retrying an old authorize-all does not restore a newer camera revocation",()=>withFixture(async()=>{
+  const keys=new Map<string,string>(),id=crypto.randomUUID();
+  await resolveOnboardingOptionalBundle("qa-session","authorize_all",id,keys);
+  const choices=(await readOnboardingPrivacy("qa-session")).choices;
+  await saveOnboardingPrivacy("qa-session",OWNER,{...choices,camera:false},new Map());
+  await assert.rejects(resolveOnboardingOptionalBundle("qa-session","authorize_all",id,keys));
+  assert.equal((await readOnboardingPrivacy("qa-session")).choices.camera,false);
+},true));
+
+test("an older receipt is never backfilled by replaying the new bundle helper",()=>withFixture(async f=>{
+  f.authorizeAll();await assert.rejects(resolveOnboardingOptionalBundle("qa-session","authorize_all",crypto.randomUUID(),new Map()));
+  assert.deepEqual(f.media,{camera:null,photos:null});
+},true));

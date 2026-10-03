@@ -1,17 +1,18 @@
 "use client";
 import { useCallback,useEffect,useMemo,useRef,useState } from 'react';
 import { courseSelectionLabel,homeCourseSelection,nearestReviewedClubs,reviewedClubsLocationSummary,searchReviewedCourses,singleReviewedCourseLayout,type ReviewedCatalogCourse } from '../../lib/review-course-catalog';
-import { readDevicePermissionPreferences,resolveAuthorizedNearbyLocation,type NearbyLocationResolution } from '../../lib/device-permissions';
-import { readAccountDevicePermissionPreferences } from '../../lib/account-device-permission-preferences';
+import { readDevicePermissionPreferences,refreshDevicePermissionStateWithoutPrompt,requestInitialLocation,resolveAuthorizedNearbyLocation,type NearbyLocationResolution } from '../../lib/device-permissions';
+import { cacheAccountDevicePermissionPreferences,readAccountDevicePermissionPreferences,requestAccountDevicePermissionPreferences } from '../../lib/account-device-permission-preferences';
 import { beginRoundCourseSelection } from '../../lib/round-course-selection';
 import type { Course } from '../../lib/types';
 import { AnchoredSearch,AnchoredSearchOption } from './anchored-search';
 import styles from './catalog-course-picker.module.css';
 type Entry=Omit<ReviewedCatalogCourse,'tees'> & {teeCount:number;completeCards:number;configurationLabel?:string};
 type PickerLocationState=NearbyLocationResolution|{status:'idle'|'loading'};
-export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectClub,onSelectHomeCourse,selectedName='',selectedClubId='',selectedCourseId='',onRequest,showHeading=true,purpose='round',onSelectionReadyChange}:{token?:string|null;permissionOwnerId:string;onSelect?:(course:Course,cards:Course[])=>void;onSelectClub?:(club:{clubId:string;clubName:string})=>void;onSelectHomeCourse?:(selection:{clubId:string;clubName:string;courseId:string;courseName:string})=>void|Promise<void>;selectedName?:string;selectedClubId?:string;selectedCourseId?:string;onRequest?:(searchedName?:string)=>void;showHeading?:boolean;purpose?:'round'|'home-club';onSelectionReadyChange?:(ready:boolean)=>void}) {
+export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectClub,onSelectHomeCourse,selectedName='',selectedClubId='',selectedCourseId='',onRequest,showHeading=true,purpose='round',onSelectionReadyChange,onboardingLocation=false}:{token?:string|null;permissionOwnerId:string;onSelect?:(course:Course,cards:Course[])=>void;onSelectClub?:(club:{clubId:string;clubName:string})=>void;onSelectHomeCourse?:(selection:{clubId:string;clubName:string;courseId:string;courseName:string})=>void|Promise<void>;selectedName?:string;selectedClubId?:string;selectedCourseId?:string;onRequest?:(searchedName?:string)=>void;showHeading?:boolean;purpose?:'round'|'home-club';onSelectionReadyChange?:(ready:boolean)=>void;onboardingLocation?:boolean}) {
   const [entries,setEntries]=useState<Entry[]>([]),[query,setQuery]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(false);
   const [location,setLocation]=useState<PickerLocationState>({status:'idle'});
+  const [homeLocationEnabled,setHomeLocationEnabled]=useState(false);
   const locationController=useRef<AbortController|null>(null);
   const nearby=useMemo(()=>location.status==='located'?nearestReviewedClubs(entries,location.point):[],[entries,location]);
   const [nearbyLimit,setNearbyLimit]=useState(3);
@@ -92,9 +93,32 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
       .catch(()=>{if(!controller.signal.aborted)setLocation({status:'unavailable'});});
   },[permissionOwnerId,token]);
   useEffect(()=>{
-    if(!token||(purpose==='home-club'&&!choosingHomeCourse)||!readAccountDevicePermissionPreferences(localStorage,permissionOwnerId).locationEnabled)return;
-    locate();
-  },[choosingHomeCourse,locate,permissionOwnerId,purpose,token]);
+    if(!token||(purpose==='home-club'&&!choosingHomeCourse))return;
+    if(!onboardingLocation||purpose!=='home-club'){
+      if(readAccountDevicePermissionPreferences(localStorage,permissionOwnerId).locationEnabled)locate();
+      return;
+    }
+    const controller=new AbortController();
+    void Promise.all([requestAccountDevicePermissionPreferences(token,controller.signal),refreshDevicePermissionStateWithoutPrompt(localStorage,permissionOwnerId,navigator,undefined,{shouldCommit:()=>!controller.signal.aborted})]).then(([remote])=>{
+      if(controller.signal.aborted)return;
+      const current=cacheAccountDevicePermissionPreferences(localStorage,permissionOwnerId,remote);
+      const enabled=current.locationPreference==='enabled';setHomeLocationEnabled(enabled);
+      if(!enabled)return;
+      if(current.locationEnabled)locate();
+      else setLocation({status:current.location==='denied'?'denied':'prompt'});
+    }).catch(()=>{if(!controller.signal.aborted)setLocation({status:'unavailable'});});
+    return()=>controller.abort();
+  },[choosingHomeCourse,locate,permissionOwnerId,purpose,token,onboardingLocation]);
+  async function retryHomeLocation(){
+    if(!onboardingLocation||purpose!=='home-club'||!homeLocationEnabled){locate();return;}
+    if(readAccountDevicePermissionPreferences(localStorage,permissionOwnerId).locationPreference!=='enabled')return;
+    locationController.current?.abort();const controller=new AbortController();locationController.current=controller;
+    setLocation({status:'loading'});
+    const current=await requestInitialLocation(localStorage,permissionOwnerId,navigator.geolocation,{signal:controller.signal});
+    if(controller.signal.aborted)return;
+    if(current.location==='granted')locate();
+    else setLocation({status:current.location==='denied'?'denied':current.location==='timeout'?'timeout':'unavailable'});
+  }
   const locationError=({disabled:'Ubicación desactivada en The Backyard. Puedes revisarla en Configuración → Privacidad y permisos o buscar manualmente.',prompt:'La ubicación todavía no está resuelta en este dispositivo. Revísala desde Privacidad y permisos; la búsqueda manual sigue disponible.',denied:'La ubicación está bloqueada en este dispositivo. Puedes revisar el permiso o buscar manualmente.',timeout:'La ubicación agotó el tiempo. Puedes reintentar o buscar manualmente.',unavailable:'No pudimos obtener la ubicación. La búsqueda manual sigue disponible.', 'query-unsupported':'Este navegador no permite consultar el permiso. Revísalo desde Privacidad y permisos o busca manualmente.','geolocation-unavailable':'Este dispositivo no ofrece ubicación. Puedes buscar manualmente.'} as Record<string,string>)[location.status];
   const selectedNearbyClub=nearby.find(entry=>entry.clubId===club);
   const selectedPlace=selectedEntry?[selectedEntry.city,selectedEntry.stateRegion].filter(Boolean).join(', '):selectedNearbyClub?[selectedNearbyClub.city,selectedNearbyClub.stateRegion].filter(Boolean).join(', '):'';
@@ -106,9 +130,9 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
   </section>;
   return <section className={styles.picker} aria-label="Catálogo de campos">
     {showHeading&&<h3>Campo</h3>}
-    {location.status!=='idle'&&<button type="button" className={styles.locate} disabled={locating||!token} onClick={locate}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M12 21s7-6 7-12A7 7 0 0 0 5 9c0 6 7 12 7 12ZM15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>{locating?'Buscando ubicación…':'Campos cercanos'}</button>}
+    {(location.status!=='idle'||(onboardingLocation&&purpose==='home-club'&&homeLocationEnabled))&&<button type="button" className={styles.locate} disabled={locating||!token} onClick={()=>void retryHomeLocation()}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M12 21s7-6 7-12A7 7 0 0 0 5 9c0 6 7 12 7 12ZM15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>{locating?'Buscando ubicación…':onboardingLocation&&purpose==='home-club'&&location.status!=='located'?'Usar ubicación para mostrar campos cercanos':'Campos cercanos'}</button>}
     {locating&&<><p role="status">Buscando tu ubicación autorizada…</p><button type="button" className="textButton" onClick={()=>{locationController.current?.abort();setLocation({status:'idle'});}}>Cancelar búsqueda</button></>}
-    {locationError&&<div role="status"><p>{locationError}</p><button type="button" className="secondary" onClick={locate}>Reintentar</button></div>}
+    {locationError&&<div role="status"><p>{onboardingLocation?'No pudimos usar tu ubicación. Puedes buscar tu campo manualmente.':locationError}</p>{(!onboardingLocation||homeLocationEnabled)&&<button type="button" className="secondary" onClick={()=>void retryHomeLocation()}>{onboardingLocation?'REINTENTAR UBICACIÓN':'Reintentar'}</button>}</div>}
     {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':error?'Ubicación obtenida. Reintenta cargar el catálogo.':`${reviewedClubsLocationSummary(nearby)}${location.point.accuracyMeters===undefined?'':` Precisión informada por el dispositivo: ±${location.point.accuracyMeters} m.`}`}</p>}
     {visibleNearby.map(c=><button type="button" className={`${styles.club} ${club===c.clubId?styles.clubSelected:''}`} aria-pressed={club===c.clubId} disabled={selectingCourseId!==null} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km</span>{club===c.clubId&&<em>✓ {selectingCourseId?'Guardando…':'Seleccionado'}</em>}</button>)}
     {nearby.length>visibleNearby.length&&<button type="button" className="textButton" onClick={()=>setNearbyLimit(limit=>Math.min(limit+9,nearby.length))}>Ver más campos cercanos</button>}

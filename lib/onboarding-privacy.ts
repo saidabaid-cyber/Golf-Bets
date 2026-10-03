@@ -1,9 +1,10 @@
-import { requestOptionalAuthorizationState, saveOptionalAuthorizationScope, type OptionalAuthorizationState } from "./account-optional-authorizations";
+import { isCompleteBundleResolution, requestOptionalAuthorizationState, resolveOptionalAuthorizationBundle, saveOptionalAuthorizationScope, type OptionalAuthorizationAction, type OptionalAuthorizationState } from "./account-optional-authorizations";
 import { acceptRemoteAiProcessingConsent, revokeRemoteAiProcessingConsent, saveRemoteAiConsentDecisions } from "./backyard-ai/consent-client";
 import { requestAccountNotificationPreferences } from "./account-notification-preferences";
 import { legalEvidenceDefinition } from "./legal-evidence";
 import { socialRequest } from "./social-activity-client";
 import { requestAccountDeviceMediaPreferences, type AccountDeviceMediaPreferences } from "./account-device-permission-preferences";
+import type { DevicePermissionPreferences } from "./device-permissions";
 
 export const PRIVACY_GROUPS = [
   { title: "Funciones del dispositivo", choices: [
@@ -46,6 +47,29 @@ const settings = { memory: "PERSONAL_MEMORY", learning: "GLOBAL_LEARNING", locat
 const ai = { ai: "AI_PROVIDER_PROCESSING_CONSENT", images: "AI_IMAGE_PROCESSING_CONSENT", practice: "AI_LAUNCH_MONITOR_PROCESSING_CONSENT" } as const;
 const socialKeys = ["notifyLike", "notifyComment", "notifyAttest", "notifyFriendAchievement", "notifyEquipment", "notifyFriendRequest"] as const;
 type SocialState = { data: Record<string, unknown> };
+
+/** Only a new explicit bundle action includes device media. Stable request IDs
+ * make a retry safe even if a later individual decision revoked a preference.
+ * Historical receipts are read without adding consent to existing accounts. */
+export async function resolveOnboardingOptionalBundle(token: string, action: OptionalAuthorizationAction, idempotencyKey: string, mediaKeys: Map<string, string>, signal?: AbortSignal, transport: typeof fetch = fetch) {
+  const state = await resolveOptionalAuthorizationBundle(token, action, idempotencyKey, signal, transport);
+  if (!isCompleteBundleResolution(state, action) || state.receipt?.idempotencyKey !== idempotencyKey) throw new Error("incomplete_optional_authorization");
+  let media: AccountDeviceMediaPreferences = { camera: null, photos: null };
+  for (const preference of ["camera", "photos"] as const) {
+    const key = `${action}:${preference}`;
+    if (!mediaKeys.has(key)) mediaKeys.set(key, crypto.randomUUID());
+    media = await requestAccountDeviceMediaPreferences(token, { preference, enabled: action === "authorize_all", idempotencyKey: mediaKeys.get(key)! }, signal, transport);
+  }
+  if (Object.values(media).some(record => record?.value !== (action === "authorize_all" ? "enabled" : "disabled"))) throw new Error("incomplete_device_media_authorization");
+  return state;
+}
+
+export function pendingOnboardingDevicePermissions(choices: { location: boolean; notifications: boolean }, device: DevicePermissionPreferences, availability: { location: boolean; notifications: boolean }) {
+  return {
+    location: choices.location && device.locationPreference === "enabled" && availability.location && device.location !== "granted" && device.location !== "denied",
+    notifications: choices.notifications && device.notificationPreference === "enabled" && availability.notifications && device.notifications !== "granted" && device.notifications !== "denied",
+  };
+}
 
 export function choicesFromCanonical(state: OptionalAuthorizationState, social: SocialState, media: AccountDeviceMediaPreferences): PrivacyChoices {
   return { location: state.scopes.LOCATION_INTERNAL.active, notifications: state.scopes.NOTIFICATION_INTERNAL.active,

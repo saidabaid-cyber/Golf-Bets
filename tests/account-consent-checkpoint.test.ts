@@ -34,7 +34,8 @@ test("required legal and the atomic optional bundle are explicit and separate", 
   assert.match(consent, /LEGAL_EVIDENCE_DEFINITIONS\.marketing\.statements\.accepted/);
   assert.doesNotMatch(consent, /FUNCIONES DE APUESTAS|ACTIVAR APUESTAS/);
   assert.doesNotMatch(consent, /type="checkbox"/);
-  assert.match(consent, /resolveOptionalAuthorizationBundle/);
+  assert.match(consent, /resolveOnboardingOptionalBundle/);
+  assert.match(consent, /Uso de Cámara[\s\S]*Fotos \/ Fototeca/);
   assert.match(consent, /isCompleteBundleResolution/);
   assert.match(consent, /Autorización inicial registrada; conservamos tus cambios posteriores/);
   assert.match(consent, /await onAcceptRequired\(\)/);
@@ -47,11 +48,13 @@ test("optional bundle is idempotent, verified before success and fails closed", 
   assert.match(consent, /declineRequestKey/);
   assert.match(consent, /crypto\.randomUUID\(\)/);
   assert.match(consent, /const action = accepted \? "authorize_all" as const : "decline_all" as const/);
-  assert.match(consent, /if \(!isCompleteBundleResolution\(saved, action\)\) throw/);
+  const privacy = source("lib/onboarding-privacy.ts");
+  assert.match(privacy, /if \(!isCompleteBundleResolution\(state, action\) \|\| state.receipt\?\.idempotencyKey !== idempotencyKey\) throw/);
+  assert.match(privacy, /requestAccountDeviceMediaPreferences/);
   assert.match(consent, /No pudimos confirmar si el conjunto se guardó/);
   assert.match(consent, /usaremos la misma solicitud y no duplicaremos decisiones/);
   assert.match(consent, /const latest = await requestOptionalAuthorizationState/);
-  assert.match(consent, /if \(!latest\.eligible\)/);
+  assert.match(consent, /if \(!latest\.eligible && latest.receipt\?\.idempotencyKey !== key\)/);
   assert.match(consent, /Otra decisión explícita ya fue registrada/);
   assert.match(consent, /required !== "accepted" \|\| !canContinue/);
   assert.doesNotMatch(consent, /saveRemoteAiConsentDecisions|AI_PROCESSING_CONSENT_SCOPES/);

@@ -69,8 +69,9 @@ test("onboarding conecta el prompt nativo sólo al tap explícito y evita texto 
   assert.match(source, /value\.location === "granted" && value\.locationEnabled/);
   assert.match(source, /persistPreference\("location", "enabled"\)/);
   assert.match(source, /"Usar ubicación"/);
-  assert.equal((source.match(/finishInitialDevicePermissions\(localStorage, userId\)/g) || []).length, 2);
-  assert.equal((source.match(/onContinue\(\)/g) || []).length, 2);
+  const legacyView = source.slice(source.indexOf('  return <div className="devicePermissionChoices">'));
+  assert.equal((legacyView.match(/finishInitialDevicePermissions\(localStorage, userId\)/g) || []).length, 1);
+  assert.match(source, /if \(!onboardingChoices \|\| !ready \|\| busy \|\| needsLocation \|\| needsNotifications \|\| continued\.current\) return/);
   assert.match(source, /Skipping the OS prompt is not a revocation/);
   const skip = source.slice(source.indexOf("async function skipNotifications"), source.indexOf("return <div", source.indexOf("async function skipNotifications")));
   assert.doesNotMatch(skip, /disableNotificationsForApp/);

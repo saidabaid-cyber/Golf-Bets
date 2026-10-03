@@ -7,7 +7,7 @@ const source = (file: string) => readFileSync(file, "utf8");
 
 test("initial consent separates required documents from the explicit optional bundle", () => {
   const consent = source("app/components/account-consent-checkpoint.tsx");
-  assert.match(consent, /resolveOptionalAuthorizationBundle/);
+  assert.match(consent, /resolveOnboardingOptionalBundle/);
   assert.match(consent, /AUTORIZAR TODO Y CONTINUAR/);
   assert.match(consent, /CONSENTIMIENTOS REQUERIDOS/);
   assert.match(consent, /marketing y cada autorización de IA conservan evidencia separada/);

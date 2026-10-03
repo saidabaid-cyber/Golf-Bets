@@ -175,7 +175,7 @@ export function OnboardingWelcomeStep({
       <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => onSelectEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura campo habitual, índice, bolsa, objetivos y permisos opcionales.</p></div></button>
     </div>
     {entryMode && <div ref={consentSectionRef} data-onboarding-consents-revealed="true">
-      <InitialOnboardingConsents requiredOnly key={profileUserId} userId={profileUserId} accessToken={accessToken} legalRequired={legalConsentRequired} canContinue={Boolean(entryMode)} onAcceptRequired={onAcceptRequiredConsents} onContinue={onContinue} />
+      <InitialOnboardingConsents key={profileUserId} userId={profileUserId} accessToken={accessToken} legalRequired={legalConsentRequired} canContinue={Boolean(entryMode)} onAcceptRequired={onAcceptRequiredConsents} onContinue={onContinue} />
     </div>}
   </>;
 }
@@ -286,7 +286,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   };
 
   if (progress.step === "course") return <Shell progress={progress} {...navigationProps} eyebrow="TU CAMPO" title="Elige tu campo habitual" description="Busca tu club habitual o usa la ubicación que ya autorizaste para mostrar los campos más cercanos." actions={<button className="primary big" disabled={!profile.homeClubId || !profile.homeCourseId || !homeClubSelectionReady} onClick={() => advance("ghin")}>Continuar: Handicap / Índice</button>}>
-    <CatalogCoursePicker key={`onboarding-home-${profile.userId}`} purpose="home-club" token={accessToken} permissionOwnerId={profile.userId} selectedName={[profile.homeClub, profile.homeCourse].filter(Boolean).join(" · ")} selectedClubId={profile.homeClubId} selectedCourseId={profile.homeCourseId} onSelectionReadyChange={setHomeClubSelectionReady} onRequest={(searchedName) => requestFeedback("COURSE", searchedName ? { name: searchedName } : undefined)} onSelectHomeCourse={async (selection) => {
+    <CatalogCoursePicker onboardingLocation key={`onboarding-home-${profile.userId}`} purpose="home-club" token={accessToken} permissionOwnerId={profile.userId} selectedName={[profile.homeClub, profile.homeCourse].filter(Boolean).join(" · ")} selectedClubId={profile.homeClubId} selectedCourseId={profile.homeCourseId} onSelectionReadyChange={setHomeClubSelectionReady} onRequest={(searchedName) => requestFeedback("COURSE", searchedName ? { name: searchedName } : undefined)} onSelectHomeCourse={async (selection) => {
       setMessage("");
       await onUpdateProfile({ displayName: profile.displayName, avatarUrl: profile.avatarUrl, defaultHandicap: profile.defaultHandicap, homeClub: selection.clubName, homeClubId: selection.clubId, homeCourse: selection.courseName, homeCourseId: selection.courseId });
     }} />
@@ -367,7 +367,7 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
   </Shell>;
 
   if (progress.step === "permissions") return <Shell progress={progress} {...navigationProps} eyebrow="TÚ DECIDES" title="Permisos y privacidad" description="Elige qué autorizas. Cada propósito se guarda por separado; puedes revisar o revocar tus decisiones después." actions={null}>
-    <OnboardingPrivacyChoices key={`initial-permissions-${profile.userId}`} userId={profile.userId} accessToken={accessToken} onContinue={() => advance("course")} />
+    <OnboardingPrivacyChoices resolveDevicePermissions key={`initial-permissions-${profile.userId}`} userId={profile.userId} accessToken={accessToken} onContinue={() => advance("course")} />
   </Shell>;
 
   return null;

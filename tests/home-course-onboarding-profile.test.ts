@@ -215,7 +215,7 @@ async function selectCourseThroughPicker(
     if (id.endsWith("/review-course-catalog")) return reviewedCatalog;
     if (id.endsWith("/device-permissions")) return devicePermissions;
     if (id.endsWith("/account-device-permission-preferences")) {
-      return { readAccountDevicePermissionPreferences: () => ({ locationEnabled: false }) };
+      return { readAccountDevicePermissionPreferences: () => ({ locationEnabled: false }), requestAccountDevicePermissionPreferences: async () => ({ location: null, notifications: null }), cacheAccountDevicePermissionPreferences: () => ({ locationEnabled: false, locationPreference: "disabled" }) };
     }
     if (id.endsWith("/round-course-selection")) return roundCourseSelection;
     if (id === "./anchored-search") return { AnchoredSearch: "anchored-search", AnchoredSearchOption: "anchored-search-option" };
