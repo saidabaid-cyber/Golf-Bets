@@ -1090,11 +1090,6 @@ function GolfBetsApp() {
       if (!ownsLocalWorkspace(localStorage, identity.userId)) return false;
       try {
         const draft = withDerivedRoundLifecycle({ version: 11, course, courseSelected, courseIdentity: courseSelected ? undefined : pendingCourseIdentity ?? undefined, playerTeeAssignments, startHole, roundHoles, handicapBasis: roundHandicapBasis, presentation: normalizeRoundPresentation(roundPresentation), players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scorecardPhotoIds, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending, templateOrigin: roundTemplateOrigin ?? undefined });
-        // Temporary QA-only trace: hole numbers, never score values or identity.
-        if (window.location?.hostname.endsWith(".vercel.app") && identity.displayName?.startsWith("QA ")) {
-          const stored = JSON.parse(localStorage.getItem(STORAGE_KEYS.draft) || "null");
-          console.info("[round-persistence]", JSON.stringify({ source: "autosave", revision, index: currentIndex, stored: Object.keys(stored?.scores || {}), scores: Object.keys(scores), edits: Object.keys(scoreEdits) }));
-        }
         const activeDraft = roundClosed ? null : draft;
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
@@ -1122,7 +1117,7 @@ function GolfBetsApp() {
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, identity.userId, identity.mode, identity.displayName, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, pendingCourseIdentity, playerTeeAssignments, startHole, roundHoles, roundHandicapBasis, roundPresentation, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, scorecardPhotoIds, putts, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, roundTemplateOrigin, currentIndex]);
+  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, pendingCourseIdentity, playerTeeAssignments, startHole, roundHoles, roundHandicapBasis, roundPresentation, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, scorecardPhotoIds, putts, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, roundTemplateOrigin, currentIndex]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1157,13 +1152,16 @@ function GolfBetsApp() {
     // again at the UI boundary so a canonical response captured before the
     // save can never replace a newly confirmed Historical round.
     const reconciled = mergeLocalAndCloud(local, data);
+    // An in-flight upload can return a bundle already merged with newer local
+    // edits. Its active draft is not an acknowledgment of those edits: keep
+    // the actual server base so the next cycle cannot restore older scores.
+    if (data.baseDraftFingerprint !== undefined) {
+      reconciled.baseDraft = data.baseDraft;
+      reconciled.baseDraftFingerprint = data.baseDraftFingerprint;
+      reconciled.baseDraftUpdatedAt = data.baseDraftUpdatedAt;
+    }
     const changed = (left: unknown, right: unknown) => JSON.stringify(stableValue(left)) !== JSON.stringify(stableValue(right));
     const draftPlan = cloudDraftApplyPlan(local.activeDraft, reconciled.activeDraft);
-    // Temporary QA-only trace: no names, scores, images, tokens or credentials.
-    if (typeof window !== "undefined" && window.location?.hostname.endsWith(".vercel.app")) {
-      const draft = reconciled.activeDraft as { players?: Player[]; scores?: ScoreRows; scoreEdits?: ScoreRows } | null;
-      if (draft?.players?.some(player => player.name.startsWith("QA "))) console.info("[round-persistence]", JSON.stringify({ source: "cloud-apply", revision: localPersistRevision.current, changed: draftPlan.changed, scores: Object.keys(draft.scores || {}), edits: Object.keys(draft.scoreEdits || {}) }));
-    }
     if (draftPlan.changed) {
       // The reconciled checkpoint becomes durable below before React installs
       // its next persistence effect. Fence the previous render's timer and sync
@@ -2114,7 +2112,6 @@ function GolfBetsApp() {
       if (localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return false;
       const previousDraft = readStoredJson<unknown>(window.localStorage, STORAGE_KEYS.draft, null);
       const draft = roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false, startedAt, scorecardPhotoIds: savedPhotoIds });
-      if (window.location?.hostname.endsWith(".vercel.app") && identity.displayName?.startsWith("QA ")) console.info("[round-persistence]", JSON.stringify({ source: "checkpoint", revision: localPersistRevision.current, index: savedIndex, scores: Object.keys(savedScores), edits: Object.keys(savedEdits) }));
       // localStorage is the synchronous durability boundary used by Safari/PWA.
       // Metadata and the offline outbox are created only after exact readback.
       persistRoundDraftCheckpoint(window.localStorage, draft);

@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { persistRoundDraftCheckpoint } from "../lib/round-review";
 import { STORAGE_KEYS } from "../lib/round-utils";
+import { CLOUD_LOCAL_META_KEY, cloudDraftApplyPlan, cloudSyncPayloadFingerprint, collectLocalCloudData, mergeLocalAndCloud, persistCloudMetadata, restoreLocalRoundUi, type CloudDataBundle } from "../lib/cloud-sync";
 
 test("a confirmed hole fences the previous render's autosave before cloud readback", () => {
   const page = readFileSync("app/page.tsx", "utf8");
@@ -99,6 +100,45 @@ test("cloud reconciliation fences a queued React autosave before the next render
   assert.equal(flush.current(), true);
   assert.equal(staleAutosave(), false);
   assert.deepEqual(JSON.parse(storage.getItem(STORAGE_KEYS.draft)!), confirmedDraft);
+});
+
+test("applying a merged in-flight checkpoint preserves the actual server base for the next cycle", () => {
+  const page = readFileSync("app/page.tsx", "utf8");
+  const start = page.indexOf("  const applyCloudBundle = useCallback(");
+  const end = page.indexOf("\n  useEffect(() =>", start);
+  assert.ok(start > 0 && end > start);
+  const source = ts.transpileModule(`${page.slice(start, end)}\nexports.apply = applyCloudBundle;`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const before = { roundId: "qa-in-flight", scores: { 1: { qa: 4 } }, scoreEdits: { 2: { qa: 4 }, 3: { qa: 4 } } };
+  const acknowledged = { roundId: "qa-in-flight", scores: { 1: { qa: 4 }, 2: { qa: 4 } }, scoreEdits: { 3: { qa: 4 } } };
+  const newerLocal = { roundId: "qa-in-flight", scores: { 1: { qa: 4 }, 2: { qa: 4 }, 3: { qa: 4 } }, scoreEdits: {} };
+  const bundle = (draft: unknown, at: string): CloudDataBundle => ({ version: 1, deviceId: "qa-device", courses: [], history: [], rivals: [], frequentPlayers: [], frequentGroups: [], tombstones: [],
+    preferences: { highContrast: true, language: "es-MX", notificationsEnabled: false, defaultHandicap: null }, activeDraft: draft, activeDraftUpdatedAt: at });
+  const local = { ...bundle(newerLocal, "2026-10-03T03:09:25Z"), baseDraft: before, baseDraftFingerprint: JSON.stringify(before), baseDraftUpdatedAt: "2026-10-03T03:09:20Z" };
+  const server = bundle(acknowledged, "2026-10-03T03:09:24Z");
+  // Hole 3 was confirmed while the server was processing the upload of hole 2.
+  const inFlightMerge = mergeLocalAndCloud(local, server);
+  assert.deepEqual(inFlightMerge.activeDraft, newerLocal);
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+  const noOp = () => undefined;
+  const exports: Record<string, unknown> = {};
+  runInNewContext(source, { exports, STORAGE_KEYS, localStorage: storage,
+    localPersistRevision: { current: 0 }, flushLocalState: { current: noOp }, useCallback: (callback: unknown) => callback,
+    mergeLocalAndCloud, stableValue: (value: unknown) => value, cloudDraftApplyPlan, preserveDraftConflict: noOp, setFeedback: noOp, applyDraft: noOp,
+    mergeDefaultCourses: (courses: unknown) => courses, normalizeHistorySnapshot: (item: unknown) => item,
+    setCourses: noOp, setHistory: noOp, setSavedPersonalRivals: noOp, setFrequentPlayers: noOp, setFrequentGroups: noOp,
+    setHighContrast: noOp, applyCloudPreferences: noOp, serializeFrequentGroups: JSON.stringify, restoreLocalRoundUi,
+    currentIndexRef: { current: 2 }, CLOUD_TOMBSTONES_KEY: "qa-tombstones", persistCloudMetadata,
+    hadLocalPreferences: { current: true }, offlineDeviceId: { current: "qa-device" }, collectLocalCloudData, cloudSyncPayloadFingerprint,
+  });
+  (exports.apply as (...args: unknown[]) => unknown)(inFlightMerge, local);
+  const metadata = JSON.parse(storage.getItem(CLOUD_LOCAL_META_KEY)!);
+  assert.deepEqual(JSON.parse(metadata.cloudDraftFingerprint), acknowledged, "a local merge is not a server acknowledgment");
+  const nextLocal = { ...local, activeDraft: JSON.parse(storage.getItem(STORAGE_KEYS.draft)!), baseDraft: JSON.parse(metadata.cloudDraftFingerprint), baseDraftFingerprint: metadata.cloudDraftFingerprint };
+  const nextCycle = mergeLocalAndCloud(nextLocal, server);
+  assert.deepEqual(nextCycle.activeDraft, newerLocal, "the next GET cannot resurrect the pending edit or drop confirmed hole 3");
 });
 
 test("the autosave installer captures its render revision before a confirmed click", () => {
