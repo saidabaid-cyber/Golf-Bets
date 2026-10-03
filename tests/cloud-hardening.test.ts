@@ -158,6 +158,36 @@ test("edición durante upload se rebasa sin sobrescribirse y programa retry", as
   assert.equal((local.activeDraft as ReturnType<typeof draft>).scores[1].p, 80);
   assert.equal(states.at(-1), "synced");
 });
+
+for (const importedRemoteHole of [false, true]) test(`confirming an unchanged score during upload removes its pending edit and preserves remote holes ${importedRemoteHole}`, async () => {
+  const settled = { ...draft(4), scoreEdits: {} };
+  const editing = { ...settled, scoreEdits: { 1: { p: 4 } } };
+  let cloud = bundle({ deviceId: "iphone", activeDraft: settled, activeDraftUpdatedAt: earlier });
+  let local = bundle({ deviceId: "iphone", activeDraft: editing, activeDraftUpdatedAt: later, baseDraft: settled, baseDraftFingerprint: JSON.stringify(settled) });
+  let uploaded = false;
+  let retries = 0;
+  const cycle = () => runCloudSyncCycle({
+    read: () => local, download: async () => cloud, current: () => true,
+    upload: async data => {
+      cloud = structuredClone(data);
+      if (!uploaded) {
+        uploaded = true;
+        local = { ...local, activeDraft: settled, activeDraftUpdatedAt: "2026-09-03T11:00:01.000Z" };
+        if (importedRemoteHole) cloud.activeDraft = { ...editing, scores: { 1: { p: 4 }, 2: { p: 5 } } };
+      }
+    },
+    media: async () => {}, apply: data => { local = data; },
+    status: () => {}, retry: () => { retries++; },
+  });
+  assert.equal(await cycle(), false);
+  const applied = local.activeDraft as { scores: Record<number, { p: number }>; scoreEdits: unknown };
+  assert.deepEqual(applied.scoreEdits, {}, "the in-flight response cannot resurrect an edit that the user confirmed");
+  assert.equal(applied.scores[1].p, 4);
+  if (importedRemoteHole) assert.equal(applied.scores[2].p, 5, "compatible imported scores must survive the rebase");
+  assert.equal(retries, 1);
+  assert.equal(await cycle(), true);
+  assert.deepEqual((cloud.activeDraft as typeof settled).scoreEdits, {});
+});
 test("logout/cambio de usuario durante request bloquea apply y acknowledgment", async () => {
   let current = true, applied = false; const states: SyncStatus[] = [];
   await assert.rejects(runCloudSyncCycle({ read: () => bundle(), download: async () => { current = false; return bundle(); }, upload: async () => {}, media: async () => {}, apply: () => { applied = true; }, current: () => current, status: value => states.push(value) }));

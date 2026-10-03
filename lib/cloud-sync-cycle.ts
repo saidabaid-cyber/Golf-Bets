@@ -1,4 +1,4 @@
-import { cloudDataFingerprint, mergeLocalAndCloud, type CloudDataBundle } from "./cloud-sync";
+import { cloudDataFingerprint, mergeLocalAndCloud, stableValue, stripLocalRoundUi, type CloudDataBundle } from "./cloud-sync";
 
 export type SyncStatus = "local" | "saving" | "offline" | "syncing" | "synced" | "pending" | "error";
 type CycleOptions = {
@@ -42,11 +42,21 @@ export async function runCloudSyncCycle(options: CycleOptions) {
       // Rebase the newer local edit on the write that the server actually
       // confirmed. This records the canonical base without letting an older
       // response overwrite text that changed while the request was in flight.
-      if (options.conflicts?.(latest, canonical)) {
+      // The common base for edits made during this request is the local
+      // snapshot that entered it, not its older server acknowledgment.
+      // Confirming an unchanged score can return a field to that older base;
+      // comparing against it would import the in-flight pending edit again.
+      const rebasingLocal = {
+        ...latest,
+        baseDraft: before.activeDraft,
+        baseDraftFingerprint: JSON.stringify(stableValue(stripLocalRoundUi(before.activeDraft))),
+        baseDraftUpdatedAt: before.activeDraftUpdatedAt,
+      };
+      if (options.conflicts?.(rebasingLocal, canonical)) {
         options.status("pending");
         return false;
       }
-      options.apply(merge(latest, canonical));
+      options.apply(merge(rebasingLocal, canonical));
       options.status("pending");
       options.retry?.();
       return false;
