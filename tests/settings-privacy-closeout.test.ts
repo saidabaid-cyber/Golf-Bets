@@ -41,11 +41,34 @@ test("all five primary headers open the existing profile and notification action
   const header = load("app/components/primary-header.tsx", { "./profile-navigation-button": profile, "../../lib/app-navigation": navigation, "./admin-mode-menu": { AdminModeMenu: () => null } });
   for (const tab of Object.values(navigation.BOTTOM_NAV_TARGETS)) {
     const visited: string[] = [];
-    const buttons = nodes(header.PrimaryHeader({ tab, displayName: "Golfista", avatarUrl: "", onProfile: () => visited.push("profile"), onNotifications: () => visited.push("notifications") })).filter((node) => node.type === "button");
-    for (const label of ["Ir a Mi Perfil", "Notificaciones"]) (buttons.find((node) => node.props["aria-label"] === label)!.props.onClick as () => void)();
-    assert.deepEqual(visited, ["profile", "notifications"]);
+    const tree = header.PrimaryHeader({ tab, displayName: "Golfista", avatarUrl: "", onProfile: () => visited.push("profile"), onNotifications: () => visited.push("notifications"), onHome: () => visited.push("home") });
+    const rendered = nodes(tree);
+    assert.ok(rendered.every((node) => node.type !== "h1" && node.props.className !== "primaryScreenHeading"));
+    const wordmark = rendered.find((node) => node.props.className === "editorialWordmark")!;
+    assert.match(text(wordmark), /The Backyard/);
+    assert.match(text(wordmark), /GOLF MORE TOGETHER/);
+    assert.equal(rendered.filter((node) => node.type === "svg").length, 2);
+    assert.equal(rendered.filter((node) => node.type === "details").length, 0);
+    const buttons = rendered.filter((node) => node.type === "button");
+    for (const label of ["Ir a Mi Perfil", "Notificaciones", "Ir a Inicio"]) (buttons.find((node) => node.props["aria-label"] === label)!.props.onClick as () => void)();
+    assert.deepEqual(visited, ["profile", "notifications", "home"]);
   }
   assert.match(readFileSync("app/components/profile-account-panel.tsx", "utf8"), /<b>Configuración<\/b><small>Preferencias, cuenta, notificaciones, privacidad y permisos/);
+});
+
+test("admin access remains in the top header actions with its existing links and logout", () => {
+  let loggedOut = 0;
+  const admin = load("app/components/admin-mode-menu.tsx", { "next/link": { __esModule: true, default: "a" }, "./account-provider": { useBackyardAccount: () => ({ adminAccess: { hasAccess: true }, logout: () => { loggedOut++; } }) } });
+  const header = load("app/components/primary-header.tsx", { "./profile-navigation-button": { ProfileNavigationButton: () => null }, "./admin-mode-menu": admin });
+  const tree = header.PrimaryHeader({ tab: "home", displayName: "Admin", avatarUrl: "", onProfile: () => {}, onNotifications: () => {}, onHome: () => {} });
+  const actions = nodes(tree).find((node) => node.props.className === "primaryHeaderActions")!;
+  const menu = nodes(actions).find((node) => node.type === "details")!;
+  assert.match(text(menu), /Administrador/);
+  assert.deepEqual(nodes(menu).filter((node) => node.type === "a").map((node) => [node.props.href, text(node)]), [["/", "Modo jugador"], ["/manage", "Modo administrador"]]);
+  const logout = nodes(menu).find((node) => node.type === "button")!;
+  (logout.props.onClick as () => void)();
+  assert.equal(loggedOut, 1);
+  assert.ok(nodes(tree).every((node) => node.props.className !== "primaryScreenHeading"));
 });
 test("actual bottom navigation has five tabs and Play is always the central destination", () => {
   const nav = load("app/components/app-bottom-nav.tsx", { "next/image": { __esModule: true, default: "img" }, "../../lib/app-navigation": navigation });
@@ -57,6 +80,11 @@ test("actual bottom navigation has five tabs and Play is always the central dest
   assert.deepEqual(active.map((node) => text(node).trim()), ["Inicio", "Carrera", "Play", "My Coach", "Reglas"]);
   assert.equal(active[2].props["aria-current"], "page");
   (active[2].props.onClick as () => void)(); assert.deepEqual(visited, ["play"]); assert.equal(resumed, 0);
+  for (const [index, tab] of Object.values(navigation.BOTTOM_NAV_TARGETS).entries()) {
+    const buttons = nodes(nav.AppBottomNav({ activeTab: tab, onNavigate: () => {} })).filter((node) => node.type === "button");
+    assert.equal(buttons.filter((node) => node.props["aria-current"] === "page").length, 1);
+    assert.equal(buttons[index].props["aria-current"], "page");
+  }
 });
 
 function privacyHarness(initial: audience.PersistedProfileAudience = "private", failSave = false) {

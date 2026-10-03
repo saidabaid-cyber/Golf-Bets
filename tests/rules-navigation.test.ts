@@ -83,7 +83,7 @@ test("un resultado de búsqueda abre su regla o fuente correcta", () => {
   assert.match(panel, /setSelectedDocument\(document\)/);
 });
 
-test("el micrófono detecta SpeechRecognition y WebKit", () => {
+test("el dictado de preguntas detecta SpeechRecognition y WebKit sin micrófono en la búsqueda", () => {
   class Recognition implements SpeechRecognitionLike {
     lang = ""; continuous = false; interimResults = false;
     onstart = null; onresult = null; onerror = null; onend = null;
@@ -91,7 +91,12 @@ test("el micrófono detecta SpeechRecognition y WebKit", () => {
   }
   assert.equal(speechRecognitionConstructor({ SpeechRecognition: Recognition }), Recognition);
   assert.equal(speechRecognitionConstructor({ webkitSpeechRecognition: Recognition }), Recognition);
-  assert.match(panel, /Dictar búsqueda/);
+  const searchStart = panel.indexOf('<div className="rulesSearchField">');
+  const searchField = panel.slice(searchStart, panel.indexOf("</section>", searchStart));
+  assert.match(searchField, /id="rules-search"/);
+  assert.doesNotMatch(searchField, /rulesMicButton|toggleDictation\("search"\)/);
+  assert.doesNotMatch(panel, /onClick=\{\(\) => toggleDictation\("search"\)\}/);
+  assert.match(panel, /onClick=\{\(\) => toggleDictation\("question"\)\}/);
 });
 
 test("el micrófono sin soporte muestra fallback y conserva búsqueda escrita", () => {

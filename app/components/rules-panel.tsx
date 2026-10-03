@@ -301,7 +301,6 @@ export function RulesPanel({
       <div className="rulesSearchField">
         <span className="rulesSearchIcon" aria-hidden="true">⌕</span>
         <input id="rules-search" type="search" autoComplete="off" value={query} placeholder="Buscar una regla, situación o palabra clave…" onChange={(event) => setQuery(event.target.value)} />
-        <button type="button" className={`rulesMicButton ${listeningTarget === "search" ? "listening" : ""}`} aria-pressed={listeningTarget === "search"} aria-label={listeningTarget === "search" ? "Detener dictado de búsqueda" : "Dictar búsqueda"} onClick={() => toggleDictation("search")}>{listeningTarget === "search" ? <><span aria-hidden="true">🔴</span><b>Detener</b></> : <span aria-hidden="true">🎙</span>}</button>
       </div>
       {dictationSupported === false && <div className="rulesSearchStatus">{DICTATION_FALLBACK}</div>}
       {dictationMessage && dictationSupported !== false && <div className="rulesSearchStatus" role="status">{dictationMessage}</div>}
