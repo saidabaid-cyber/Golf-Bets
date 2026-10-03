@@ -231,6 +231,7 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
       setError("Corrige las mediciones marcadas antes de guardar.");
       return;
     }
+    setError("");
     onConfirm(validated.source, shots as LaunchMonitorShot[]);
     setExtraction(null);
     setEditingShots([]);
@@ -259,7 +260,7 @@ export function LaunchMonitorCamera({ userId, accessToken, requiresRemoteConsent
     {error && <p className={styles.formMessage} role="alert">{error}</p>}
     {showConsent && <AiProcessingConsentPrompt userId={userId} accessToken={accessToken} requiresRemoteConsent={requiresRemoteConsent} scope={AI_LAUNCH_MONITOR_PROCESSING_CONSENT} onAccepted={(_consent, persistence) => { if (aiProcessingConsentAllowsTransport(persistence)) void analyzeWithConsent(); }} onCancel={() => setShowConsent(false)} />}
     {extraction && <div className={styles.launchReview}>
-      <div className={styles.statusRow}><div><h3>Corrige sólo lo necesario</h3><p>{extraction.shots.length} golpe(s) detectados · {ambiguousCount} dato(s) requieren atención. El resto ya está aplicado.</p></div></div>
+      <div className={styles.statusRow}><div><h3>Corrige sólo lo necesario</h3><p>{extraction.shots.length} {extraction.shots.length === 1 ? "golpe detectado" : "golpes detectados"} · {ambiguousCount} {ambiguousCount === 1 ? "dato requiere atención" : "datos requieren atención"}. Revisa los datos marcados antes de agregarlos.</p></div></div>
       {extraction.shots.map((shot, index) => { const editing = editingShots.includes(shot.id); const knownMetrics = LAUNCH_MONITOR_METRICS.filter((metric) => shot.metrics[metric].value !== null && !metricNeedsReview(shot, metric)); const reviewMetrics = LAUNCH_MONITOR_METRICS.filter((metric) => editing || metricNeedsReview(shot, metric)); return <article className={styles.reviewShot} key={shot.id}>
         <div className={styles.reviewShotHeader}><div><b>Golpe {index + 1}</b><small>{shot.club ? CLUB_LABELS[shot.club] : "Palo pendiente"}</small></div><button type="button" className="textButton" onClick={() => setEditingShots((current) => current.includes(shot.id) ? current.filter((id) => id !== shot.id) : [...current, shot.id])}>{editing ? "Cerrar edición" : "Editar datos detectados"}</button></div>
         {knownMetrics.length > 0 && !editing && <div className={styles.detectedMetrics}>{knownMetrics.map((metric) => <span key={metric}><small>{METRIC_LABELS[metric].label}</small><b>{shot.metrics[metric].value} {METRIC_LABELS[metric].unit}</b></span>)}</div>}

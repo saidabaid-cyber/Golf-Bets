@@ -10,6 +10,7 @@ import * as photoRequest from "../lib/backyard-ai/server/scorecard-request";
 import * as launchSchema from "../lib/backyard-ai/schemas/launch-monitor";
 import * as handicapSource from "../lib/handicap-source";
 import * as featureFlags from "../lib/feature-flags";
+import * as golfEquipment from "../lib/golf-equipment";
 
 type Node = { type: unknown; props: Record<string, unknown> };
 type Handler = (...args: unknown[]) => unknown;
@@ -21,7 +22,7 @@ const flush = async () => { await new Promise<void>((resolve) => setImmediate(re
 
 /** Executes the actual TSX handlers and state transitions. Only React's host
  * renderer and remote/browser boundaries are replaced; no copied feature logic. */
-function featureHarness(file: string, options: { active?: boolean; remoteError?: boolean; guest?: boolean } = {}) {
+function featureHarness(file: string, options: { active?: boolean; remoteError?: boolean; guest?: boolean; extraction?: launchSchema.LaunchMonitorVisionExtraction } = {}) {
   let cursor = 0;
   const slots: unknown[] = [];
   const effects: (() => unknown)[] = [];
@@ -101,7 +102,7 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
       acknowledgeRemoteAiProcessingConsentRevocation: () => ({ ok: true }),
     },
     "privacy": { AI_PROVIDER_PROCESSING_CONSENT: PROVIDER, AI_IMAGE_PROCESSING_CONSENT: IMAGE, AI_LAUNCH_MONITOR_PROCESSING_CONSENT: LAUNCH, BACKYARD_AI_PROVIDER_CONSENT_VERSION: "v1", backyardAiProviderConsent: () => ({ accepted: true }) },
-    "client-api": { requestBackyardAi: async () => { providerCalls++; return { canonicalCommand: "Jugamos Said", confidence: 1, clarification: null, extraction: {}, summary: "QA", observations: [], answer: "QA" }; } },
+    "client-api": { requestBackyardAi: async () => { providerCalls++; return { canonicalCommand: "Jugamos Said", confidence: 1, clarification: null, extraction: options.extraction ?? {}, summary: "QA", observations: [], answer: "QA" }; } },
     "learning-events": { readLearningConsent: () => ({ consent: { personalMemoryEnabled: false } }) },
     "account-learning-consent-cache": { readAccountLearningConsent: () => ({ personalMemoryEnabled: false, globalLearningEnabled: false }) },
     "clarification": { parseUnknownPlayerClarification: () => null },
@@ -113,10 +114,11 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
     "speech-dictation": { speechRecognitionConstructor: () => function Recognition() {}, createDictationSession: () => ({ start: () => { microphoneStarts++; }, dispose: () => undefined }) },
     "limits": { MAX_SCORECARD_PHOTOS: 4 },
     "live-questions": { classifyLiveQuestion: () => "score", liveQuestionFacts: () => ({}) },
-    "client": { MAX_LAUNCH_MONITOR_PHOTOS: 4, prepareLaunchMonitorPhotos: async () => [], recordProductEvent: async () => undefined },
+    "client": { MAX_LAUNCH_MONITOR_PHOTOS: 4, prepareLaunchMonitorPhotos: async () => options.extraction ? [{ id: "launch-qa-id" }] : [], recordProductEvent: async () => undefined },
     "domain": { buildGolfTrends: () => [] },
     "insights": { structuredGolfInsightInput: () => ({ sampleRounds: 1 }) },
-    "launch-monitor": { normalizeLaunchMonitorVisionExtraction: () => ({ shots: [] }) },
+    "launch-monitor": options.extraction ? launchSchema : { normalizeLaunchMonitorVisionExtraction: () => ({ shots: [] }) },
+    "golf-equipment": golfEquipment,
     "client-pipeline": {
       runScorecardPhotoAnalysis: async (_photos: unknown, _owner: string, input: { analyze: (transport: unknown[]) => Promise<unknown> }) => ({
         response: await input.analyze([]), persistence: Promise.resolve({ failedPhotoIds: [] }), preparationFailures: [], preparedPhotoIds: [],
@@ -339,6 +341,49 @@ for (const active of [true, false]) {
     }
   });
 }
+
+test("incomplete launch readings stay pending and do not claim to be applied before correction", async () => {
+  const metrics = Object.fromEntries(golfEquipment.LAUNCH_MONITOR_METRICS.map(metric => [metric, { value: null, confidence: 1 }])) as launchSchema.LaunchMonitorVisionShot["metrics"];
+  metrics.ballSpeedMph.value = 100;
+  metrics.carryYards.value = 140;
+  const extraction: launchSchema.LaunchMonitorVisionExtraction = {
+    version: 1, source: "QA controlled capture", shots: [{
+      id: "qa-reading", sourcePhotoId: "launch-qa-id", club: "IRON_7", clubConfidence: 1, metrics,
+    }],
+  };
+  const h = featureHarness("app/components/launch-monitor-camera.tsx", { active: true, extraction });
+  h.props.targetClub = "IRON_7";
+  const applied: golfEquipment.LaunchMonitorShot[][] = [];
+  h.props.onConfirm = (_source: unknown, shots: golfEquipment.LaunchMonitorShot[]) => applied.push(shots);
+  invoke(find(h.render("LaunchMonitorCamera"), node => node.type === "input" && node.props.type === "file"), "onChange", {
+    target: { files: [{ type: "image/png" }] }, currentTarget: { value: "qa.png" },
+  });
+  invoke(find(h.render("LaunchMonitorCamera"), node => node.type === "button" && node.props.children === "Analizar fotos"), "onClick");
+  await flush();
+  let tree = h.render("LaunchMonitorCamera");
+  assert.equal(applied.length, 0, "missing critical readings cannot be silently auto-applied");
+  assert.match(JSON.stringify(tree), /Revisa los datos marcados antes de agregarlos/);
+  assert.doesNotMatch(JSON.stringify(tree), /El resto ya está aplicado/);
+  const spin = find(tree, node => node.type === "input" && node.props.type === "number");
+  assert.equal(spin.props.value, "", "missing spin remains blank rather than an inferred value");
+  invoke(spin, "onChange", { target: { value: "26000" } });
+  tree = h.render("LaunchMonitorCamera");
+  invoke(find(tree, node => node.type === "button" && node.props.children === "Aplicar correcciones y continuar"), "onClick");
+  assert.equal(applied.length, 0, "out-of-range corrections must not be saved");
+  tree = h.render("LaunchMonitorCamera");
+  assert.match(JSON.stringify(tree), /Una medición quedó fuera del rango válido/);
+  invoke(find(tree, node => node.type === "button" && node.props.children === "Editar datos detectados"), "onClick");
+  tree = h.render("LaunchMonitorCamera");
+  const spinLabel = find(tree, node => node.type === "label" && JSON.stringify(node.props.children).includes('"Spin"'));
+  invoke(find(spinLabel, node => node.type === "input"), "onChange", { target: { value: "6000" } });
+  tree = h.render("LaunchMonitorCamera");
+  invoke(find(tree, node => node.type === "button" && node.props.children === "Aplicar correcciones y continuar"), "onClick");
+  assert.equal(applied.length, 1);
+  assert.equal(applied[0][0].spinRpm, 6000);
+  assert.equal(applied[0][0].clubSpeedMph, null);
+  assert.equal(applied[0][0].ballSpeedMph, 100);
+  assert.doesNotMatch(JSON.stringify(h.render("LaunchMonitorCamera")), /Una medición quedó fuera del rango válido/, "successful correction clears the prior validation error");
+});
 
 test("launch-monitor endpoint rejects scorecard consent before touching the provider or ledger", async () => {
   const compiled = ts.transpileModule(readFileSync("app/api/backyard-ai/launch-monitor/route.ts", "utf8"), {
