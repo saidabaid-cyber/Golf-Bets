@@ -2068,6 +2068,11 @@ function GolfBetsApp() {
       if (localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return false;
       const previousDraft = readStoredJson<unknown>(window.localStorage, STORAGE_KEYS.draft, null);
       const draft = persistPendingRoundReview(window.localStorage, roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true, startedAt, scorecardPhotoIds: savedPhotoIds }));
+      // Fence timers/read callbacks from the previous React render. Until the
+      // next persistence effect installs its fresh closure, the verified
+      // checkpoint is already durable and must not be overwritten by that render.
+      localPersistRevision.current += 1;
+      flushLocalState.current = () => true;
       trackLocalCloudCheckpoint(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap }, previousDraft);
       setRoundReviewPending(true);
       setDraftAvailable(true);
@@ -2094,6 +2099,8 @@ function GolfBetsApp() {
       // localStorage is the synchronous durability boundary used by Safari/PWA.
       // Metadata and the offline outbox are created only after exact readback.
       persistRoundDraftCheckpoint(window.localStorage, draft);
+      localPersistRevision.current += 1;
+      flushLocalState.current = () => true;
       trackLocalCloudCheckpoint(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap }, previousDraft);
       setRoundReviewPending(false);
       setShowRoundFinishedNotice(false);
