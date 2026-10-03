@@ -27,6 +27,7 @@ export function InitialOnboardingConsents({
   canContinue,
   onAcceptRequired,
   onContinue,
+  requiredOnly = false,
 }: {
   userId: string;
   accessToken: string | null;
@@ -34,6 +35,7 @@ export function InitialOnboardingConsents({
   canContinue: boolean;
   onAcceptRequired: () => Promise<void>;
   onContinue: () => void;
+  requiredOnly?: boolean;
 }) {
   const [remote, setRemote] = useState<OptionalAuthorizationState | null>(null);
   const [required, setRequired] = useState<Decision>(legalRequired ? "pending" : "accepted");
@@ -48,6 +50,7 @@ export function InitialOnboardingConsents({
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
+    if (requiredOnly) return () => controller.abort();
     if (!accessToken) {
       setError("No pudimos consultar las autorizaciones opcionales. Reintenta para decidir antes de continuar.");
       return () => controller.abort();
@@ -67,7 +70,7 @@ export function InitialOnboardingConsents({
       if (!controller.signal.aborted) setError("No pudimos consultar las autorizaciones opcionales. Reintenta para decidir antes de continuar.");
     });
     return () => controller.abort();
-  }, [accessToken, retry, userId]);
+  }, [accessToken, retry, userId, requiredOnly]);
 
   const resolved = required === "accepted" && optional !== "pending";
 
@@ -150,7 +153,7 @@ export function InitialOnboardingConsents({
   }
 
   return <section className={styles.embedded} aria-labelledby="initial-consent-title" aria-busy={Boolean(busy)}>
-    <div><h2 id="initial-consent-title">Consentimientos de cuenta</h2><p>Dos decisiones claras. Ninguna autorización opcional se acepta automáticamente.</p></div>
+    <div><h2 id="initial-consent-title">Consentimientos de cuenta</h2><p>Los términos requeridos y las funciones opcionales se deciden por separado.</p></div>
 
     <section className={styles.decision} aria-labelledby="required-consents-title">
       <div><span className={styles.eyebrow}>REQUERIDOS</span><h3 id="required-consents-title">CONSENTIMIENTOS REQUERIDOS</h3></div>
@@ -162,7 +165,7 @@ export function InitialOnboardingConsents({
       </div>}
     </section>
 
-    <section className={styles.decision} aria-labelledby="optional-consent-title">
+    {!requiredOnly && <section className={styles.decision} aria-labelledby="optional-consent-title">
       <div><span className={styles.eyebrow}>OPCIONAL</span><h3 id="optional-consent-title">FUNCIONES OPCIONALES DE THE BACKYARD</h3></div>
       <p>Al autorizar todo activas expresamente:</p>
       <ul>
@@ -183,8 +186,9 @@ export function InitialOnboardingConsents({
         <button type="button" className="primary" disabled={Boolean(busy) || required !== "accepted" || !canContinue} onClick={() => void resolveOptional(true)}>{busy === "optional" ? "REGISTRANDO TODO…" : "AUTORIZAR TODO Y CONTINUAR"}</button>
         <button type="button" className="secondary" disabled={Boolean(busy) || required !== "accepted" || !canContinue} onClick={() => void resolveOptional(false)}>CONTINUAR SIN AUTORIZAR</button>
       </div>}
-    </section>
+    </section>}
 
+    {requiredOnly && <button type="button" className="primary" disabled={required !== "accepted" || !canContinue || Boolean(busy)} onClick={onContinue}>Continuar: permisos y privacidad</button>}
     {!canContinue && <p className={styles.hint}>Elige antes una configuración Rápida o Completa.</p>}
     <p className={styles.hint}>Después puedes revisar o revocar individualmente estas elecciones en Perfil → Configuración → Privacidad y permisos.</p>
     {error && <p className={styles.error} role="alert">{error}</p>}

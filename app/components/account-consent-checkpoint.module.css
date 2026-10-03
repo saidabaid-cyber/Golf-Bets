@@ -16,3 +16,14 @@
 .continueBar { position:sticky; z-index:2; bottom:calc(4px + env(safe-area-inset-bottom)); display:grid; gap:5px; border-radius:15px; background:rgba(248,251,248,.96); padding-top:4px; }
 .continueBar small { color:#53655c; text-align:center; }
 @media(max-width:430px) { .embedded { margin-inline:-6px; padding-inline:12px; } .decision { padding:12px; } .actions { grid-template-columns:1fr; } }
+
+.privacyChoice { display:flex; align-items:flex-start; gap:12px; padding:10px 0; min-height:44px; cursor:pointer; }
+.privacyChoice input { flex:0 0 20px; width:20px; height:20px; margin:3px 0 0; }
+.privacyChoice span { min-width:0; display:grid; gap:5px; }
+.privacyChoice b { font-size:14px; line-height:1.4; color:#173c2e; }
+.privacyChoice small { color:#465e50; font-size:13px; line-height:1.5; overflow-wrap:anywhere; }
+.decision legend { font-weight:800; padding:0 6px; }
+.decision summary { cursor:pointer; font-size:15px; font-weight:800; min-height:44px; line-height:1.45; }
+.decision summary small { font-size:12px; font-weight:500; color:#465e50; }
+.privacyFields { min-width:0; border:0; padding:0; margin:0; }
+.privacyFields legend { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }

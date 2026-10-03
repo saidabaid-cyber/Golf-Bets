@@ -101,12 +101,15 @@ import {
 import { ACCOUNT_LEARNING_CONSENT_HYDRATED_EVENT, cacheAccountLearningConsent, failClosedAccountLearningConsent } from "../../lib/account-learning-consent-cache";
 import { failClosedAccountDevicePermissionPreferences, hydrateOptionalDevicePermissionPreferences } from "../../lib/account-device-permission-preferences";
 import { InitialOnboardingConsents } from "./account-consent-checkpoint";
+import { OnboardingPrivacyChoices } from "./onboarding-privacy-choices";
+import { requestAccountActivation, type AccountActivation } from "../../lib/account-activation";
 
 export type BackyardIdentity = BackyardProfile & {
   mode: Exclude<AccountMode, "undecided">;
   providers: string[];
   accessToken: string | null;
 };
+type AccountActivationSnapshot = { userId: string; state: AccountActivation };
 
 type AccountContextValue = {
   identity: BackyardIdentity;
@@ -114,6 +117,8 @@ type AccountContextValue = {
   updateProfile: (profile: BackyardProfileUpdate) => Promise<ProfileSaveResult>;
   logout: () => Promise<void>;
   finishAccountDeletion: () => Promise<boolean>;
+  deactivateAccount: () => Promise<void>;
+  deactivationAvailable: boolean;
   openAccess: () => void;
   acceptances: LegalAcceptance[];
   legalEvidenceEvents: LegalEvidenceEvent[];
@@ -530,6 +535,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const [accountEntry, setAccountEntry] = useState<AccountEntry | null>(null);
   const [accountEntryError, setAccountEntryError] = useState("");
   const [accountEntryRetry, setAccountEntryRetry] = useState(0);
+  const [activationState, setActivationState] = useState<AccountActivationSnapshot | null>(null);
+  const [activationError, setActivationError] = useState("");
+  const [activationRetry, setActivationRetry] = useState(0);
+  const [activationBusy, setActivationBusy] = useState(false);
+  const activationInFlight = useRef(false);
+  const activationKeys = useRef(new Map<string, string>());
   const [existingAccountNotice, setExistingAccountNotice] = useState(false);
   const [pendingDeletionSession, setPendingDeletionSession] = useState<Session | null>(null);
   const [pendingDeletionOwner, setPendingDeletionOwner] = useState("");
@@ -826,8 +837,19 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activateSession, activateOfflineWorkspace, setCloudIssue, setCloudStatus]);
 
-  const authenticatedUserId = identity?.mode === "authenticated" ? identity.userId : "";
-  const authenticatedAccessToken = identity?.mode === "authenticated" ? identity.accessToken : null;
+  const activationUserId = identity?.mode === "authenticated" ? identity.userId : "";
+  const activationToken = identity?.mode === "authenticated" ? identity.accessToken : null;
+  const activeAccountConfirmed = activationState?.userId === activationUserId && activationState.state.status === "active";
+  const authenticatedUserId = activeAccountConfirmed ? activationUserId : "";
+  const authenticatedAccessToken = activeAccountConfirmed ? activationToken : null;
+  useEffect(() => {
+    if (!activationUserId || !activationToken) return;
+    const controller = new AbortController();
+    void requestAccountActivation(activationToken, undefined, undefined, controller.signal).then(state => {
+      if (!controller.signal.aborted && activeUserId.current === activationUserId) { setActivationState({ userId: activationUserId, state }); setActivationError(""); }
+    }).catch(error => { if (!controller.signal.aborted && activeUserId.current === activationUserId) { setActivationState(null); setActivationError(error instanceof Error ? error.message : "No pudimos verificar tu cuenta."); } });
+    return () => controller.abort();
+  }, [activationUserId, activationToken, activationRetry]);
 
   useEffect(() => {
     setAdminAccessState({ userId: "", access: NO_ADMIN_ACCESS });
@@ -1316,6 +1338,17 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
 
   async function recordLegalChoice(subject: LegalEvidenceSubject, action: LegalEvidenceAction, origin: LegalEvidenceOrigin = "account_privacy") {
     recordLegalChoices([{ subject, action }], origin);
+    if (identity?.mode === "authenticated") {
+      const owner = identity.userId;
+      if (!identity.accessToken) throw new Error("Inicia sesión para guardar tu decisión.");
+      const events = await synchronizeLegalEvidence({ storage: localStorage, userId: owner, accessToken: identity.accessToken,
+        environment: legalEnvironment, isCurrentIdentity: () => accountMutationStillActive(owner) });
+      if (!accountMutationStillActive(owner)) throw new Error("La sesión cambió antes de confirmar la decisión.");
+      const current = events.filter(event => event.subject === subject).at(-1);
+      if (current?.action !== action || current.syncStatus !== "synced") throw new Error("El servidor no confirmó tu decisión.");
+      setLegalEvidenceState({ actorKey: `account:${owner}`, environment: legalEnvironment, events, resolved: true, resolvedSubjects: [] });
+      setCloudIssue("legal", null);
+    }
   }
 
   async function persistAcceptanceBatch(next: LegalAcceptance[], requireServerPersistence: boolean) {
@@ -1598,6 +1631,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       if (activeUserId.current) profileWriteCoordinators.current.delete(activeUserId.current);
       activeUserId.current = null;
       setIdentity(null);
+      setActivationState(null); setActivationError(""); activationKeys.current.clear();
       setEquipmentOnboardingRequired(false);
       setBetaOnboardingRequired(false);
       setOptionalAuthorizationCheck("pending");
@@ -1608,6 +1642,25 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       setLastCloudSync(null);
       setCloudIssuesByDomain({});
     }
+  }
+
+  async function changeActivation(action: "deactivate" | "reactivate") {
+    if (activationInFlight.current || !identity?.accessToken || identity.mode !== "authenticated") return;
+    const owner = identity.userId; const token = identity.accessToken;
+    if (activationState?.userId !== owner || !activationState.state.available) throw new Error("La desactivación necesita habilitarse en este entorno. Tu cuenta sigue sin cambios.");
+    const key = `${owner}:${action}`;
+    if (!activationKeys.current.has(key)) activationKeys.current.set(key, crypto.randomUUID());
+    activationInFlight.current = true; setActivationBusy(true); setActivationError("");
+    try {
+      const state = await requestAccountActivation(token, action, activationKeys.current.get(key));
+      if (activeUserId.current !== owner) return;
+      setActivationState({ userId: owner, state }); activationKeys.current.delete(key);
+      if (action === "deactivate") await logout();
+      else { setAccountEntry(null); setProfileChecked(false); setAccountReloadRevision(value => value + 1); }
+    } catch (error) {
+      if (activeUserId.current === owner) { setActivationState(null); setActivationRetry(value => value + 1); setActivationError(error instanceof Error ? error.message : "No se confirmó el cambio."); }
+      throw error;
+    } finally { activationInFlight.current = false; setActivationBusy(false); }
   }
 
   async function purgeDeletedAccountLocal(deletedUserId: string, options: { clearAuth?: boolean; trackPending?: boolean } = {}) {
@@ -1959,7 +2012,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
   const blockingCloudIssues = cloudIssues.filter((issue) => issue.kind === "session_expired");
   const effectiveCloudStatus: AccountContextValue["cloudStatus"] = cloudIssues.some((issue) => issue.kind === "offline") ? "offline" : cloudIssues.some((issue) => issue.kind === "conflict") ? "pending" : cloudIssues.length ? "error" : cloudStatus;
   const adminAccess = identity?.mode === "authenticated" && adminAccessState.userId === identity.userId ? adminAccessState.access : NO_ADMIN_ACCESS;
-  const context = identity ? ({ identity, adminAccess, updateProfile, logout, finishAccountDeletion, openAccess: () => setAccessRequested(true), acceptances, legalEvidenceEvents, legalEvidenceResolved, marketingConsentResolved, bettingConsentGranted, bettingConsentResolved, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
+  const context = identity ? ({ identity, adminAccess, updateProfile, logout, finishAccountDeletion, deactivateAccount: () => changeActivation("deactivate"), deactivationAvailable: activeAccountConfirmed && activationState?.state.available === true, openAccess: () => setAccessRequested(true), acceptances, legalEvidenceEvents, legalEvidenceResolved, marketingConsentResolved, bettingConsentGranted, bettingConsentResolved, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus: effectiveCloudStatus, setCloudStatus, lastCloudSync, cloudIssues, applyCloudPreferences,
     reportCloudSyncError,
     clearCloudSyncError,
     retryCloudSync: retryAllCloud,
@@ -2024,6 +2077,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     setAccessRequested(false);
     setCloudIssuesByDomain({}); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
   }} sessionError={accountCloudError} onAuthenticated={(session) => { activateSession(session); setAccessRequested(false); }} />;
+  if (identity.mode === "authenticated" && identity.accessToken && (!activationState || activationState.userId !== identity.userId)) return <main className="accessScreen"><section className="accessCard"><BrandLockup compact /><h1>Verificando tu cuenta…</h1>{activationError && <><p role="alert">{activationError}</p><button className="primary" onClick={() => { setActivationError(""); setActivationRetry(value => value + 1); }}>Reintentar</button><button className="secondary" onClick={logout}>Cerrar sesión</button></>}</section></main>;
+  if (identity.mode === "authenticated" && activationState?.userId === identity.userId && activationState.state.status === "deactivated") return <main className="accessScreen"><section className="accessCard"><BrandLockup compact /><h1>Tu cuenta está desactivada</h1><p>Puedes reactivarla mientras los datos conservados sigan disponibles conforme a la política de retención.</p>{activationError && <p role="alert">{activationError}</p>}<button className="primary big" disabled={activationBusy} onClick={() => void changeActivation("reactivate").catch(() => {})}>{activationBusy ? "Reactivando…" : "Reactivar mi cuenta"}</button><button className="secondary" disabled={activationBusy} onClick={logout}>Cancelar / salir</button></section></main>;
   if (identity.mode === "authenticated" && identity.accessToken && accountEntry?.userId !== identity.userId) return <main className="accessScreen"><section className="accessCard">
     <BrandLockup compact /><h1>Verificando tu cuenta…</h1>
     {accountEntryError && <><p role="alert">{accountEntryError}</p><button className="primary big" onClick={() => { setAccountEntryError(""); setAccountEntryRetry(value => value + 1); }}>Reintentar</button><button className="textButton" onClick={logout}>Volver al acceso</button></>}
@@ -2040,7 +2095,8 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     <h1 id="optional-authorization-check-title">Verificando tus autorizaciones opcionales…</h1>
     {optionalAuthorizationCheck === "error" && <><p role="alert">No pudimos consultar el registro canónico. Reintenta antes de continuar.</p><button type="button" className="primary big" onClick={() => { setOptionalAuthorizationCheck("pending"); setAccountReloadRevision((value) => value + 1); }}>Reintentar</button><button type="button" className="textButton" onClick={logout}>Cerrar sesión</button></>}
   </section></main>;
-  if (identity.mode === "authenticated" && !betaOnboardingRequired && optionalAuthorizationRequired) return <main className="accessScreen"><InitialOnboardingConsents
+  if (identity.mode === "authenticated" && !betaOnboardingRequired && optionalAuthorizationRequired && currentConsent) return <main className="accessScreen"><section className="accessCard"><h1>Permisos y privacidad</h1><OnboardingPrivacyChoices key={identity.userId} userId={identity.userId} accessToken={identity.accessToken} onContinue={() => { setOptionalAuthorizationRequired(false); setAccountReloadRevision(value => value + 1); }} /></section></main>;
+  if (identity.mode === "authenticated" && !betaOnboardingRequired && optionalAuthorizationRequired) return <main className="accessScreen"><InitialOnboardingConsents requiredOnly
     userId={identity.userId}
     accessToken={identity.accessToken}
     legalRequired={!currentConsent}

@@ -36,6 +36,8 @@ export function LegalConsentManager({ userId, accessToken, authenticated, accept
   const learningRequest = useRef<AbortController | null>(null);
   const learningRevision = useRef(0);
   const [marketing, setMarketing] = useState(false);
+  const [marketingBusy, setMarketingBusy] = useState(false);
+  const marketingInFlight = useRef(false);
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -57,6 +59,7 @@ export function LegalConsentManager({ userId, accessToken, authenticated, accept
     void requestOptionalAuthorizationState(accessToken, controller.signal).then((saved) => {
       if (controller.signal.aborted || revision !== learningRevision.current) return;
       setLearning(cacheAccountLearningConsent(localStorage, userId, saved, learningResult.consent));
+      if (saved.legal) setMarketing(saved.legal.marketing.active);
       setMessage("");
     }).catch(() => {
       if (!controller.signal.aborted && revision === learningRevision.current) setMessage("No pudimos consultar memoria y aprendizaje. Sólo conservamos activa una decisión confirmada por el servidor durante esta sesión.");
@@ -85,6 +88,8 @@ export function LegalConsentManager({ userId, accessToken, authenticated, accept
   }
 
   async function changeMarketing(accepted: boolean) {
+    if (marketingInFlight.current) return;
+    marketingInFlight.current = true; setMarketingBusy(true);
     setMessage("");
     if (!accepted) {
       try {
@@ -93,7 +98,7 @@ export function LegalConsentManager({ userId, accessToken, authenticated, accept
         await recordLegalChoice("marketing", "revoked");
         setMessage("Marketing opcional desactivado. La revocación quedó guardada.");
       } catch { setMessage("Marketing permanece desactivado, pero no pudimos guardar toda la evidencia de revocación. Reintenta."); setMarketing(false); }
-      return;
+      marketingInFlight.current = false; setMarketingBusy(false); return;
     }
     try {
       await recordLegalChoice("marketing", "accepted");
@@ -105,6 +110,7 @@ export function LegalConsentManager({ userId, accessToken, authenticated, accept
       setMarketing(false);
       setMessage("No pude guardar esta elección. Marketing permanece desactivado.");
     }
+    marketingInFlight.current = false; setMarketingBusy(false);
   }
 
   async function revokeFinancialConsent() {
@@ -137,13 +143,13 @@ export function LegalConsentManager({ userId, accessToken, authenticated, accept
 
     <section className="card"><h2>Memoria y aprendizaje</h2>
       <label className="preferenceRow"><span><b>Memoria personal</b><small className="preferenceDescription">Recuerda tus preferencias privadas para futuras rondas.</small></span><input type="checkbox" disabled={learningBusy || learningLoading || !authenticated || !accessToken} checked={learning.personalMemoryEnabled} onChange={(event) => void changeLearning("PERSONAL_MEMORY", event.target.checked)} /></label>
-      <label className="preferenceRow"><span><b>Learning global futuro</b><small className="preferenceDescription">Sólo habilita datos desidentificados y revisados; puedes revocarlo por separado.</small></span><input type="checkbox" disabled={learningBusy || learningLoading || !authenticated || !accessToken} checked={learning.globalLearningEnabled} onChange={(event) => void changeLearning("GLOBAL_LEARNING", event.target.checked)} /></label>
+      <label className="preferenceRow"><span><b>Learning global futuro</b><small className="preferenceDescription">Autorización para datos desidentificados y revisados. No activa entrenamiento actual; puedes revocarla por separado.</small></span><input type="checkbox" disabled={learningBusy || learningLoading || !authenticated || !accessToken} checked={learning.globalLearningEnabled} onChange={(event) => void changeLearning("GLOBAL_LEARNING", event.target.checked)} /></label>
       <p className="hint">Versión {BACKYARD_AI_MEMORY_POLICY_VERSION}. Inputs privados permanecen excluidos por defecto.</p>
     </section>
 
-    <section className="card"><h2>Apuestas, resultados y gastos</h2><p>Para registrar apuestas, resultados económicos, saldos o gastos necesitamos tu autorización expresa. Puedes seguir usando las demás funciones sin autorizarlo.</p><div className="row between"><span>{bettingConsentGranted ? `Vigente · ${evidenceLabel("financial_data")}` : evidenceLabel("financial_data")}</span>{bettingConsentGranted ? <button type="button" className="secondary" onClick={() => void revokeFinancialConsent()}>Revocar autorización</button> : <button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar y decidir</button>}</div></section>
+    <section className="card"><h2>Apuestas, resultados y gastos</h2><p>Para registrar apuestas, resultados económicos, saldos o gastos necesitamos tu autorización expresa. Puedes seguir usando las demás funciones sin autorizarlo.</p><div className="row between"><span>{bettingConsentGranted ? `ACTIVO · ${evidenceLabel("financial_data")}` : evidenceLabel("financial_data")}</span>{bettingConsentGranted ? <button type="button" className="secondary" onClick={() => void revokeFinancialConsent()}>Revocar autorización</button> : <button type="button" className="secondary" onClick={() => void requestBettingConsent()}>Revisar y decidir</button>}</div></section>
 
-    <section className="card"><h2>Marketing opcional</h2><label className="preferenceRow"><span><b>Recibir comunicaciones de marketing</b><small className="preferenceDescription">Opcional, apagado por defecto y sin activar campañas desde esta pantalla.</small></span><input type="checkbox" checked={marketing} onChange={(event) => void changeMarketing(event.target.checked)} /></label><p className="hint">Versión {MARKETING_CONSENT_VERSION} · {evidenceLabel("marketing")}.</p></section>
+    <section className="card"><h2>Marketing opcional</h2><label className="preferenceRow"><span><b>Recibir comunicaciones de marketing</b><small className="preferenceDescription">Opcional, apagado por defecto y sin activar campañas desde esta pantalla.</small></span><input type="checkbox" disabled={marketingBusy || learningLoading} checked={marketing} onChange={(event) => void changeMarketing(event.target.checked)} /></label><p className="hint">Versión {MARKETING_CONSENT_VERSION} · {evidenceLabel("marketing")}.</p></section>
     {message && <div className="notice" role="status">{message}</div>}
     <BottomBackAction label="← Legal y privacidad" onBack={onBack} />
   </>;

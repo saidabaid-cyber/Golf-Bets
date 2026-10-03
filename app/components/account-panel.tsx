@@ -134,7 +134,7 @@ function gameProfileChanged(profile: BackyardProfile, draft: ProfileDetailsDraft
 }
 
 export function AccountPanel({ view, focusSection = "profile", highContrast, onHighContrastChange, notificationsEnabled, onNotificationsEnabledChange, internalNotificationsSaving = false, internalNotificationsMessage = "", golfInsights, onOpenStats, onOpenAccount }: AccountPanelProps) {
-  const { identity, updateProfile, logout, finishAccountDeletion, openAccess, acceptances, legalEvidenceEvents, marketingConsentResolved, bettingConsentGranted, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
+  const { identity, updateProfile, logout, finishAccountDeletion, deactivateAccount, deactivationAvailable, openAccess, acceptances, legalEvidenceEvents, marketingConsentResolved, bettingConsentGranted, requestBettingConsent, recordLegalChoice, cloudLinked, cloudStatus, requestCloudLink, lastCloudSync, cloudIssues, retryCloudSync } = useBackyardAccount();
   const ghinControl = useGhinReadOnlyProfile(identity.accessToken);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(identity.displayName);
@@ -314,7 +314,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
       <p role="status">{cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando con la nube…" : cloudStatus === "saving" ? "Guardando en este dispositivo…" : cloudStatus === "offline" ? "Sin conexión · Pendiente de sincronizar" : cloudStatus === "error" ? "Error de sincronización · Tu copia local se conserva" : cloudLinked ? "Pendiente de sincronizar" : "Guardado en este dispositivo · Nube sin vincular"}</p>
       {lastCloudSync && <p className="hint">Última sincronización confirmada: {new Date(lastCloudSync).toLocaleString("es-MX")}</p>}
       {cloudIssues.map((issue) => <p className={issue.kind === "offline" || issue.kind === "conflict" ? "hint" : "bad"} key={issue.domain}><b>{issue.domain === "auth" ? "Sesión" : issue.domain === "profile" ? "Perfil" : issue.domain === "legal" ? "Consentimientos" : issue.domain === "files" ? "Archivos" : issue.domain === "conflict" ? "Conflicto" : "Ronda"}:</b> {issue.message}</p>)}
-      {cloudLinked && !sessionExpired && <button className="secondary" disabled={cloudStatus === "syncing" || cloudStatus === "saving"} onClick={() => void retryCloudSync()}>Reintentar sincronización</button>}
+      {cloudLinked && !sessionExpired && ["pending", "offline", "error"].includes(cloudStatus) && <button className="secondary" disabled={cloudStatus === "syncing" || cloudStatus === "saving"} onClick={() => void retryCloudSync()}>Reintentar sincronización</button>}
       {sessionExpired && <button className="primary" onClick={openAccess}>Volver a iniciar sesión</button>}
     </section>}
     {view === "account" && identity.mode === "authenticated" && !cloudLinked && <section className="card"><h2>Sincronización</h2><p>Tus datos siguen seguros en este dispositivo. Puedes vincularlos a tu cuenta cuando la nube esté configurada.</p><button className="primary" onClick={requestCloudLink}>Vincular datos locales</button></section>}
@@ -428,7 +428,7 @@ export function AccountPanel({ view, focusSection = "profile", highContrast, onH
     <section className={`card accountSessionCard ${identity.mode === "guest" ? "single" : ""}`}><button className="secondary big" onClick={logout}>{identity.mode === "guest" ? "Salir del modo invitado" : "Cerrar sesión"}</button>{identity.mode === "authenticated" && <button className="dangerButton" onClick={() => { setDeleteText(""); setDeletePolicy(null); setDeleteError(""); setDeleteOpen(true); }}>Eliminar cuenta</button>}</section>
     {message && <div className={messageKind === "error" ? "notice bad" : "notice"} role={messageKind === "error" ? "alert" : "status"}>{message}</div>}
 
-    {deleteOpen && <AccountDataDialog confirmation={deleteText} onConfirmation={setDeleteText} policy={deletePolicy} onPolicy={setDeletePolicy} busy={deletingAccount} syncBusy={cloudStatus === "syncing" || cloudStatus === "saving"} error={deleteError} onClose={() => { setDeleteOpen(false); setDeleteText(""); setDeletePolicy(null); setDeleteError(""); }} onConfirm={() => void deleteAccount()} />}
+    {deleteOpen && <AccountDataDialog confirmation={deleteText} onConfirmation={setDeleteText} policy={deletePolicy} onPolicy={setDeletePolicy} busy={deletingAccount} syncBusy={cloudStatus === "syncing" || cloudStatus === "saving"} error={deleteError} onClose={() => { setDeleteOpen(false); setDeleteText(""); setDeletePolicy(null); setDeleteError(""); }} onDeactivate={deactivationAvailable ? () => { if (accountInFlight.current) return; accountInFlight.current = true; setDeletingAccount(true); setDeleteError(""); void deactivateAccount().catch(error => { if (mounted.current && liveOwner.current === identity.userId) setDeleteError(error instanceof Error ? error.message : "No se confirmó la desactivación."); }).finally(() => { accountInFlight.current = false; if (mounted.current && liveOwner.current === identity.userId) setDeletingAccount(false); }); } : undefined} onConfirm={() => void deleteAccount()} />}
     </>}
   </>;
 }

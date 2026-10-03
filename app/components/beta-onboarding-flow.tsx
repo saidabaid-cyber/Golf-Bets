@@ -36,7 +36,7 @@ import { BrandLockup } from "./brand-lockup";
 import { EquipmentOnboarding } from "./equipment-onboarding";
 import { HandicapSourceChoices, ghinIndexHeading } from "./handicap-source-selector";
 import { ModalShell } from "./modal-shell";
-import { InitialDevicePermissions } from "./device-permission-settings";
+import { OnboardingPrivacyChoices } from "./onboarding-privacy-choices";
 import { useGhinReadOnlyProfile } from "./use-ghin-read-only-profile";
 import { useBackyardIndexPreference } from "./use-backyard-index-preference";
 import { requestFeedback } from "./feedback-dialog";
@@ -175,7 +175,7 @@ export function OnboardingWelcomeStep({
       <button type="button" className={entryMode === "complete" ? styles.entrySelected : styles.entryChoice} aria-pressed={entryMode === "complete"} onClick={() => onSelectEntryMode("complete")}><span aria-hidden="true">⛳</span><div><b>Completa</b><p>Configura campo habitual, índice, bolsa, objetivos y permisos opcionales.</p></div></button>
     </div>
     {entryMode && <div ref={consentSectionRef} data-onboarding-consents-revealed="true">
-      <InitialOnboardingConsents key={profileUserId} userId={profileUserId} accessToken={accessToken} legalRequired={legalConsentRequired} canContinue={Boolean(entryMode)} onAcceptRequired={onAcceptRequiredConsents} onContinue={onContinue} />
+      <InitialOnboardingConsents requiredOnly key={profileUserId} userId={profileUserId} accessToken={accessToken} legalRequired={legalConsentRequired} canContinue={Boolean(entryMode)} onAcceptRequired={onAcceptRequiredConsents} onContinue={onContinue} />
     </div>}
   </>;
 }
@@ -366,8 +366,8 @@ export function BetaOnboardingFlow({ profile, accessToken, onUpdateProfile, lega
     <div className={styles.planGrid}>{PLAN_CATALOG.map((plan) => <button type="button" key={plan.id} disabled={plan.availability !== "available"} className={`${styles.planCard} ${draft.planId === plan.id ? styles.planSelected : ""}`} onClick={() => setDraft((current) => current ? { ...current, planId: plan.id } : current)}><span>{plan.eyebrow}</span><b>{plan.name}</b><p>{plan.description}</p><small>{plan.availability === "available" ? "Incluido en Beta" : "Próximamente · sin cobro"}</small></button>)}</div>
   </Shell>;
 
-  if (progress.step === "permissions") return <Shell progress={progress} {...navigationProps} eyebrow="PERMISOS OPCIONALES" title="Decide una sola vez" description="Puedes usar The Backyard sin ubicación ni notificaciones. Después podrás revisar o desactivar estos permisos desde Configuración." actions={null}>
-    <InitialDevicePermissions key={`initial-permissions-${profile.userId}`} userId={profile.userId} accessToken={accessToken} onContinue={() => advance("course")} />
+  if (progress.step === "permissions") return <Shell progress={progress} {...navigationProps} eyebrow="TÚ DECIDES" title="Permisos y privacidad" description="Elige qué autorizas. Cada propósito se guarda por separado; puedes revisar o revocar tus decisiones después." actions={null}>
+    <OnboardingPrivacyChoices key={`initial-permissions-${profile.userId}`} userId={profile.userId} accessToken={accessToken} onContinue={() => advance("course")} />
   </Shell>;
 
   return null;

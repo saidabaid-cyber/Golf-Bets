@@ -3,7 +3,6 @@ import "server-only";
 import { NextRequest, NextResponse } from "next/server";
 
 import { authenticatedRequest } from "../../../../lib/server-auth";
-import { isolatedPreviewDatabaseEnabled } from "../../../../lib/preview-database";
 import { executeStatisticsReset, statisticsResetStatus, type StatisticsApiResult, type StatisticsResetGateway } from "../../../../lib/statistics-reset-execution";
 import { BACKYARD_AI_PRIVATE_HEADERS, isCrossSiteRequest, isJsonRequest, readJsonBodyWithLimit } from "../../../../lib/backyard-ai/server/http-security";
 
@@ -65,11 +64,8 @@ export async function DELETE(request: NextRequest) {
   if (isCrossSiteRequest(request)) return json({ code: "CROSS_SITE", error: "Solicitud no permitida." }, 403);
   const account = await authenticatedRequest(request);
   if (!account.ok) return json({ error: account.error, code: account.code }, account.status);
-  if (!isolatedPreviewDatabaseEnabled()) return resetResponse("reset", { status: 503, body: {
-    code: "PREVIEW_DATABASE_REQUIRED",
-    error: "El reinicio de estadísticas no está disponible en este entorno. Tu cuenta y tu histórico se conservan.",
-    noDataDeleted: true,
-  } });
+  // This is an account capability, not a QA runner. Ownership, active account
+  // status, exact confirmation and the idempotent request ledger remain enforced.
   if (!isJsonRequest(request)) return json({ code: "UNSUPPORTED_MEDIA_TYPE", error: "La solicitud debe usar JSON." }, 415);
   const read = await readJsonBodyWithLimit(request, 1_024);
   if (!read.ok) return json({ code: read.reason === "too_large" ? "REQUEST_TOO_LARGE" : "INVALID_REQUEST", error: "La solicitud de reset no es válida." }, read.reason === "too_large" ? 413 : 400);
