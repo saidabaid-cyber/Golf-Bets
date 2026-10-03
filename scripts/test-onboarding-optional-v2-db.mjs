@@ -44,7 +44,11 @@ try {
     create function extensions.gen_random_bytes(integer) returns bytea language sql volatile as $$ select substring(decode(replace(gen_random_uuid()::text,'-','')||replace(gen_random_uuid()::text,'-',''),'hex') from 1 for $1) $$;
     grant usage on schema auth,storage,extensions to anon,authenticated,service_role;
   `);
-  for (const file of readdirSync("supabase/migrations").filter(name=>name.endsWith(".sql")).sort()) {
+  // Test the portable schema shipped to DEV, not the archived QA-only
+  // originals retained in the migration directory for audit.
+  const promotionManifest=JSON.parse(readFileSync("supabase/admin-v2-promotion-manifest.json","utf8"));
+  const excluded=new Set([...promotionManifest.qaOnly,...promotionManifest.rejected]);
+  for (const file of readdirSync("supabase/migrations").filter(name=>name.endsWith(".sql") && !excluded.has(name)).sort()) {
     const sql=readFileSync(`supabase/migrations/${file}`,"utf8").replace(/create extension if not exists pgcrypto(?: with schema extensions)?;/gi,"");
     try { await db.exec(sql); } catch(error) { throw new Error(`Migration ${file}: ${error.code}: ${error.message}`); }
   }
