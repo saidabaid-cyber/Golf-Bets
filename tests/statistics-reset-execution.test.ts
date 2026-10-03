@@ -78,8 +78,8 @@ test("stats reset: errores de permisos no se confunden con migración ni revelan
 test("stats reset: mutation route is Preview isolated while status lookup remains read-only", () => {
   const source = readFileSync("app/api/account/statistics/route.ts", "utf8");
   const deletion = source.slice(source.indexOf("export async function DELETE"));
-  assert.ok(deletion.indexOf("isolatedPreviewDatabaseEnabled()") < deletion.indexOf("executeStatisticsReset("));
-  assert.match(deletion, /code: "PREVIEW_DATABASE_REQUIRED"/);
+  assert.ok(deletion.indexOf("authenticatedRequest(request)") < deletion.indexOf("executeStatisticsReset("));
+  assert.doesNotMatch(deletion, /PREVIEW_DATABASE_REQUIRED|isolatedPreviewDatabaseEnabled/);
   const lookup = source.slice(source.indexOf("export async function GET"), source.indexOf("export async function DELETE"));
   assert.doesNotMatch(lookup, /executeStatisticsReset/);
   assert.match(source, /console\.warn\("\[statistics-reset\]", \{ operation, code: result\.body\.code \}\)/);

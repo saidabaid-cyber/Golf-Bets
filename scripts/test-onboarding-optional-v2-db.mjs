@@ -29,6 +29,7 @@ try {
     create publication supabase_realtime;
     create schema auth; create schema storage; create schema extensions;
     create table auth.users(id uuid primary key,email text,email_confirmed_at timestamptz,raw_user_meta_data jsonb default '{}',raw_app_meta_data jsonb default '{}',created_at timestamptz default now(),banned_until timestamptz);
+    create table auth.sessions(id uuid primary key,user_id uuid,created_at timestamptz default now());
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     create function auth.jwt() returns jsonb language sql stable as $$ select jsonb_build_object('role',current_setting('request.jwt.claim.role',true)) $$;
     create function auth.role() returns text language sql stable as $$ select nullif(current_setting('request.jwt.claim.role',true),'') $$;
@@ -70,5 +71,18 @@ try {
   await service();const replay=await resolve(A,"authorize_all",key(1),events(key(1),true));assert.equal(replay.profileVisibility,"friends");assert.equal(replay.socialProfilePrivacy,"FRIENDS");assert.equal(replay.scopes.PERSONAL_MEMORY.active,false);pass("replay never restores public audience or revoked scope");
   await user(A);const reread=await get();assert.equal(reread.resolved,true);assert.equal(reread.profileVisibility,"friends");assert.equal(reread.legal.marketing.active,true);pass("fresh canonical read retains completed decision and later audience choice");
   await user(B);const separate=await get();assert.equal(separate.legal.marketing.active,false);assert.equal(separate.legal.financial_data.active,false);pass("owner isolation and rejected evidence survive fresh read");
+  // Granular onboarding reuses existing purpose-specific ledgers, not a bundle.
+  const D="64444444-4444-4444-8444-444444444444";
+  await db.exec("reset role");await q("insert into auth.users(id,email,email_confirmed_at) values($1,'qa-granular@example.invalid',now())",[D]);
+  await user(D);const missing=await get();assert.equal(missing.resolved,false);assert.ok(Object.values(missing.scopes).every(s=>!s.active));pass("granular new account is entirely OFF without evidence");
+  for(const scope of ["PERSONAL_MEMORY","GLOBAL_LEARNING","LOCATION_INTERNAL","NOTIFICATION_INTERNAL"])await value("select public.set_optional_authorization_scope_v1($1,true,$2)",[scope,crypto.randomUUID()]);
+  await service();await q("select * from public.record_ai_processing_consent_decisions($1,'2026-09-08-v2',$2::jsonb,'onboarding')",[D,JSON.stringify(["AI_PROVIDER_PROCESSING_CONSENT","AI_IMAGE_PROCESSING_CONSENT","AI_LAUNCH_MONITOR_PROCESSING_CONSENT"].map(scope=>({scope,accepted:true})))]);
+  await q("select * from public.record_legal_evidence_batch($1,'preview','local-granular',$2::jsonb)",[D,JSON.stringify(events(key(9),true))]);
+  await user(D);await value("select public.set_my_notification_preferences_v1(true,true,true,true)");
+  const prefs=Object.fromEntries(["shareRounds","shareAchievements","shareEquipment","shareCourses","notifyLike","notifyComment","notifyAttest","notifyFriendAchievement","notifyEquipment","notifyFriendRequest","enabledForFriends"].map(k=>[k,true]));
+  await value("select public.set_my_social_activity_preferences_v1($1::jsonb)",[JSON.stringify(prefs)]);
+  const granular=await get();assert.ok(Object.values(granular.scopes).every(s=>s.active));assert.ok(Object.values(granular.notifications).every(Boolean));assert.ok(Object.values(granular.sharing).every(Boolean));assert.ok(Object.values(granular.legal).every(s=>s.active));assert.equal(granular.receipt,null);assert.equal(granular.resolved,false);assert.equal(granular.eligible,false);pass("granular acceptance persists all purposes with no fabricated bundle receipt");
+  await user(B);await user(D);assert.deepEqual(await get(),granular);pass("another authenticated client reads the same granular choices");
+  await value("select public.set_optional_authorization_scope_v1('PERSONAL_MEMORY',false,$1)",[crypto.randomUUID()]);assert.equal((await get()).scopes.PERSONAL_MEMORY.active,false);assert.equal((await get()).scopes.AI_IMAGE_PROCESSING_CONSENT.active,true);pass("granular revocation closes only the selected purpose");
   console.log(JSON.stringify({status:"PASS",checks,database:"isolated PostgreSQL WASM"}));
 } finally { await db.close(); }

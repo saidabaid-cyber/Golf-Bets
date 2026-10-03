@@ -179,7 +179,8 @@ test("onboarding authorizes app intent while OS permission and delivery remain s
   assert.match(consent, /FUNCIONES OPCIONALES DE THE BACKYARD/);
   for (const purpose of ["texto o dictado", "fotos e imágenes", "launch monitor", "Uso interno de ubicación y notificaciones"]) assert.match(consent, new RegExp(purpose, "i"));
   assert.match(consent, /el permiso del dispositivo y la entrega se muestran y solicitan por separado/);
-  assert.match(onboarding, /<InitialDevicePermissions/);
+  assert.match(onboarding, /<OnboardingPrivacyChoices/);
+  assert.match(readFileSync("app/components/onboarding-privacy-choices.tsx", "utf8"), /<InitialDevicePermissions/);
   assert.match(settings, /requestInitialLocation/);
   assert.match(settings, /requestInitialNotifications/);
   assert.match(settings, /devicePermissionReviewStatus/);

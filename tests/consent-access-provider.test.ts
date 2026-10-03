@@ -24,13 +24,14 @@ function text(value: unknown): string {
 
 // Executes the production provider's render branches with a server-verified
 // identity. Bootstrap effects are intentionally not live OAuth/DB QA.
-function providerHarness(options: { existingNotice?: boolean; newAccount?: boolean; mappingPending?: boolean; provider?: "google" | "email" | "apple" } = {}) {
+function providerHarness(options: { existingNotice?: boolean; newAccount?: boolean; mappingPending?: boolean; deactivated?: boolean; activationPending?: boolean; provider?: "google" | "email" | "apple" } = {}) {
   const source = readFileSync("app/components/account-provider.tsx", "utf8");
   const providerBody = source.slice(source.indexOf("export function AccountProvider("));
   const stateNames = [...providerBody.matchAll(/const \[(\w+),[^\]]+\] = useState(?:<[^;]+?>)?\(/g)].map((match) => match[1]);
   assert.ok(stateNames.includes("accountEntry") && stateNames.includes("profileChecked"));
   const identity = { mode: "authenticated", userId: OWNER, accessToken: "verified-token", displayName: "Cuenta existente", email: "qa@example.invalid", providers: [options.provider || "google"] };
   const initial: Record<string, unknown> = {
+    activationState: options.activationPending ? null : { userId: OWNER, state: { status: options.deactivated ? "deactivated" : "active", available: true } },
     ready: true, identity, cloudConsentChecked: true, profileChecked: true,
     optionalAuthorizationCheck: "ready", optionalAuthorizationRequired: false,
     accountEntry: options.mappingPending ? null : { userId: OWNER, profileExists: true, existingAccount: !options.newAccount },
@@ -107,4 +108,15 @@ test("unresolved authenticated mapping cannot display account information or cre
   assert.doesNotMatch(text(screen), /Ya tienes una cuenta/);
   assert.ok(!nodes(screen).includes(provider.child));
   assert.equal(nodes(screen).some(node => typeof node.type === "function" && node.type.name === "ProfileSetupScreen"), false);
+});
+
+
+test("deactivated legitimate login shows only reactivation, not account routes or onboarding", () => {
+  const provider=providerHarness({deactivated:true});const screen=provider.render();
+  assert.match(text(screen),/Tu cuenta está desactivada/);assert.match(text(screen),/Reactivar mi cuenta/);
+  assert.ok(!nodes(screen).includes(provider.child));
+});
+test("unverified activation state cannot render protected workspace",()=>{
+  const provider=providerHarness({activationPending:true});const screen=provider.render();
+  assert.match(text(screen),/Verificando tu cuenta/);assert.ok(!nodes(screen).includes(provider.child));
 });
