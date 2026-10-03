@@ -117,6 +117,7 @@ try {
   // the latest function-only fix so every lifecycle/permission assertion below
   // runs against the version prepared for the current Preview.
   await db.exec(readFileSync("supabase/migrations/20261003035013_account_lifecycle_skip_unrelated_json_branches.sql","utf8"));
+  await db.exec(readFileSync("supabase/migrations/20261003070508_account_lifecycle_bound_snapshot_identity_work.sql","utf8"));
   await db.exec("alter table public.competition_definitions enable trigger competition_definition_audit; alter table public.admin_import_jobs enable trigger import_job_audit; alter table public.admin_catalog_revisions enable trigger admin_catalog_revision_audit;");
   const legacyTombstone=await deletedPlayerKey(legacyRound,LEGACY_DELETED,legacyPlayer);
   const legacyRoundSnapshot=await scalar("select snapshot from public.rounds_cloud where id=$1",[legacyRound]);
@@ -662,10 +663,42 @@ try {
   await q(`insert into public.cloud_record_versions(owner_id,entity_type,local_id,version,previous_snapshot)
     select $1,'round','qa-json-pruning',i,$2::jsonb from generate_series(1,74) i`,[LEGACY_OTHER,largeVersionSnapshot]);
   assert.equal((await acquire(D,normalOp,"delete_golf_data",normalLease)).stage,"requested");
+  // Account-state cardinality matters: production already has hundreds of
+  // completed lifecycle states, all checked by every snapshot trigger. Local
+  // synthetic accounts only, no credentials/network/real-account deletion.
+  await q(`insert into auth.users(id,email,email_confirmed_at)
+    select ('90000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,
+      'qa-night-state-'||i||'@example.invalid',now() from generate_series(1,238) i`);
+  await q(`insert into private.account_lifecycle_state(user_id,account_status,deleted_at)
+    select id,'deleted',now() from auth.users where email like 'qa-night-state-%'`);
+  await q(`insert into private.account_lifecycle_jobs(request_id,user_id,data_policy,token_hash,stage,completed_at)
+    select gen_random_uuid(),id,'delete_golf_data',$1,'completed',now()
+    from auth.users where email like 'qa-night-state-%'`,[HASH]);
+  const functionDefinition=(source,name)=>{
+    const start=source.indexOf(`create or replace function private.${name}(`);
+    const end=source.indexOf("$$;",source.indexOf("as $$",start))+3;
+    assert.ok(start>=0 && end>start,name);
+    return source.slice(start,end);
+  };
+  // Baseline and candidate run against exactly the same synthetic graph.
+  // Roll back the baseline transaction, including its function definitions,
+  // before running the candidate. No timeout increase or integrity bypass.
+  await db.exec("begin");
+  for(const name of ["account_replace_deleted_identity_text","account_scrub_deleted_snapshot","anonymize_account_json","account_scrub_marked_deleted_json"])
+    await db.exec(functionDefinition(tombstoneSql,name));
+  await db.exec(functionDefinition(readFileSync("supabase/migrations/20261003035013_account_lifecycle_skip_unrelated_json_branches.sql","utf8"),"account_scrub_json_uuid"));
+  const baselineStarted=performance.now();
+  assert.equal((await prepare(normalOp,normalLease)).stage,"data_prepared");
+  const baselineMs=Math.round(performance.now()-baselineStarted);
+  const baselineVersions=(await q("select previous_snapshot from public.cloud_record_versions where owner_id=$1 and local_id='qa-json-pruning' order by version",[LEGACY_OTHER])).rows;
+  await db.exec("rollback");
   const prepareStarted=performance.now();
   assert.equal((await prepare(normalOp,normalLease)).stage,"data_prepared");
   console.log(JSON.stringify({benchmark:"Full lifecycle prepare / 74 synthetic historical versions / PostgreSQL WASM",
-    durationMs:Math.round(performance.now()-prepareStarted),remoteTimingGuarantee:false}));
+    lifecycleStates:await scalar("select count(*) from private.account_lifecycle_state"),
+    beforeMs:baselineMs,afterMs:Math.round(performance.now()-prepareStarted),remoteTimingGuarantee:false}));
+  assert.deepEqual((await q("select previous_snapshot from public.cloud_record_versions where owner_id=$1 and local_id='qa-json-pruning' order by version",[LEGACY_OTHER])).rows,baselineVersions,
+    "optimized full prepare preserves exactly the deployed snapshot output");
   const retainedVersions=(await q("select previous_snapshot from public.cloud_record_versions where owner_id=$1 and local_id='qa-json-pruning'",[LEGACY_OTHER])).rows;
   assert.equal(retainedVersions.length,74);
   for(const {previous_snapshot:version} of retainedVersions) {

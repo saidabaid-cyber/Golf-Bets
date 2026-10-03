@@ -1,6 +1,9 @@
 # Account lifecycle — prepare timeout, controlled fix
 
-Status: **PENDING_CONTROLLED_DB_APPLY**. Prepared locally; not applied remotely.
+Historical report of the first pruning fix. That fix was subsequently authorized
+and applied (remote ledger 20261003040627); its one authorized retry still timed
+out. The current diagnosis and new NOT-APPLIED correction are documented in
+[ACCOUNT_LIFECYCLE_NIGHT_ROOT_CAUSE.md](ACCOUNT_LIFECYCLE_NIGHT_ROOT_CAUSE.md).
 
 ## Observed failure
 
