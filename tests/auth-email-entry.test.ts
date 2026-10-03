@@ -57,7 +57,7 @@ test("cuenta inexistente en Login no envía OTP", async () => {
   assert.equal(sends, 0);
 });
 
-test("Crear cuenta envía OTP solo después del intent explícito y no hace lookup", async () => {
+test("Crear cuenta verifica que no exista y envía OTP con intent explícito", async () => {
   let lookups = 0;
   const sends: string[] = [];
   const result = await processEmailOtpEntry({
@@ -66,8 +66,31 @@ test("Crear cuenta envía OTP solo después del intent explícito y no hace look
     sendOtp: async (_email, intent) => { sends.push(intent); },
   });
   assert.deepEqual(result, { sent: true });
-  assert.equal(lookups, 0);
+  assert.equal(lookups, 1);
   assert.deepEqual(sends, ["create"]);
+});
+
+test("Crear cuenta con correo existente ofrece Login sin enviar OTP", async () => {
+  let sends = 0;
+  const result = await processEmailOtpEntry({
+    email: " EXISTING@example.com ", intent: "create",
+    accountExists: async (email) => { assert.equal(email, "existing@example.com"); return true; },
+    sendOtp: async () => { sends += 1; },
+  });
+  assert.deepEqual(result, { sent: false, code: "ACCOUNT_ALREADY_EXISTS" });
+  assert.equal(sends, 0);
+});
+
+test("fallo de lookup no envía OTP ni crea cuentas en ninguna intención", async () => {
+  for (const intent of ["create", "login"] as const) {
+    let sends = 0;
+    await assert.rejects(processEmailOtpEntry({
+      email: "qa@example.invalid", intent,
+      accountExists: async () => { throw new Error("lookup unavailable"); },
+      sendOtp: async () => { sends += 1; },
+    }), /lookup unavailable/);
+    assert.equal(sends, 0);
+  }
 });
 
 test("la resolución exacta vive en un comando same-origin y su RPC es solo service_role", () => {

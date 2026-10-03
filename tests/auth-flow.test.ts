@@ -239,7 +239,7 @@ test("OTP con menos de ocho dígitos no llama verifyOtp", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("pantalla OTP tiene captura, regreso y separación explícita de invitado", () => {
+test("pantalla OTP tiene captura y regreso sin rutas públicas de invitado o Apple", () => {
   const ui = readFileSync("app/components/account-provider.tsx", "utf8");
   assert.match(ui, /Código de verificación/);
   assert.match(ui, /id="access-otp"/);
@@ -251,10 +251,10 @@ test("pantalla OTP tiene captura, regreso y separación explícita de invitado",
   assert.match(ui, /onAuthenticated\(await verifyEmailOtp/);
   assert.match(ui, /Todavía no has iniciado sesión/);
   assert.match(ui, /Regresar al acceso/);
-  assert.match(ui, /disabled=\{busy \|\| !googleAvailable\}/);
+  assert.match(ui, /googleAvailable && <button/);
   assert.match(ui, /Usar otra cuenta de Google/);
   assert.match(ui, /social\("google", true\)/);
-  assert.match(ui, /disabled=\{busy \|\| !appleAvailable\}/);
+  assert.doesNotMatch(ui, /appleAvailable|<AccessScreen onGuest/);
   assert.match(ui, /pendiente de configuración/);
   assert.match(ui, /restoreAuthSession\(supabase.auth\)/);
   assert.match(ui, /Mantener sesión iniciada/);
@@ -286,6 +286,6 @@ test("la pantalla OTP no expone magic links ni configuración interna de Supabas
   assert.doesNotMatch(ui, /¿Recibiste un enlace en lugar del código\?/);
   assert.doesNotMatch(ui, /correo de Supabase|magic link/i);
   assert.match(ui, /No encontramos una cuenta con este correo\./);
-  assert.match(ui, />CREAR CUENTA</);
+  assert.match(ui, /loginRecovery === "existing" \? "INICIAR SESIÓN" : "CREAR CUENTA"/);
   assert.match(ui, />USAR OTRO CORREO</);
 });

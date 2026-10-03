@@ -12,13 +12,12 @@ const terms = read("app/legal/terms/page.tsx");
 const callback = read("app/auth/callback/page.tsx");
 const migration = read("supabase/migrations/202609010002_backyard_accounts_legal.sql");
 
-test("login muestra identidad, Google, correo e invitado y mantiene Apple cerrado si no está disponible", () => {
+test("login muestra identidad, Google configurado y correo sin invitado ni Apple", () => {
   const accessSource = auth + read("app/components/brand-lockup.tsx");
-  for (const text of ["THE BACKYARD", "Google", "Continuar con correo", "Continuar como invitado"]) assert.match(accessSource, new RegExp(text));
-  assert.match(accessSource, /appleAvailable \? "Continuar con Apple" : "Apple · Próximamente"/);
-  assert.match(accessSource, /disabled=\{busy \|\| !appleAvailable\}/);
+  for (const text of ["THE BACKYARD", "Google", "Continuar con correo", "Crear cuenta", "Iniciar sesión"]) assert.match(accessSource, new RegExp(text));
+  assert.doesNotMatch(accessSource, /Continuar como invitado|Continuar con Apple|appleAvailable/);
   assert.match(accessSource, /Continuar con Google/);
-  assert.match(accessSource, /disabled=\{busy \|\| !googleAvailable\}/);
+  assert.match(accessSource, /googleAvailable && <button/);
 });
 
 test("correo implementa OTP de ocho dígitos, reenviar y cambiar correo", () => {
@@ -39,9 +38,9 @@ test("Google usa OAuth real sin credenciales inventadas", () => {
   assert.doesNotMatch(`${auth}\n${authFlow}`, /client[_-]?secret/i);
 });
 
-test("Supabase sin configurar mantiene fallback e invitado", () => {
+test("Supabase sin configurar informa el estado sin ofrecer acceso de invitado", () => {
   assert.match(auth, /pendiente de configuración/);
-  assert.match(auth, /setIdentity\(\{ \.\.\.profile, mode: "guest"/);
+  assert.doesNotMatch(auth, /<AccessScreen onGuest/);
 });
 
 test("restauración y cierre de sesión no borran los datos locales de The Backyard", () => {

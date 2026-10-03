@@ -80,7 +80,6 @@ import { NO_ADMIN_ACCESS, readAdminAccess, type AdminAccess } from "../../lib/ad
 import { resolveBrowserAppOrigin } from "../../lib/app-origin";
 import { type LegalEvidenceAction, type LegalEvidenceSubject } from "../../lib/legal-evidence";
 import {
-  GUEST_LEGAL_ACTOR_KEY,
   legalActorForIdentity,
   legalClientEnvironment,
   legalEvidenceStateKey,
@@ -226,14 +225,14 @@ function nextPendingLocalDeletionOwner(storage: Pick<Storage, "getItem" | "key" 
   return "";
 }
 
-function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () => void | Promise<void>; onAuthenticated: (session: Session) => void; sessionError: string }) {
+function AccessScreen({ onAuthenticated, sessionError }: { onAuthenticated: (session: Session) => void; sessionError: string }) {
   const [stage, setStage] = useState<"splash" | "methods">("splash");
   const [intent, setIntent] = useState<"create" | "login">("create");
   const [emailMode, setEmailMode] = useState(false);
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [codeSent, setCodeSent] = useState(false);
-  const [loginRecovery, setLoginRecovery] = useState(false);
+  const [loginRecovery, setLoginRecovery] = useState<"missing" | "existing" | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [socialEnabled, setSocialEnabled] = useState(true);
@@ -260,19 +259,19 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
     return () => { active = false; };
   }, []);
 
-  async function social(provider: "google" | "apple", selectGoogleAccount = false) {
+  async function social(provider: "google", selectGoogleAccount = false) {
     if (oauthStarting.current) return;
     if (!providers || providers.status === "unavailable") {
       setMessage("No pudimos comprobar el proveedor de acceso. Revisa tu conexión y vuelve a intentar.");
       return;
     }
     if (!socialEnabled || !providers[provider]) {
-      setMessage(`Acceso con ${provider === "google" ? "Google" : "Apple"} pendiente de configuración.`);
+      setMessage("Acceso con Google pendiente de configuración.");
       return;
     }
     const supabase = getSupabaseBrowser();
     if (!supabase) {
-      setMessage(`Acceso con ${provider === "google" ? "Google" : "Apple"} pendiente de configuración.`);
+      setMessage("Acceso con Google pendiente de configuración.");
       return;
     }
     oauthStarting.current = true;
@@ -314,7 +313,10 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       }
       if (error instanceof EmailOtpRequestError && error.code === "ACCOUNT_NOT_FOUND" && requestedIntent === "login") {
         setMessage("No encontramos una cuenta con este correo.");
-        setLoginRecovery(true);
+        setLoginRecovery("missing");
+      } else if (error instanceof EmailOtpRequestError && error.code === "ACCOUNT_ALREADY_EXISTS" && requestedIntent === "create") {
+        setMessage("Ya existe una cuenta con este correo. Inicia sesión para continuar.");
+        setLoginRecovery("existing");
       } else {
         setMessage(error instanceof EmailOtpRequestError ? error.message : authErrorMessage(error, "email"));
       }
@@ -335,7 +337,6 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
   }
 
   const googleAvailable = Boolean(socialEnabled && providers?.status === "ready" && providers.google);
-  const appleAvailable = Boolean(socialEnabled && providers?.status === "ready" && providers.apple);
   return <main className="accessScreen">
     <section className={`accessCard ${stage === "splash" ? "splashCard" : ""}`}>
       {stage === "splash" && <div className="accessEditorial"><Image src="/brand/home-swing.jpg" alt="" fill sizes="(max-width: 600px) 100vw, 460px" priority /><span>GOOD GOLF.<br /><em>BETTER FRIENDS.</em></span></div>}
@@ -345,29 +346,18 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
       {stage === "splash" ? <div className="accessActions splashActions">
         <button className="primary big" onClick={() => { setIntent("create"); setStage("methods"); }}>Crear cuenta</button>
         <button className="secondary big" onClick={() => { setIntent("login"); setStage("methods"); }}>Iniciar sesión</button>
-        <button className="guestButton" disabled={busy} onClick={async () => {
-          setBusy(true); setMessage("");
-          try { await onGuest(); } catch { setMessage("No pudimos abrir el modo invitado. Inténtalo nuevamente."); }
-          finally { setBusy(false); }
-        }}>Continuar como invitado</button>
       </div> : <>
       <div className="accessIntent"><button className="textButton" onClick={() => { setStage("splash"); setEmailMode(false); setMessage(""); }}>← Inicio</button><span>{intent === "create" ? "CREAR CUENTA" : "INICIAR SESIÓN"}</span></div>
       <label className="consentCheck"><input type="checkbox" checked={rememberSession} onChange={(event) => { setRememberSession(event.target.checked); setAuthSessionPersistence(event.target.checked); }} /><span>Mantener sesión iniciada en este dispositivo.</span></label>
       {!emailMode ? <div className="accessActions">
-        <button className="oauthButton google" disabled={busy || !googleAvailable} onClick={() => social("google")}>{!providers ? "Google · comprobando acceso…" : googleAvailable ? "Continuar con Google" : "Google · pendiente de configuración"}</button>
+        {googleAvailable && <button className="oauthButton google" disabled={busy} onClick={() => social("google")}>Continuar con Google</button>}
         {googleAvailable && <button className="textButton" disabled={busy} onClick={() => social("google", true)}>Usar otra cuenta de Google</button>}
-        <button className="oauthButton apple" disabled={busy || !appleAvailable} onClick={() => social("apple")}>{appleAvailable ? "Continuar con Apple" : "Apple · Próximamente"}</button>
         <button className="secondary big" disabled={busy} onClick={() => { setEmailMode(true); setMessage(""); }}>{intent === "create" ? "Registro con email" : "Continuar con correo"}</button>
-        <button className="guestButton" disabled={busy} onClick={async () => {
-          setBusy(true); setMessage("");
-          try { await onGuest(); } catch { setMessage("No pudimos salir de la sesión anterior. Reintenta antes de continuar como invitado."); }
-          finally { setBusy(false); }
-        }}>Continuar como invitado</button>
       </div> : <div className="emailAccess">
         {!codeSent ? <>
           <label htmlFor="access-email">Correo electrónico</label>
           <input id="access-email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} disabled={busy} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="tu@correo.com" />
-          {intent === "create" && <p className="hint">Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella.</p>}
+          {intent === "create" && <p className="hint">Verifica tu correo para crear tu cuenta. Si ya estás registrado, elige Iniciar sesión.</p>}
           <button className="primary big" disabled={busy || retrySeconds > 0} onClick={() => void sendCode()}>{busy ? "Enviando…" : retrySeconds ? `Enviar en ${retrySeconds}s` : "Enviar código"}</button>
           <button className="textButton" disabled={busy} onClick={() => setEmailMode(false)}>← Volver</button>
         </> : <>
@@ -381,17 +371,14 @@ function AccessScreen({ onGuest, onAuthenticated, sessionError }: { onGuest: () 
           <button className="textButton" disabled={busy} onClick={() => { setEmailMode(false); setMessage(""); }}>← Regresar al acceso</button>
         </>}
       </div>}</>}
-      {!socialEnabled && <p id="social-auth-status" className="hint">Google · Pendiente de configuración</p>}
-      {socialEnabled && providers?.status === "ready" && !providers.google && <p className="hint">Google · Pendiente de configuración.</p>}
       {(message || sessionError) && <div className="accessMessage" role="status">{message || sessionError}</div>}
-      {loginRecovery && <div className="modalBackdrop" onKeyDown={(event) => { if (event.key === "Escape") setLoginRecovery(false); }}><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="email-login-recovery-title">
-        <ModalCloseButton onClose={() => setLoginRecovery(false)} disabled={busy} />
-        <h2 id="email-login-recovery-title">No encontramos una cuenta con este correo.</h2>
-        <p>Elige crear una cuenta para recibir el código de alta, o usa otro correo.</p>
-        <div className="dialogActions"><button autoFocus type="button" className="primary" disabled={busy} onClick={() => { setLoginRecovery(false); setIntent("create"); setCodeSent(false); setOtp(""); void sendCode("create"); }}>CREAR CUENTA</button>
-          <button type="button" className="secondary" disabled={busy} onClick={() => { setLoginRecovery(false); setCodeSent(false); setOtp(""); setMessage(""); requestAnimationFrame(() => document.getElementById("access-email")?.focus()); }}>USAR OTRO CORREO</button></div>
+      {loginRecovery && <div className="modalBackdrop" onKeyDown={(event) => { if (event.key === "Escape") setLoginRecovery(null); }}><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="email-login-recovery-title">
+        <ModalCloseButton onClose={() => setLoginRecovery(null)} disabled={busy} />
+        <h2 id="email-login-recovery-title">{loginRecovery === "existing" ? "Ya existe una cuenta con este correo." : "No encontramos una cuenta con este correo."}</h2>
+        <p>{loginRecovery === "existing" ? "Inicia sesión para acceder a tu cuenta." : "Elige crear una cuenta para recibir el código de alta, o usa otro correo."}</p>
+        <div className="dialogActions"><button autoFocus type="button" className="primary" disabled={busy} onClick={() => { const nextIntent = loginRecovery === "existing" ? "login" : "create"; setLoginRecovery(null); setIntent(nextIntent); setCodeSent(false); setOtp(""); void sendCode(nextIntent); }}>{loginRecovery === "existing" ? "INICIAR SESIÓN" : "CREAR CUENTA"}</button>
+          <button type="button" className="secondary" disabled={busy} onClick={() => { setLoginRecovery(null); setCodeSent(false); setOtp(""); setMessage(""); requestAnimationFrame(() => document.getElementById("access-email")?.focus()); }}>USAR OTRO CORREO</button></div>
       </section></div>}
-      <p className="hint">Invitado es un acceso independiente: no inicia sesión ni sincroniza tus datos con una cuenta.</p>
       <p className="legalLead">Consulta el <Link href="/legal/privacy-simplified?returnTo=access">Aviso de Privacidad Simplificado</Link>, el <Link href="/legal/privacy?returnTo=access">Aviso de Privacidad Integral</Link> y los <Link href="/legal/terms?returnTo=access">Términos y Condiciones</Link>. La aceptación explícita ocurre antes de crear el perfil.</p>
     </section>
   </main>;
@@ -2056,32 +2043,9 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
     </div>
     <p><a href={`mailto:${legalConfig.supportEmail}?subject=Recuperaci%C3%B3n%20de%20cuenta%20pendiente`}>Contactar soporte</a></p>
   </section></main>;
-  if (!identity || accessRequested) return <AccessScreen onGuest={async () => {
-    if (activeUserId.current) {
-      const supabase = getSupabaseBrowser();
-      if (!supabase) throw new Error("Session unavailable");
-      await closeAuthSession(supabase.auth);
-    }
-    switchAccountWorkspace(localStorage, "guest");
-    activeUserId.current = null;
-    const withoutPreviousGuestConsent = clearLegalAcceptancesForUser(acceptances, "guest");
-    localStorage.setItem(ACCOUNT_STORAGE_KEYS.acceptances, JSON.stringify(withoutPreviousGuestConsent));
-    setAcceptances(withoutPreviousGuestConsent);
-    // Each explicit guest entry is a fresh local identity. Prior evidence stays
-    // append-only under its old random actor and is never reassigned to a user.
-    localStorage.removeItem(GUEST_LEGAL_ACTOR_KEY);
-    setLegalEvidenceState(null);
-    const profile = guestProfile();
-    localStorage.setItem(ACCOUNT_STORAGE_KEYS.mode, "guest");
-    setIdentity({ ...profile, mode: "guest", providers: [], accessToken: null });
-    setEquipmentOnboardingRequired(false);
-    setBetaOnboardingRequired(false);
-    setOptionalAuthorizationCheck("pending");
-    setOptionalAuthorizationRequired(false);
-    setCloudConsentChecked(true);
-    setAccessRequested(false);
-    setCloudIssuesByDomain({}); setCloudStatus("local"); setCloudLinked(false); setLastCloudSync(null); setShowMigration(false);
-  }} sessionError={accountCloudError} onAuthenticated={(session) => { activateSession(session); setAccessRequested(false); }} />;
+  // Older local guest workspaces remain available for an explicit import after
+  // sign-in, but never bypass the approved authenticated entry screen.
+  if (!identity || Boolean(identity.mode === "guest") || accessRequested) return <AccessScreen sessionError={accountCloudError} onAuthenticated={(session) => { activateSession(session); setAccessRequested(false); }} />;
   if (identity.mode === "authenticated" && identity.accessToken && (!activationState || activationState.userId !== identity.userId)) return <main className="accessScreen"><section className="accessCard"><BrandLockup compact /><h1>Verificando tu cuenta…</h1>{activationError && <><p role="alert">{activationError}</p><button className="primary" onClick={() => { setActivationError(""); setActivationRetry(value => value + 1); }}>Reintentar</button><button className="secondary" onClick={logout}>Cerrar sesión</button></>}</section></main>;
   if (identity.mode === "authenticated" && activationState?.userId === identity.userId && activationState.state.status === "deactivated") return <main className="accessScreen"><section className="accessCard"><BrandLockup compact /><h1>Tu cuenta está desactivada</h1><p>Puedes reactivarla mientras los datos conservados sigan disponibles conforme a la política de retención.</p>{activationError && <p role="alert">{activationError}</p>}<button className="primary big" disabled={activationBusy} onClick={() => void changeActivation("reactivate").catch(() => {})}>{activationBusy ? "Reactivando…" : "Reactivar mi cuenta"}</button><button className="secondary" disabled={activationBusy} onClick={logout}>Cancelar / salir</button></section></main>;
   if (identity.mode === "authenticated" && identity.accessToken && accountEntry?.userId !== identity.userId) return <main className="accessScreen"><section className="accessCard">

@@ -135,7 +135,7 @@ test("provider places mapping before cloud writes and sends completed accounts d
   assert.doesNotMatch(source, /const mapping = await readAccountEntry/);
   assert.match(source, /Ya tienes una cuenta\. Vamos a iniciar sesión\./);
   assert.doesNotMatch(source, /if \(identity\.mode === "authenticated" && existingAccountNotice\) return/);
-  assert.match(source, /Verifica tu correo para continuar; si ya tienes cuenta, entraremos a ella\./);
+  assert.match(source, /Verifica tu correo para crear tu cuenta\. Si ya estás registrado, elige Iniciar sesión\./);
   assert.doesNotMatch(source, /requiresAccountConsent|AccountConsentCheckpoint/);
   assert.match(source, /<BetaOnboardingFlow/);
   assert.match(source, /legalConsentRequired=\{!currentConsent\}/);

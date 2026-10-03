@@ -88,7 +88,9 @@ export async function POST(request: NextRequest) {
         if (sent.error) throw sent.error;
       },
     });
-    if (!result.sent) return json({ code: result.code, error: "No encontramos una cuenta con este correo." }, 404);
+    if (!result.sent) return result.code === "ACCOUNT_ALREADY_EXISTS"
+      ? json({ code: result.code, error: "Ya existe una cuenta con este correo. Inicia sesión para continuar." }, 409)
+      : json({ code: result.code, error: "No encontramos una cuenta con este correo." }, 404);
     return json({ sent: true });
   } catch (error) {
     const safe = safeError(error);

@@ -274,13 +274,12 @@ test("documentos legales regresan al origen y conservan contexto entre documento
   assert.equal(preserveLegalReturn("/legal/privacy#contact", "account"), "/legal/privacy?returnTo=account#contact");
 });
 
-test("Cuenta y acceso presentan Apple sólo cuando está disponible y resuelven el origen canónico para OAuth", () => {
+test("el acceso aprobado ofrece Google configurado y correo, sin Apple ni invitado", () => {
   const provider = readFileSync("app/components/account-provider.tsx", "utf8");
-  const account = readFileSync("app/components/account-panel.tsx", "utf8");
-  assert.match(provider, /const appleAvailable = Boolean\(socialEnabled && providers\?\.status === "ready" && providers\.apple\)/);
-  assert.match(provider, /appleAvailable \? "Continuar con Apple" : "Apple · Próximamente"/);
-  assert.match(provider, /disabled=\{busy \|\| !appleAvailable\}/);
-  assert.doesNotMatch(account, />Apple</);
+  const access = provider.slice(provider.indexOf("function AccessScreen("), provider.indexOf("function ConsentScreen("));
+  assert.match(access, /googleAvailable && <button/);
+  assert.doesNotMatch(access, /Apple|onGuest|Continuar como invitado|guestButton/);
+  assert.doesNotMatch(provider, /<AccessScreen onGuest/);
   assert.match(provider, /resolveBrowserAppOrigin\(window\.location\.origin, process\.env\.NEXT_PUBLIC_APP_ORIGIN\)/);
   assert.match(provider, /authCallbackUrl\(appOrigin\)/);
 });

@@ -13,7 +13,7 @@ export function emailOtpFailure(error: unknown) {
 
 export type EmailEntryDecision =
   | { sent: true }
-  | { sent: false; code: "ACCOUNT_NOT_FOUND" };
+  | { sent: false; code: "ACCOUNT_NOT_FOUND" | "ACCOUNT_ALREADY_EXISTS" };
 
 /**
  * Keeps account discovery and OTP delivery inside one server operation. A
@@ -27,8 +27,12 @@ export async function processEmailOtpEntry(input: {
   sendOtp: (email: string, intent: EmailEntryIntent) => Promise<void>;
 }): Promise<EmailEntryDecision> {
   const email = input.email.trim().toLocaleLowerCase("en-US");
-  if (input.intent === "login" && !await input.accountExists(email)) {
+  const exists = await input.accountExists(email);
+  if (input.intent === "login" && !exists) {
     return { sent: false, code: "ACCOUNT_NOT_FOUND" };
+  }
+  if (input.intent === "create" && exists) {
+    return { sent: false, code: "ACCOUNT_ALREADY_EXISTS" };
   }
   await input.sendOtp(email, input.intent);
   return { sent: true };
