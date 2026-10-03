@@ -384,7 +384,9 @@ test("Card AI reusa las puertas finales y no muestra resultados con una Personal
   const confirmedEnd = page.indexOf("useLayoutEffect", confirmedStart);
   const confirmedFlow = page.slice(confirmedStart, confirmedEnd);
   assert.ok(confirmedFlow.indexOf("saveRoundHistoryLocalFirst") < confirmedFlow.indexOf("recordScorecardResultReached()"));
-  assert.ok(confirmedFlow.indexOf("recordScorecardResultReached()") < confirmedFlow.indexOf('setTab("results")'));
+  const savedDestination = confirmedFlow.indexOf("openHistoricalRound(snapshot.id)");
+  assert.ok(savedDestination >= 0);
+  assert.ok(confirmedFlow.indexOf("recordScorecardResultReached()") < savedDestination);
 });
 
 test("el último hoyo digital conserva el borrador vivo y pasa todas las puertas antes de promover revisión", () => {

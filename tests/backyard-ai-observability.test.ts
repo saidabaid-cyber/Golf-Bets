@@ -92,7 +92,9 @@ test("Card AI conserva el reloj ante cualquier puerta final y lo cierra sólo tr
   const saveEnd = page.indexOf("useLayoutEffect", saveStart);
   const save = page.slice(saveStart, saveEnd);
   assert.ok(save.indexOf("saveRoundHistoryLocalFirst") < save.indexOf("recordScorecardResultReached();"));
-  assert.ok(save.indexOf("recordScorecardResultReached();") < save.indexOf('setTab("results")'));
+  const savedDestination = save.indexOf("openHistoricalRound(snapshot.id)");
+  assert.ok(savedDestination >= 0);
+  assert.ok(save.indexOf("recordScorecardResultReached();") < savedDestination);
   assert.match(page, /else latestSaveRound\.current\(\{ prepareReview: true \}\)/);
   assert.match(page, /onManualFallback=\{\(\) => \{ setScorecardScanStartedAt\(null\); setTab\("round"\); \}\}/);
   assert.match(page, /onCancel=\{\(\) => \{ setScorecardScanStartedAt\(null\); setTab\("round"\); \}\}/);
