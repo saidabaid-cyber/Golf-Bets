@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnchoredSearch, AnchoredSearchOption } from "./anchored-search";
 import { resolveAuthorizedNearbyLocation, type NearbyLocationResolution } from "../../lib/device-permissions";
 import { readAccountDevicePermissionPreferences } from "../../lib/account-device-permission-preferences";
+import { searchSavedCourses } from "../../lib/saved-course-search";
+import type { Course } from "../../lib/types";
 
 type CourseResult = {
   id: string;
@@ -60,6 +62,7 @@ export function RoundCoursePicker({
   describedBy,
   accessToken,
   permissionOwnerId,
+  savedCourses,
   onSelect,
 }: {
   selectedName: string;
@@ -69,6 +72,7 @@ export function RoundCoursePicker({
   describedBy?: string;
   accessToken?: string | null;
   permissionOwnerId: string;
+  savedCourses?: readonly Course[];
   onSelect: (course: CourseResult) => void;
 }) {
   const [query, setQuery] = useState(selectedName);
@@ -105,20 +109,22 @@ export function RoundCoursePicker({
       setNextCursor(null);
       return;
     }
+    const localResults = searchSavedCourses(savedCourses || [], normalized);
+    setResults(localResults);
     const controller = new AbortController();
     const timer = window.setTimeout(async () => {
-      setStatus("loading");
+      setStatus(localResults.length ? "ready" : "loading");
       try {
         const page = await loadCoursePage(normalized, accessToken, null, controller.signal);
         if (controller.signal.aborted) return;
-        setResults(mergeCourseResults([], page.courses ?? []));
+        setResults(mergeCourseResults(localResults, page.courses ?? []));
         setHasMore(page.hasMore === true);
         setNextCursor(typeof page.nextCursor === "string" ? page.nextCursor : null);
         setStatus("ready");
       } catch {
         if (!controller.signal.aborted) {
-          setResults([]);
-          setStatus("error");
+          setResults(localResults);
+          setStatus(localResults.length ? "ready" : "error");
         }
       }
     }, 250);
@@ -126,7 +132,7 @@ export function RoundCoursePicker({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, selectedCourseId, resultMode, accessToken]);
+  }, [query, selectedCourseId, resultMode, accessToken, savedCourses]);
 
   const visibleResults = useMemo(() => mergeCourseResults([], results), [results]);
   const expanded = !selectedCourseId && (visibleResults.length > 0 || status === "loading" || status === "error");
@@ -201,6 +207,8 @@ export function RoundCoursePicker({
             ? "Campo seleccionado ✓"
             : resultMode === "nearby" && visibleResults.length
               ? "Campos cercanos del catálogo, ordenados por distancia. También puedes escribir para buscar por nombre."
+            : status === "ready" && !visibleResults.length
+              ? "No encontramos campos con ese nombre. Puedes buscar otro o crear uno."
             : "Escribe al menos dos letras para buscar por nombre."}
     >
       {visibleResults.map((course) => <AnchoredSearchOption key={course.courseId} label={`Seleccionar ${course.name}`} onSelect={() => {
