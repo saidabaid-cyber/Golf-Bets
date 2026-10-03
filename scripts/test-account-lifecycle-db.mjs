@@ -11,7 +11,11 @@ const LEGACY_OTHER="55555555-5555-4555-8555-555555555555";
 const A_PLAYER=`qa-player-${A}`;
 const REBORN="33333333-3333-4333-8333-333333333333";
 const OP="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", LEASE="bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", HASH="c".repeat(64);
-const q=(sql,values)=>db.query(sql,values);
+const q=async(sql,values)=>{
+  const origin=new Error("Local SQL fixture call");
+  try { return await db.query(sql,values); }
+  catch(error) { error.stack += `\n${origin.stack}`; throw error; }
+};
 const scalar=async(sql,values)=>Object.values((await q(sql,values)).rows[0])[0];
 const deletedPlayerKey=async(roundId,userId,oldKey)=>oldKey.replace(
   userId,
@@ -46,7 +50,11 @@ try {
     create function extensions.gen_random_bytes(integer) returns bytea language sql volatile as $$ select substring(decode(replace(gen_random_uuid()::text,'-','')||replace(gen_random_uuid()::text,'-',''),'hex') from 1 for $1) $$;
     grant usage on schema auth,storage,extensions to anon,authenticated,service_role;
   `);
-  const files=readdirSync("supabase/migrations").filter(name=>name.endsWith(".sql")).sort();
+  const promotionManifest=JSON.parse(readFileSync("supabase/admin-v2-promotion-manifest.json","utf8"));
+  const excluded=new Set([...promotionManifest.qaOnly,...promotionManifest.rejected]);
+  // Historical QA-only/rejected originals are retained for audit. The graph
+  // must use their portable promotion replacements, as the DEV ledger does.
+  const files=readdirSync("supabase/migrations").filter(name=>name.endsWith(".sql") && !excluded.has(name)).sort();
   for(const file of files) {
     const sql=readFileSync(`supabase/migrations/${file}`,"utf8").replace(/create extension if not exists pgcrypto(?: with schema extensions)?;/gi,"");
     try{await db.exec(sql);}catch(error){throw new Error(`Migration ${file}: ${error.code}: ${error.message}`);}
@@ -98,7 +106,6 @@ try {
       id:"legacy-admin-marker",identityDeleted:true,name:"LEGACY_ADMIN_MARKER_PII",
       avatarUrl:"legacy-admin-marker-avatar",updatedBy:LEGACY_OTHER,
     }}),HASH,LEGACY_OWNER]);
-  await db.exec("alter table public.competition_definitions enable trigger competition_definition_audit; alter table public.admin_import_jobs enable trigger import_job_audit; alter table public.admin_catalog_revisions enable trigger admin_catalog_revision_audit;");
   const legacyAudit=await scalar(`insert into public.admin_audit_log(action,entity_type,entity_id,before_state,after_state)
     values('QA_BACKFILL','QA_SYNTHETIC','qa-legacy',$1::jsonb,$1::jsonb) returning id`,[JSON.stringify({player:{id:legacyPlayer,name:"Legacy private name",avatarUrl:"legacy-private-avatar"}})]);
   await q(`insert into private.account_lifecycle_state(user_id,account_status,deleted_at) values($1,'deleted',now())`,[LEGACY_DELETED]);
@@ -106,6 +113,11 @@ try {
     values('99999999-9999-4999-8999-999999999998',$1,'delete_golf_data',$2,'completed',now())`,[LEGACY_DELETED,HASH]);
   const tombstoneSql=readFileSync("supabase/migrations/20260927045252_account_delete_round_player_tombstones.sql","utf8");
   await db.exec(tombstoneSql);
+  // The historical backfill intentionally reinstalls its older helper. Restore
+  // the latest function-only fix so every lifecycle/permission assertion below
+  // runs against the version prepared for the current Preview.
+  await db.exec(readFileSync("supabase/migrations/20261003035013_account_lifecycle_skip_unrelated_json_branches.sql","utf8"));
+  await db.exec("alter table public.competition_definitions enable trigger competition_definition_audit; alter table public.admin_import_jobs enable trigger import_job_audit; alter table public.admin_catalog_revisions enable trigger admin_catalog_revision_audit;");
   const legacyTombstone=await deletedPlayerKey(legacyRound,LEGACY_DELETED,legacyPlayer);
   const legacyRoundSnapshot=await scalar("select snapshot from public.rounds_cloud where id=$1",[legacyRound]);
   const legacyGroupTemplate=await scalar("select default_template from public.groups_v2 where id=$1",[legacyGroup]);
@@ -636,8 +648,35 @@ try {
   await db.exec("alter table public.competition_definitions enable trigger competition_definition_audit; alter table public.admin_import_jobs enable trigger import_job_audit; alter table public.admin_catalog_revisions enable trigger admin_catalog_revision_audit;");
   const requestedAudit=await scalar(`insert into public.admin_audit_log(action,entity_type,entity_id,before_state,after_state)
     values('QA_RUNTIME','QA_SYNTHETIC','qa-requested',$1::jsonb,$1::jsonb) returning id`,[requestedAdminPayload]);
+  // Reproduce the Preview's 74 historical versions using synthetic golf data.
+  // Keep the versions owned by a surviving account so preparation must scrub
+  // them, preserve scores, and run the actual stale-snapshot trigger.
+  const largeVersionSnapshot=JSON.stringify({
+    players:[{id:D_PLAYER,name:"QA private player",avatarUrl:"qa-private-avatar"},
+      {id:"qa-survivor",accountUserId:LEGACY_OTHER,name:"QA surviving player"}],
+    scores:{1:{[D_PLAYER]:4,"qa-survivor":5}},putts:{1:{[D_PLAYER]:2}},
+    courses:Array.from({length:11},(_,courseIndex)=>({id:`qa-course-${courseIndex}`,name:"QA test course",
+      holes:Array.from({length:18},(_,holeIndex)=>({hole:holeIndex+1,par:4,strokeIndex:holeIndex+1,
+        yardages:{black:440,blue:410,white:380,red:330}}))})),
+  });
+  await q(`insert into public.cloud_record_versions(owner_id,entity_type,local_id,version,previous_snapshot)
+    select $1,'round','qa-json-pruning',i,$2::jsonb from generate_series(1,74) i`,[LEGACY_OTHER,largeVersionSnapshot]);
   assert.equal((await acquire(D,normalOp,"delete_golf_data",normalLease)).stage,"requested");
+  const prepareStarted=performance.now();
   assert.equal((await prepare(normalOp,normalLease)).stage,"data_prepared");
+  console.log(JSON.stringify({benchmark:"Full lifecycle prepare / 74 synthetic historical versions / PostgreSQL WASM",
+    durationMs:Math.round(performance.now()-prepareStarted),remoteTimingGuarantee:false}));
+  const retainedVersions=(await q("select previous_snapshot from public.cloud_record_versions where owner_id=$1 and local_id='qa-json-pruning'",[LEGACY_OTHER])).rows;
+  assert.equal(retainedVersions.length,74);
+  for(const {previous_snapshot:version} of retainedVersions) {
+    assert.equal(JSON.stringify(version).includes(D),false);
+    assert.equal(version.players[0].name,"Jugador eliminado");
+    assert.equal(version.players[0].avatarUrl,null);
+    assert.equal(version.players[1].name,"QA surviving player");
+    assert.equal(version.scores[1][version.players[0].id],4);
+    assert.equal(version.scores[1]["qa-survivor"],5);
+    assert.equal(version.courses.length,11);
+  }
   await expectError(()=>reconcile(normalOp,normalLease),["23514"]);
   assert.equal(await scalar("select local_player_id from public.round_players_cloud where id=$1",[relationalOnlyPlayer]),D_PLAYER,
     "an unmapped handicap fails the whole identifier reconciliation transaction");
@@ -678,7 +717,12 @@ try {
   await q("delete from auth.users where id=$1",[D]);
   assert.equal((await complete(normalOp,normalLease)).stage,"completed");
   await admin();
-  await db.exec(`set request.jwt.claim.sub='${B}';`);
+  // B was archived earlier and is only a catalog-scoped administrator. Use
+  // a live, authorized fixture for the later COURSE revision writes; this
+  // tests stale deleted-player payloads without bypassing current Admin V2.
+  await q(`insert into public.admin_memberships(user_id,role,scope_type,active,created_by)
+    values($1,'SUPER_ADMIN','GLOBAL',true,$1)`,[LEGACY_OTHER]);
+  await db.exec(`set request.jwt.claim.sub='${LEGACY_OTHER}';`);
   await q("update public.admin_catalog_revisions set payload=$1::jsonb where id=$2",[requestedAdminPayload,requestedRevision]);
   const staleAdminRevision=(await q("select payload,preview_hash,revision_hash from public.admin_catalog_revisions where id=$1",[requestedRevision])).rows[0];
   assert.equal(JSON.stringify(staleAdminRevision.payload).includes(D),false,"later Admin draft update cannot restore a deleted UUID");
@@ -688,7 +732,7 @@ try {
   assert.equal(staleAdminRevision.preview_hash,staleAdminRevisionHash);
   assert.equal(staleAdminRevision.revision_hash,staleAdminRevisionHash);
   const staleInsertedRevision=await scalar(`insert into public.admin_catalog_revisions(entity_type,entity_id,scope_type,version,payload,preview_hash,created_by)
-    values('BALL','qa-stale-deleted-revision','GLOBAL',1,$1::jsonb,$2,$3) returning id`,[requestedAdminPayload,HASH,B]);
+    values('BALL','qa-stale-deleted-revision','GLOBAL',1,$1::jsonb,$2,$3) returning id`,[requestedAdminPayload,HASH,LEGACY_OTHER]);
   const staleInserted=(await q("select payload,preview_hash from public.admin_catalog_revisions where id=$1",[staleInsertedRevision])).rows[0];
   assert.equal(JSON.stringify(staleInserted.payload).includes(D),false,"later Admin draft insert cannot restore a deleted UUID");
   assert.equal(staleInserted.payload.player.name,"Jugador eliminado");
