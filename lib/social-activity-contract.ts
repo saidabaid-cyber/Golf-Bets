@@ -72,7 +72,7 @@ export type SocialActivityDetail = { data: SocialActivityCard };
 
 export type SocialNotification = {
   id: string;
-  type: "like" | "comment" | "attest" | "friend_achievement" | "equipment" | "friend_request";
+  type: "like" | "comment" | "attest" | "friend_achievement" | "equipment" | "friend_request" | "round_started" | "scorecard_ready";
   activityId: string;
   createdAt: string;
   readAt: string | null;

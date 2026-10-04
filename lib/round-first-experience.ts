@@ -50,7 +50,7 @@ export function resolveFirstExperience(state: FirstExperienceState, field: First
 
 export type FirstExperiencePrompt = "friends" | "group" | "roundGroup";
 export function firstExperiencePrompt(state: FirstExperienceState, context: { home: boolean; setup: boolean; hasGroup: boolean }) : FirstExperiencePrompt | null {
-  if (context.setup && !context.hasGroup && state.firstRoundGroup === "pending") return "roundGroup";
+  if (context.setup && state.friendDiscovery !== "pending" && !context.hasGroup && state.firstRoundGroup === "pending") return "roundGroup";
   if (!context.home) return null;
   if (state.friendDiscovery === "pending") return "friends";
   if (!context.hasGroup && state.firstGroup === "pending") return "group";

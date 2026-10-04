@@ -190,8 +190,10 @@ test("published rounds route uses participant-aware reader and refuses shared re
     if (name.endsWith("/social-publication.server")) return { scheduleSocialPublication: () => {} };
     if (name.endsWith("/social-publication-policy")) return { hasCompletedRoundPublicationCandidate: () => false };
     if (name.endsWith("/cloud-sync-service")) return { readCloudRoundHistory };
+    if (name.endsWith("/shared-round-participants.server")) return { syncSharedRoundParticipants: async () => {} };
+    if (name.endsWith("/shared-round-participants")) return { linkedRoundPlayers: () => [] };
     throw new Error(name);
-  } });
+  }, URL });
   const response = await exports.GET(new Request("https://qa.invalid/api/cloud/rounds", { headers: { authorization: "Bearer fixture" } }));
   assert.equal(response.status, 200);
   assert.match(response.headers.get("cache-control") || "", /no-store/);

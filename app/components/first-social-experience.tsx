@@ -56,7 +56,7 @@ export function FirstSocialExperience({ prompt, busy, error, scoreOnly, canBet, 
   const friends = prompt === "friends", round = prompt === "roundGroup";
   return <ModalShell open={Boolean(prompt)} onClose={onSkip} closeDisabled={busy} labelledBy="first-social-title" describedBy="first-social-copy" className={`confirmDialog ${styles.dialog}`}>
     <span className="eyebrow">{friends ? "TU COMUNIDAD" : "TU GRUPO"}</span>
-    <h2 id="first-social-title">{friends ? "¿Quieres agregar amigos?" : round ? "¿Juegas normalmente con este grupo?" : "¿Quieres crear tu primer grupo?"}</h2>
+    <h2 id="first-social-title">{friends ? "¿Quieres agregar amigos?" : "¿Quieres crear tu primer grupo?"}</h2>
     <p id="first-social-copy">{friends ? "Encuentra a las personas con las que juegas. Puedes buscarlas por nombre o @usuario, escanear su QR o descubrir golfistas de tu zona." : round ? firstRoundGroupCopy(scoreOnly) : "Guarda a las personas con las que juegas normalmente para cargarlas en futuras rondas en segundos."}</p>
     {!friends && !round && canBet && <p>También puedes guardar tus apuestas habituales.</p>}
     {friends && <div className={styles.options}><span>Cerca de ti</span><span>Buscar por nombre</span><span>Escanear QR</span></div>}

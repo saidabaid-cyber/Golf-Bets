@@ -6,6 +6,7 @@ import { readCloudBundle, writeCloudBundle } from "../../../../lib/cloud-sync-se
 import { authUserFailure } from "../../../../lib/auth-errors";
 import { scheduleSocialPublication } from "../../../../lib/social-publication.server";
 import { hasCompletedRoundPublicationCandidate } from "../../../../lib/social-publication-policy";
+import { syncSharedRoundParticipants } from "../../../../lib/shared-round-participants.server";
 
 const MAX_BODY_BYTES = 5_000_000;
 
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest) {
 
 
     const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string }, { extendedSchema: true });
+    await syncSharedRoundParticipants(account.client, account.userId, (body.data.history || []).filter(round => !round.cloudReadOnly && round.scorekeeping?.version === 1).map(round => String(round.id)));
     if (hasCompletedRoundPublicationCandidate(body.data.history)) scheduleSocialPublication(account.userId, "round");
     return NextResponse.json(result, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {

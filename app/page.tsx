@@ -145,6 +145,9 @@ import { foursomePressure, setFoursomePressure } from "../lib/foursome-config";
 import { FoursomeLive } from "./components/foursome-live";
 import { ResultAccordion } from "./components/result-accordion";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
+import { OwnerRoundSync } from "./components/owner-round-sync";
+import { RoundScorekeepingChoice } from "./components/round-scorekeeping-choice";
+import { RoundSavedConfirmation } from "./components/round-saved-confirmation";
 import { FullScorecard } from "./components/full-scorecard";
 import { RoundCaptureV2 } from "./components/round-capture-v2";
 import { GolfLeaderboard } from "./components/golf-leaderboard";
@@ -567,6 +570,7 @@ function GolfBetsApp() {
   const [roundId, setRoundId] = useState(makeId());
   const [roundDate, setRoundDate] = useState(localDateMexico());
   const [roundStartedAt, setRoundStartedAt] = useState<string | null>(null);
+  const [justSavedGroupRound, setJustSavedGroupRound] = useState<RoundSnapshot | null>(null);
   const [quickPars, setQuickPars] = useState("");
   const [quickStroke, setQuickStroke] = useState("");
   const [hydrated, setHydrated] = useState(false);
@@ -2087,7 +2091,7 @@ function GolfBetsApp() {
     });
     const groupOrigin = createRoundGroupSnapshot(roundTemplateOrigin, players);
     return structuredClone({
-      id: roundId, lifecycleState: "completed", startedAt: roundStartedAt ?? undefined, scoreCaptureMode, date: roundDate, courseName: course.name, teeName: course.teeName,
+      id: roundId, lifecycleState: "completed", scorekeeping: { version: 1, mode: "owner" }, startedAt: roundStartedAt ?? undefined, scoreCaptureMode, date: roundDate, courseName: course.name, teeName: course.teeName,
       snapshotVersion: 2, ownerId: owner.id, handicapBasis: roundHandicapBasis, presentation: normalizeRoundPresentation(roundPresentation), segments, playerBalances: allBetBalances,
       categoryBalances: { Conejos: rabbitBalances, Skins: skinBalances, Unidades: units.balances, Monkey: monkey.balances, Foursome: foursomes.balances, "Bola Amiga": ballFriend.balances, "Polla 1ª vuelta": pollaFirstBalances, "Polla 2ª vuelta": pollaSecondBalances, "Polla Nassau": pollaNassauBalances, "Mini Polla": miniPollaComponentBalances, "🐍 Víboras": vipers.balances, "🐫 Camellos": camels.balances, "🐟 Peces": fish.balances, "🐺 Loba": loba.balances, ...Object.fromEntries(supplementalGeneralResults.map((result, index) => [`${result.label}${supplementalGeneralResults.length > 1 ? ` ${index + 1}` : ""}`, result.balances])), Personales: personalCombinedBalances, Manuales: manual.balances },
       resultDetails: { rabbits, skins, units, monkey, foursomes, ballFriend, polla, miniPolla, vipers, camels, fish, loba, supplemental, settlementTransfers, settlementDifference, personals, manual },
@@ -2315,6 +2319,7 @@ function GolfBetsApp() {
       }
       recordScorecardResultReached();
       openHistoricalRound(snapshot.id);
+      if (snapshot.groupOrigin) setJustSavedGroupRound(snapshot);
     } catch {
       updateBackyardAiMetrics(localStorage, identity.userId, (current) => recordRoundCompletionMetric(current, false));
       setSaveStatus("error");
@@ -2403,7 +2408,7 @@ function GolfBetsApp() {
 
   function applyFrequentGroupToDraft(group: FrequentGroup, selectedMemberIds: string[], scoreOnly = false) {
     const loaded = instantiateGroupGameTemplate(group, makeId, selectedMemberIds);
-    setPlayers(loaded.players); setOwnerId(loaded.ownerId); setStartHole(loaded.startHole); setRoundHoles(loaded.roundHoles); setRoundHandicapBasis(loaded.roundHandicapBasis);
+    setPlayers(loaded.players); setOwnerId(loaded.players.find(player => player.accountUserId === identity.userId)?.id || loaded.ownerId); setStartHole(loaded.startHole); setRoundHoles(loaded.roundHoles); setRoundHandicapBasis(loaded.roundHandicapBasis);
     setBets(scoreOnly ? initialBets([]) : loaded.bets); setSegments(loaded.segments); setPersonalBets(scoreOnly ? [] : loaded.personalBets); setSupplementalBets(scoreOnly ? [] : loaded.supplementalBets); setManualBets(scoreOnly ? [] : loaded.manualBets);
     setRoundTemplateOrigin(loaded.origin);
     setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPutts({}); setAdvancedStats({}); setShots([]); setScoreEdits({});
@@ -3857,6 +3862,7 @@ function GolfBetsApp() {
       onOpenStats={() => setTab("stats")}
       onOpenCourses={() => setTab("courseLibrary")}
       onOpenGroups={() => setTab("groups")}
+      onCreateGroup={() => { setTab("groups"); beginCreateFrequentGroup(); }}
       onOpenRules={openRulesForRound}
       onOpenStandings={() => setTab("standings")}
       onOpenResults={() => setTab("results")}
@@ -3939,7 +3945,7 @@ function GolfBetsApp() {
     {pendingCloudConflict && (() => { const conflict = pendingCloudConflict.conflicts[0]; if (!conflict) return null; const display = describeCloudConflict(conflict, playerName); return <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><ModalCloseButton onClose={() => setPendingCloudConflict(null)} /><h2 id="cloud-conflict-title">Cambio en dos dispositivos</h2><p>Elige únicamente el dato en conflicto. Los demás cambios compatibles ya se combinaron.</p><div className="cloudConflictField"><b>{display.label}</b><span>Nube: {display.cloudValue}</span><span>Este dispositivo: {display.localValue}</span></div>{pendingCloudConflict.conflicts.length > 1 && <small>Quedan {pendingCloudConflict.conflicts.length} conflictos por revisar.</small>}<div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar nube para este dato</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>; })()}
     {holeValidationErrors.length > 0 && <div className="modalBackdrop" role="presentation"><section className="confirmDialog holeValidationDialog" role="alertdialog" aria-modal="true" aria-labelledby="hole-validation-title" aria-describedby="hole-validation-description"><ModalCloseButton onClose={() => setHoleValidationErrors([])} /><h2 id="hole-validation-title">Falta completar este hoyo</h2><p id="hole-validation-description">Revisa todos estos puntos antes de guardar y avanzar:</p><ul>{holeValidationErrors.map(error => <li key={error}>{error}</li>)}</ul><div className="dialogActions"><button autoFocus className="primary" onClick={() => setHoleValidationErrors([])}>Volver y completar</button></div></section></div>}
     {tab === "personalDetail" && renderPersonalLive("Detalle Personal")}
-    {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved?.totalScoreCapture ? <TotalScoreHistory key={saved.id} round={saved} onSave={saveTotalHistory} onBack={() => setTab("history")} /> : saved ? <HistoricalRoundDetail round={saved} priorRounds={history} accountUserId={identity.userId} accessToken={identity.accessToken || undefined} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
+    {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved?.totalScoreCapture ? <TotalScoreHistory key={saved.id} round={saved} onSave={saveTotalHistory} onBack={() => setTab("history")} /> : saved && justSavedGroupRound?.id === saved.id ? <RoundSavedConfirmation round={saved} accessToken={identity.accessToken || undefined} onView={() => setJustSavedGroupRound(null)} onPlay={() => { setJustSavedGroupRound(null); setTab("play"); }} onGroups={() => { setJustSavedGroupRound(null); setTab("groups"); }} /> : saved ? <HistoricalRoundDetail round={saved} priorRounds={history} accountUserId={identity.userId} accessToken={identity.accessToken || undefined} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
     {tab === "groups" && <GroupBuilder detailGroup={frequentGroupView && !frequentGroupView.created ? frequentGroups.find(group => group.id === frequentGroupView.id) : undefined} onCloseDetail={() => setFrequentGroupView(null)} frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onOpenFrequentGroup={group => setFrequentGroupView({ id: group.id, created: false })} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} onAcceptedMembers={(group, members) => setFrequentGroups(current => current.map(item => item.id === group.id ? { ...item, players: mergeAcceptedGroupMembers(item.players, members) } : item))} />}
 
     {tab === "profile" && <ProfileAccountPanel key={`profile:${identity.userId}`} view="profile" initialLaunchMonitor={launchMonitorEntry} indexControl={indexControl} ghinControl={ghinControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} completionTarget={profileCompletionTarget} onCompletionTargetHandled={() => setProfileCompletionTarget(null)} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} internalNotificationsSaving={internalNotificationsSaving} internalNotificationsMessage={internalNotificationsMessage} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => openAccountSettings()} onOpenAccountSection={openAccountSettings} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
@@ -3965,6 +3971,7 @@ function GolfBetsApp() {
       }}>
 
       <RoundSetupStep step={5}>
+      {players.some(player => player.accountUserId && player.accountUserId !== identity.userId) && <RoundScorekeepingChoice />}
       {roundTemplateOrigin && (() => {
         const sourceGroup = frequentGroups.find((group) => group.id === roundTemplateOrigin.groupId);
         const mappedPlayerIds = new Set(Object.values(roundTemplateOrigin.roundPlayerIdByMemberId));
@@ -4250,6 +4257,7 @@ function GolfBetsApp() {
         <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={() => { flushLocalState.current?.(); setTab("welcome"); }}>Salir y continuar después</button>
         <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={requestNewRound}>Nueva ronda</button>
       </nav>
+      {roundStartedAt && !roundClosed && !editingRound && (() => { const snapshot = currentSnapshot(); return snapshot && <OwnerRoundSync key={`${identity.userId}:${roundId}`} userId={identity.userId} accessToken={identity.accessToken || undefined} snapshot={snapshot} />; })()}
       <RoundCaptureV2
         initialGpsOpen={roundGpsIntent}
         captureContext={captureContext}

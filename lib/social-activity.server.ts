@@ -685,19 +685,14 @@ export async function confirmParticipant(
   if (!source || !completedSnapshot(source as RoundRow))
     throw new SocialServiceError("NOT_FOUND", 404, "Ronda completada no disponible.");
   const canonical = source as RoundRow;
-  await reconcileSocialRoundActivities(ctx.admin, canonical.owner_id);
-  const { data: event, error: eventError } = await ctx.admin.from("social_activities_v3")
-    .select("id,material_hash,source_version,active").eq("source_round_id", roundId)
-    .eq("author_id", canonical.owner_id).eq("event_kind", "ROUND_COMPLETED").maybeSingle();
-  if (eventError) dbError(eventError);
-  if (!event || !event.active || event.source_version !== canonical.version || event.material_hash !== request.expectedHash)
-    throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; actualiza antes de confirmar.");
-  const actualHash = await roundMaterialFingerprint(canonical.snapshot, canonical.owner_id);
-  if (!actualHash || actualHash !== event.material_hash)
-    throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; actualiza antes de confirmar.");
   const matches = canonical.snapshot.players?.filter(player => player.id === request.playerKey && player.accountUserId === ctx.userId) || [];
   if (matches.length !== 1 || ctx.userId === canonical.owner_id)
     throw new SocialServiceError("PARTICIPANT_NOT_LINKED", 403, "Tu cuenta no está vinculada a este jugador de la ronda.");
+  // Participation is private and independent of feed publication preferences.
+  // Existing RLS also verifies this exact account/player pair on insertion.
+  const actualHash = await roundMaterialFingerprint(canonical.snapshot, canonical.owner_id);
+  if (!actualHash || actualHash !== request.expectedHash || request.expectedVersion > Number(canonical.version))
+    throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; actualiza antes de confirmar.");
   const { error } = await ctx.client.from("social_round_account_links_v3").insert({
     round_id: roundId, user_id: ctx.userId, player_key: request.playerKey,
     verified_by: "SELF_CONFIRMED",
@@ -769,12 +764,21 @@ export async function listNotifications(ctx: SocialContext): Promise<SocialNotif
   const preferences = await cachedPrefs(ctx, ctx.userId);
   const { data, error } = await ctx.client.from("notification_events_v2")
     .select("id,event_type,resource_id,created_at,read_at")
-    .eq("recipient_id", ctx.userId).in("event_type", ["like", "comment", "attest", "friend_achievement", "equipment", "friend_request"])
+    .eq("recipient_id", ctx.userId).in("event_type", ["like", "comment", "attest", "friend_achievement", "equipment", "friend_request", "round_started", "scorecard_ready"])
     .order("created_at", { ascending: false }).limit(50);
   if (error) dbError(error);
   const visible = [] as SocialNotificationPage["data"];
   for (const event of data || []) {
     if (!UUID.test(event.resource_id)) continue;
+    if (event.event_type === "round_started" || event.event_type === "scorecard_ready") {
+      const round = await ctx.client.from("rounds_cloud").select("owner_id,snapshot").eq("id", event.resource_id).maybeSingle();
+      if (round.error) dbError(round.error);
+      const snapshot = round.data?.snapshot as RoundSnapshot | undefined;
+      if (round.data?.owner_id !== ctx.userId && snapshot?.players?.filter(player => player.accountUserId === ctx.userId).length === 1
+        && (event.event_type !== "scorecard_ready" || snapshot.lifecycleState === "completed"))
+        visible.push({ id: event.id, type: event.event_type, activityId: event.resource_id, createdAt: event.created_at, readAt: event.read_at });
+      continue;
+    }
     if (event.event_type === "friend_request") {
       if (!preferences.notifyFriendRequest) continue;
       const request = await ctx.client.from("friend_requests").select("id,state").eq("id", event.resource_id).eq("addressee_id", ctx.userId).maybeSingle();

@@ -1,0 +1,8 @@
+.card { display: grid; gap: 12px; min-width: 0; }
+.players { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.players li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px; background: #f3f7f1; border-radius: 12px; }
+.players span { min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.players small, .note { color: #50655b; font-size: 12px; }
+.holes { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; padding: 12px 0; }
+.holes span { display: grid; text-align: center; gap: 4px; font-size: 12px; }
+.card button { min-height: 44px; }

@@ -16,6 +16,7 @@ import { calculateBackyardIndex } from "../../lib/backyard-index";
 import { BACKYARD_INDEX_REASON_LABELS } from "../../lib/backyard-index-labels";
 import { RoundAchievementSummary } from "./round-achievement-summary";
 const RoundSharingPanel = dynamic(() => import("./round-sharing-panel").then((module) => module.RoundSharingPanel));
+const RoundParticipationCard = dynamic(() => import("./round-participation-card").then(module => module.RoundParticipationCard));
 
 const money = (value: number) => `${value > 0 ? "+" : value < 0 ? "−" : ""}$${Math.abs(value).toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
 const tone = (value: number) => value > 0 ? "good" : value < 0 ? "bad" : "";
@@ -144,6 +145,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
   return <div className="historicalDetail">
     {accountUserId && <RoundAchievementSummary round={round} priorRounds={priorRounds} accountUserId={accountUserId} />}
     {accountUserId && accessToken && <RoundSharingPanel key={`${accountUserId}:${round.id}`} round={round} userId={accountUserId} accessToken={accessToken} />}
+    {accountUserId && accessToken && round.scorekeeping?.version === 1 && <RoundParticipationCard key={`participants:${accountUserId}:${round.id}`} accessToken={accessToken} roundId={round.cloudRoundId} localRoundId={round.cloudRoundId ? undefined : round.id} />}
     {indexRecord && <section className="card"><details><summary>{indexRecord.eligible ? `ÍNDICE BACKYARD · Diferencial ${indexRecord.scoreDifferential?.toFixed(1)}` : "NO ELEGIBLE PARA ÍNDICE"}</summary><p>{indexRecord.eligible ? "Evidencia congelada al cerrar la ronda. Estimación local, no oficial." : indexRecord.reasons.map((reason) => BACKYARD_INDEX_REASON_LABELS[reason]).join(" ")}</p>{indexRecord.pccKind === "DECLARED_LOCAL_ZERO" && <p>PCC 0 declarado localmente. No es un PCC oficial publicado.</p>}</details></section>}
     <section className="card historicalHero">
       <div>

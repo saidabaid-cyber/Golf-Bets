@@ -6,6 +6,8 @@ import type { SocialActivityCard, SocialActivityPage, SocialActivityPreferences,
 import { socialErrorMessage, socialRequest } from "../../lib/social-activity-client";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import styles from "./cloud-social-activity.module.css";
+import { RoundParticipationCard } from "./round-participation-card";
+import { useBackyardAccount } from "./account-provider";
 
 const preferenceLabels: Array<[keyof Omit<SocialActivityPreferences, "updatedAt">, string]> = [
   ["enabledForFriends", "Permitir que mis amigos vean la actividad que elija compartir"],
@@ -118,9 +120,11 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
   </article>;
 }
 
-const notificationLabels: Record<SocialNotification["type"], string> = { like: "Recibiste un like", comment: "Nuevo comentario", attest: "Un compañero atestó tu tarjeta", friend_achievement: "Un amigo consiguió un logro", equipment: "Un amigo actualizó su bolsa", friend_request: "Nueva solicitud de amistad" };
+const notificationLabels: Record<SocialNotification["type"], string> = { like: "Recibiste un like", comment: "Nuevo comentario", attest: "Un compañero atestó tu tarjeta", friend_achievement: "Un amigo consiguió un logro", equipment: "Un amigo actualizó su bolsa", friend_request: "Nueva solicitud de amistad", round_started: "Un compañero inició una ronda contigo · Ver ronda", scorecard_ready: "Registraron tu tarjeta · Revisar tarjeta" };
 
 export function CloudSocialNotifications({ viewerId, accessToken, onFriends, onReadChange }: { viewerId: string; accessToken?: string; onFriends?: () => void; onReadChange?: () => void }) {
+  const { retryCloudSync } = useBackyardAccount();
+  const [selectedRound, setSelectedRound] = useState<string | null>(null);
   const [items, setItems] = useState<SocialNotification[]>([]);
   const [message, setMessage] = useState("");
   const [selected, setSelected] = useState<SocialActivityCard | null>(null);
@@ -142,12 +146,14 @@ export function CloudSocialNotifications({ viewerId, accessToken, onFriends, onR
         const read = await socialRequest<SocialNotificationPage>("/api/social/notifications", accessToken, { method: "PATCH", body: { id: item.id, read: true } });
         if (live.current) { setItems(read.data); onReadChange?.(); }
         if (item.type === "friend_request") { onFriends?.(); return; }
+        if (item.type === "round_started" || item.type === "scorecard_ready") { if (live.current) { setSelected(null); setSelectedRound(item.activityId); } return; }
         const result = await socialRequest<{ data: SocialActivityCard }>(`/api/social/activity/${encodeURIComponent(item.activityId)}`, accessToken);
         if (live.current) setSelected(result.data);
       })()
         .catch((error) => { if (live.current) setMessage(socialErrorMessage(error)); })
         .finally(() => { if (live.current) setBusy(false); });
     }}><b>{!item.readAt && "● "}{notificationLabels[item.type]}</b><small>{dateLabel(item.createdAt)} · {item.readAt ? "Leída" : "Sin leer"}</small></button>)}
+    {selectedRound && <><button type="button" className="secondary" onClick={() => setSelectedRound(null)}>Cerrar tarjeta compartida</button><RoundParticipationCard key={selectedRound} accessToken={accessToken} roundId={selectedRound} onConfirmed={async () => { await retryCloudSync(); await refresh(); onReadChange?.(); }} /></>}
     {selected && <><button type="button" className="secondary" onClick={() => setSelected(null)}>Cerrar tarjeta</button><SocialRoundActivityCard key={selected.id} card={selected} viewerId={viewerId} accessToken={accessToken} onRefresh={async () => {
       const result = await socialRequest<{ data: SocialActivityCard }>(`/api/social/activity/${encodeURIComponent(selected.id)}`, accessToken);
       if (live.current) setSelected(result.data); await refresh();
