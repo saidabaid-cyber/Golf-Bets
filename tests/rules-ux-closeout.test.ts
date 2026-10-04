@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { runInNewContext } from "node:vm";
 import test from "node:test";
 import ts from "typescript";
@@ -76,6 +77,7 @@ function harness({ courseName = "La Vista", deferredSearch = false } = {}) {
   };
   const panel = load("app/components/rules-panel.tsx", {
     react, fetch: fetcher, window: browser,
+    "next/image": (props: Record<string, unknown>) => jsx("img", props),
     "../../lib/rules-catalog": catalog, "../../lib/rules-navigation": navigation, "../../lib/rules-documents": documents,
     "../../lib/local-rules": local, "../../lib/speech-dictation": speech,
     "../../lib/gentlemen-code": { GENTLEMEN_CODE: [], GENTLEMEN_CODE_DISCLAIMER: "No oficial", GENTLEMEN_CODE_FINAL_QUOTE: "" },
@@ -116,7 +118,7 @@ test("bunker topic opens an internal situation, videos precede the related rule,
   assert.match(h.text(), /La bola en un búnker/);
   assert.ok(h.text().indexOf("Videos") < h.text().indexOf("Regla relacionada"));
   assert.match(h.text(), /Regla 12.2/);
-  h.click("Abrir referencia ↗"); assert.ok(h.nodes().some(node => node.props.id === "rule-detail-title"));
+  h.click("Abrir referencia →"); assert.ok(h.nodes().some(node => node.props.id === "rule-detail-title"));
   h.click("← Búnker"); assert.match(h.text(), /Resumen de la situación/);
   h.click("← Reglas"); assert.match(h.text(), /Temas principales/); assert.equal(h.history.length, 1);
 });
@@ -129,8 +131,8 @@ test("every situation uses existing subrules and verified official-playlist vide
     const h = harness(); const card = h.nodes().find(node => node.props.className === "situationCard" && text(node).includes(situation.title))!;
     (card.props.onClick as () => void)(); h.render();
     const videos = h.nodes().filter(node => node.type === "a");
-    assert.deepEqual([...new Set(videos.map(node => node.props.href))].sort(), catalog.RULE_SITUATION_VIDEOS[situation.id].map(video => `https://www.youtube.com/shorts/${video.id}`).sort());
-    assert.ok(h.text().indexOf("Videos") < h.text().indexOf("Regla relacionada"));
+    assert.deepEqual(videos.map(node => node.props.href).sort(), catalog.RULE_SITUATION_VIDEOS[situation.id].map(video => `https://www.youtube.com/shorts/${video.id}`).sort(), "Each catalog video appears exactly once");
+    assert.ok(h.text().indexOf("Videos") < h.text().indexOf("Resumen de la situación"));
   }
 });
 
@@ -172,18 +174,108 @@ test("premium Home has the requested AI copy, disclaimer and exclusive local pho
   for (const name of ["ai-hero", "bunker", "bounds", "penalty", "relief", "obstruction", "lost-ball", "drop"]) assert.ok(readFileSync(`public/rules/${name}.webp`).length > 0);
 });
 
-test("premium bunker has a recommended video, three real clips, accurate summary and the existing official reference", () => {
+test("premium bunker retains its photograph, recommended video, two remaining clips and official reference", () => {
   const h = harness(); h.click("Búnker");
   assert.equal(h.nodes().filter(node => node.props.className === "recommendedVideo").length, 1);
   const clips = h.nodes().find(node => node.props.className === "miniClips")!;
-  assert.equal(nodes(clips).filter(node => node.type === "a").length, 3);
-  assert.match(h.text(), /VIDEO RECOMENDADO/); assert.match(h.text(), /Regla 19.3/);
+  assert.equal(nodes(clips).filter(node => node.type === "a").length, 2);
+  assert.match(h.text(), /VIDEO RECOMENDADO/); assert.match(h.text(), /Bola injugable en el búnker/);
+  assert.ok(h.nodes().some(node => node.type === "img" && node.props.src === "/rules/bunker.webp"));
   for (const duration of ["0:53", "0:35", "0:48"]) assert.ok(h.text().includes(duration));
-  for (const label of ["Qué significa", "Qué sí puedes hacer", "Qué no puedes hacer", "Cuándo aplica penalidad"]) assert.ok(h.text().includes(label));
-  assert.match(h.text(), /dos golpes en stroke play o pérdida del hoyo en match play/);
-  assert.match(h.text(), /retirar impedimentos sueltos y obstrucciones movibles/);
+  for (const label of ["Qué significa", "Qué puedes hacer", "Qué debes evitar", "Penalidad / qué ocurre después"]) assert.ok(h.text().includes(label));
+  assert.match(h.text(), /La infracción a las restricciones de 12.2 puede implicar penalidad general/);
+  assert.match(h.text(), /Retirar impedimentos sueltos y obstrucciones movibles/);
   assert.doesNotMatch(h.text(), /No puedes tocar la arena con la mano o el palo antes de golpear/);
-  h.click("Abrir referencia ↗"); assert.ok(h.nodes().some(node => node.props.id === "rule-detail-title"));
+  h.click("Abrir referencia →"); assert.ok(h.nodes().some(node => node.props.id === "rule-detail-title"));
+});
+
+const situationPhotos: Record<string, string> = { bunker: "bunker", out_of_bounds: "bounds", lost_ball: "lost-ball", free_relief: "relief", penalty_area: "penalty", obstructions: "obstruction", drop: "drop" };
+const situationPrompts: Record<string, string> = {
+  bunker: "Quiero una explicación más simple sobre qué puedo hacer en un búnker y cuándo hay penalidad.",
+  out_of_bounds: "Explícame de forma sencilla qué debo hacer cuando mi bola está fuera de límites.",
+  lost_ball: "Explícame de forma sencilla qué debo hacer si no encuentro mi bola y cuándo se considera perdida.",
+  free_relief: "Explícame cuándo tengo alivio sin penalidad y cómo debo proceder.",
+  penalty_area: "Explícame mis opciones cuando mi bola entra en un área de penalidad.",
+  obstructions: "Ayúdame a distinguir una obstrucción movible de una inamovible y qué alivio permite la regla.",
+  drop: "Explícame paso a paso cómo debo dropar correctamente una bola.",
+};
+function openSituation(h: ReturnType<typeof harness>, situation: catalog.RuleSituation) {
+  const card = h.nodes().find(node => node.props.className === "situationCard" && text(node).includes(situation.title))!;
+  assert.ok(card, situation.id); (card.props.onClick as () => void)(); h.render();
+}
+
+for (const situation of catalog.RULES_COMMON_SITUATIONS) {
+  test(`${situation.id}: shared premium detail, exact catalog content, no duplicate videos or unverified durations`, () => {
+    const h = harness(); openSituation(h, situation);
+    assert.equal(h.nodes()[0].props.className, "scope situationDetail");
+    const heading = h.nodes().find(node => node.props.className === "situationHeading")!;
+    assert.equal(text(nodes(heading).find(node => node.type === "h2")), situation.title);
+    assert.equal(text(nodes(heading).find(node => node.type === "p")), situation.description);
+    const photo = h.nodes().find(node => node.type === "img")!;
+    assert.equal(photo.props.src, `/rules/${situationPhotos[situation.id]}.webp`);
+    assert.equal(photo.props.fill, true); assert.equal(photo.props.alt, situation.title);
+    const videos = catalog.RULE_SITUATION_VIDEOS[situation.id];
+    const recommended = h.nodes().filter(node => node.props.className === "recommendedVideo");
+    assert.equal(recommended.length, 1);
+    const expectedRecommended = videos[situation.id === "bunker" ? 1 : 0];
+    assert.equal(recommended[0].props.href, `https://www.youtube.com/shorts/${expectedRecommended.id}`);
+    assert.ok(text(recommended[0]).includes(expectedRecommended.displayTitle));
+    assert.ok(text(recommended[0]).includes(expectedRecommended.description));
+    assert.ok(text(recommended[0]).includes("YouTube | Reglas de Golf · USGA"));
+    const clips = h.nodes().find(node => node.props.className === "miniClips");
+    assert.equal(Boolean(clips), videos.length > 1, "Single-video screens have no empty clip container");
+    assert.equal(clips ? nodes(clips).filter(node => node.type === "a").length : 0, videos.length - 1);
+    const durationBadges = h.nodes().filter(node => node.props.className === "duration");
+    assert.deepEqual(durationBadges.map(text).sort(), videos.flatMap(video => video.duration ? [video.duration] : []).sort());
+    for (const video of h.nodes().filter(node => node.type === "a")) {
+      const id = String(video.props.href).split("/").at(-1);
+      const source = videos.find(entry => entry.id === id)!; assert.ok(source, "USGA video source integrity");
+      assert.equal(video.props.title, source.title);
+      const thumb = nodes(video).find(node => /Thumb$/.test(String(node.props.className)))!;
+      assert.equal((thumb.props.style as { backgroundImage: string }).backgroundImage, `url(https://i.ytimg.com/vi/${source.id}/hqdefault.jpg)`);
+    }
+    const summary = h.nodes().find(node => node.props.className === "situationSummary")!;
+    assert.equal(nodes(summary).filter(node => node.props.className === "summaryRow").length, 4);
+    for (const reference of situation.references) {
+      const { chapter, section } = navigation.findNavigableRule(reference)!;
+      for (const source of [section?.summary || chapter.summary, chapter.allows, chapter.forbids, section?.penalty || "La consecuencia depende de los hechos y de la modalidad. Confírmala en la fuente oficial antes de aplicarla."]) assert.ok(text(summary).includes(source), `${reference}: summary uses indexed source verbatim`);
+    }
+    const references = h.nodes().filter(node => node.props.className === "situationReference");
+    assert.equal(references.length, situation.references.length);
+    for (const [index, reference] of situation.references.entries()) {
+      assert.ok(text(references[index]).replace(/\s+/g, " ").includes(`Regla ${reference}`));
+      assert.ok(text(references[index]).includes(navigation.findNavigableRule(reference)!.section!.title));
+    }
+    const rendered = h.text();
+    assert.ok(rendered.indexOf("Videos") < rendered.indexOf("Resumen de la situación"));
+    assert.ok(rendered.indexOf("Resumen de la situación") < rendered.indexOf("Reglas de golf".toUpperCase()));
+    assert.ok(rendered.lastIndexOf("Texto oficial, aclaraciones y diagramas.") < rendered.indexOf("¿Quieres una explicación más simple?"));
+    h.click("← Reglas"); assert.match(h.text(), /Temas principales/); assert.equal(h.history.length, 1);
+  });
+
+  test(`${situation.id}: official reference buttons and contextual AI reuse current Rules navigation`, async () => {
+    const h = harness(); await h.settle(); openSituation(h, situation);
+    for (const reference of situation.references) {
+      const card = h.nodes().find(node => node.props.className === "situationReference" && text(node).replace(/\s+/g, " ").includes(`Regla ${reference}`))!;
+      const button = nodes(card).find(node => node.type === "button")!;
+      (button.props.onClick as () => void)(); h.render();
+      const heading = h.nodes().find(node => node.props.id === "rule-detail-title")!;
+      assert.ok(text(heading).includes(navigation.findNavigableRule(reference)!.section!.title));
+      h.click(situation.id === "bunker" ? "← Búnker" : "← Situación");
+      assert.equal(h.nodes()[0].props.className, "scope situationDetail");
+    }
+    h.click("Preguntar ahora"); await h.settle();
+    assert.equal(h.nodes().find(node => node.props.id === "rules-question")!.props.value, situationPrompts[situation.id]);
+    assert.equal(h.history.length, 1); assert.equal(h.aiRequests.length, 0);
+    assert.match(h.text(), /La IA puede equivocarse y no sustituye la regla oficial/);
+    assert.match(h.text(), /Comité o árbitro oficial tiene la decisión final/);
+  });
+}
+
+test("approved Rules Home and Más recursos render code is unchanged from base 60467ee", () => {
+  const source = readFileSync("app/components/rules-panel.tsx", "utf8").replace(/\r\n/g, "\n");
+  const home = source.slice(source.lastIndexOf('  return <div className={`rulesHome'));
+  assert.equal(createHash("sha256").update(home).digest("hex"), "23b1ac2f5b1fbdd2c552d6abf1925b49dc55b32d0eee592348aebab704aa7083");
 });
 
 test("hero and bunker AI CTAs open the same Rules form without sending a question automatically", async () => {
