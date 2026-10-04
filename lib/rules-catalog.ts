@@ -36,16 +36,18 @@ export type RuleSituationVideo = {
   title: string;
   displayTitle: string;
   description: string;
+  duration?: string;
 };
 
 // IDs and exact titles observed in OFFICIAL_RULES_VIDEOS_URL on 2026-10-03.
-// Spanish display titles describe that same subject. Durations were not visible.
+// Spanish display titles describe that same subject. Bunker durations were
+// verified in the official YouTube player on 2026-10-03; other durations stay unset.
 // Lost-ball clips concern the search itself, not a replacement for Rule 18.2.
 export const RULE_SITUATION_VIDEOS: Readonly<Record<string, readonly RuleSituationVideo[]>> = {
   bunker: [
-    { id: "fc0yMbViP4Q", title: "Water in the bunker? Here's how to handle | USGA Rules of Golf", displayTitle: "Agua en el búnker", description: "Cómo proceder cuando hay agua en el búnker." },
-    { id: "AnnGid9b-Ms", title: "Unplayable ball in a bunker? Here's all 4️⃣ options to know! #golf", displayTitle: "Bola injugable en el búnker", description: "Las cuatro opciones de alivio para esta situación." },
-    { id: "8hqhJDFwVNg", title: "Putt into a bunker? Remember: stroke-and-distance relief is always an option — even from the green.", displayTitle: "Del green al búnker", description: "La opción de alivio por golpe y distancia." },
+    { id: "fc0yMbViP4Q", title: "Water in the bunker? Here's how to handle | USGA Rules of Golf", displayTitle: "Agua en el búnker", description: "Cómo proceder cuando hay agua en el búnker.", duration: "0:53" },
+    { id: "AnnGid9b-Ms", title: "Unplayable ball in a bunker? Here's all 4️⃣ options to know! #golf", displayTitle: "Bola injugable en el búnker", description: "Las cuatro opciones de alivio para esta situación.", duration: "0:35" },
+    { id: "8hqhJDFwVNg", title: "Putt into a bunker? Remember: stroke-and-distance relief is always an option — even from the green.", displayTitle: "Del green al búnker", description: "La opción de alivio por golpe y distancia.", duration: "0:48" },
   ],
   out_of_bounds: [
     { id: "JdeUClv-nMY", title: "Blast one OB? Use stroke and distance to your advantage! | USGA Rules of Golf", displayTitle: "Bola fuera de límites", description: "Cómo usar la opción de golpe y distancia." },

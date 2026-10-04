@@ -24,6 +24,7 @@ function text(value: unknown): string {
   if (value == null || typeof value === "boolean") return "";
   if (typeof value !== "object") return String(value);
   const node = value as Node;
+  if (node.props?.["aria-hidden"]) return "";
   return typeof node.type === "function" ? text(node.type(node.props)) : text(node.props?.children);
 }
 function load(file: string, dependencies: Record<string, unknown>) {
@@ -116,8 +117,8 @@ test("bunker topic opens an internal situation, videos precede the related rule,
   assert.ok(h.text().indexOf("Videos") < h.text().indexOf("Regla relacionada"));
   assert.match(h.text(), /Regla 12.2/);
   h.click("Abrir referencia ↗"); assert.ok(h.nodes().some(node => node.props.id === "rule-detail-title"));
-  h.click("← Búnker"); assert.match(h.text(), /Situación común/);
-  h.click("← Búnker"); assert.match(h.text(), /Temas principales/); assert.equal(h.history.length, 1);
+  h.click("← Búnker"); assert.match(h.text(), /Resumen de la situación/);
+  h.click("← Reglas"); assert.match(h.text(), /Temas principales/); assert.equal(h.history.length, 1);
 });
 
 test("every situation uses existing subrules and verified official-playlist videos", () => {
@@ -128,7 +129,7 @@ test("every situation uses existing subrules and verified official-playlist vide
     const h = harness(); const card = h.nodes().find(node => node.props.className === "situationCard" && text(node).includes(situation.title))!;
     (card.props.onClick as () => void)(); h.render();
     const videos = h.nodes().filter(node => node.type === "a");
-    assert.deepEqual(videos.map(node => node.props.href), catalog.RULE_SITUATION_VIDEOS[situation.id].map(video => `https://www.youtube.com/shorts/${video.id}`));
+    assert.deepEqual([...new Set(videos.map(node => node.props.href))].sort(), catalog.RULE_SITUATION_VIDEOS[situation.id].map(video => `https://www.youtube.com/shorts/${video.id}`).sort());
     assert.ok(h.text().indexOf("Videos") < h.text().indexOf("Regla relacionada"));
   }
 });
@@ -151,8 +152,54 @@ test("video metadata matches the IDs and titles captured from the official playl
   ]);
   const videos = Object.values(catalog.RULE_SITUATION_VIDEOS).flat();
   assert.equal(videos.length, verified.size);
-  for (const video of videos) { assert.equal(video.title, verified.get(video.id)); assert.ok(!("duration" in video)); }
+  const durations = new Map([["fc0yMbViP4Q", "0:53"], ["AnnGid9b-Ms", "0:35"], ["8hqhJDFwVNg", "0:48"]]);
+  for (const video of videos) { assert.equal(video.title, verified.get(video.id)); assert.equal(video.duration, durations.get(video.id)); }
   assert.match(catalog.OFFICIAL_RULES_VIDEOS_URL, /PLnU5qUEfww3dYQwcnZ5qoGAlwzGRtghdA/);
+});
+
+test("premium Home has the requested AI copy, disclaimer and exclusive local photography", () => {
+  const h = harness();
+  assert.match(h.text(), /REGLAS DE GOLF, MÁS CLARAS/);
+  assert.match(h.text(), /Pregúntale al juez de Reglas Backyard IA/);
+  assert.match(h.text(), /Resuelve dudas de reglas y situaciones del campo en segundos\./);
+  assert.match(h.text(), /La IA puede equivocarse\. Verifica la regla oficial\./);
+  assert.ok(h.text().indexOf("Pregúntale al juez") < h.text().indexOf("Temas principales"));
+  for (const node of h.nodes().filter(node => node.props.className === "situationThumb")) {
+    assert.match((node.props.style as { backgroundImage: string }).backgroundImage, /^url\(\/rules\/(?!ai-hero)/);
+  }
+  const css = readFileSync("app/components/rules-panel.module.css", "utf8");
+  assert.equal(css.match(/url\('\/rules\/ai-hero.webp'\)/g)?.length, 2, "Only hero and Bolas use the branded photo");
+  for (const name of ["ai-hero", "bunker", "bounds", "penalty", "relief", "obstruction", "lost-ball", "drop"]) assert.ok(readFileSync(`public/rules/${name}.webp`).length > 0);
+});
+
+test("premium bunker has a recommended video, three real clips, accurate summary and the existing official reference", () => {
+  const h = harness(); h.click("Búnker");
+  assert.equal(h.nodes().filter(node => node.props.className === "recommendedVideo").length, 1);
+  const clips = h.nodes().find(node => node.props.className === "miniClips")!;
+  assert.equal(nodes(clips).filter(node => node.type === "a").length, 3);
+  assert.match(h.text(), /VIDEO RECOMENDADO/); assert.match(h.text(), /Regla 19.3/);
+  for (const duration of ["0:53", "0:35", "0:48"]) assert.ok(h.text().includes(duration));
+  for (const label of ["Qué significa", "Qué sí puedes hacer", "Qué no puedes hacer", "Cuándo aplica penalidad"]) assert.ok(h.text().includes(label));
+  assert.match(h.text(), /dos golpes en stroke play o pérdida del hoyo en match play/);
+  assert.match(h.text(), /retirar impedimentos sueltos y obstrucciones movibles/);
+  assert.doesNotMatch(h.text(), /No puedes tocar la arena con la mano o el palo antes de golpear/);
+  h.click("Abrir referencia ↗"); assert.ok(h.nodes().some(node => node.props.id === "rule-detail-title"));
+});
+
+test("hero and bunker AI CTAs open the same Rules form without sending a question automatically", async () => {
+  const h = harness(); await h.settle(); h.click("Preguntar a la IA");
+  assert.ok(h.nodes().some(node => node.props.id === "rules-question"));
+  assert.match(h.text(), /La IA puede equivocarse y no sustituye la regla oficial/);
+  assert.equal(h.aiRequests.length, 0);
+  const detail = harness(); await detail.settle(); detail.click("Búnker"); detail.click("Preguntar ahora"); await detail.settle();
+  assert.ok(detail.nodes().some(node => node.props.id === "rules-question"));
+  assert.equal(detail.history.length, 1);
+  assert.equal(detail.aiRequests.length, 0);
+  detail.change("rules-question", "¿Qué puedo hacer antes del golpe en el búnker?");
+  const form = detail.nodes().find(node => node.type === "form")!;
+  await (form.props.onSubmit as (event: unknown) => Promise<void>)({ preventDefault() {} }); await detail.settle();
+  assert.equal(detail.aiRequests[0].endpoint, "/api/rules/ask");
+  assert.equal(detail.aiRequests[0].body.courseName, "La Vista");
 });
 
 test("Ver todos shows only actual catalog categories and a selected topic uses the current search", async () => {

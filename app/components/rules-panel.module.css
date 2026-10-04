@@ -78,6 +78,101 @@
 .allTopics > button > span:nth-child(2) { flex: 1; min-width: 0; }
 .allTopics b { display: block; font-size: 13px; }
 .allTopics small { display: block; margin-top: 4px; font-size: 11px; color: #6b776f; }
+
+/* Editorial surfaces are exclusive to RulesPanel. */
+.scope .aiHero { position: relative; isolation: isolate; overflow: hidden; min-height: 226px; padding: 19px 16px 16px; border-radius: 15px; background: #123e2b url('/rules/ai-hero.webp') 68% center / cover no-repeat; color: #fff; }
+.aiHero::before { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, #032e20e6, #082d2070 54%, transparent 80%); }
+.aiHeroContent { width: 70%; max-width: 380px; }
+.aiEyebrow { display: block; margin-bottom: 8px; color: #e7c56d; font-size: 8px; font-weight: 700; letter-spacing: 1.4px; line-height: 1.4; }
+.scope .aiHero h2 { margin: 0 0 8px; color: #fff; font: 600 23px/1.06 Georgia, serif; letter-spacing: -.5px; }
+.aiHero h2 em { color: #f1d17e; font-style: normal; }
+.scope .aiHeroContent p { margin: 0 0 13px; color: #f4f5e9; font-size: 11px; line-height: 1.45; max-width: 220px; }
+.scope .aiHero button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 8px 14px; border: 0; border-radius: 22px; background: #f2ce75; color: #143322; font: 600 13px/1.2 Georgia, serif; box-shadow: 0 3px 14px #00271933; }
+.scope .aiHero button svg { width: 17px; height: 17px; }
+.aiHero button > span { margin-left: 5px; font: 22px/1 Arial, sans-serif; }
+.scope .aiHeroQuote { position: absolute; right: 11px; top: 17px; width: 76px; margin: 0; text-align: center; color: #fff9e7; font: italic 12px/1.35 Georgia, serif; text-shadow: 0 1px 4px #062417; transform: rotate(-5deg); }
+.scope .aiDisclaimer { margin: 8px 0 11px; text-align: center; color: #5f716b; font-size: 9px; line-height: 1.4; }
+.scope .aiNotice { padding: 10px 12px; border: 1px solid #e4dcc8; border-radius: 10px; background: #faf7ed; color: #4a5b4d; font-size: 12px; line-height: 1.5; }
+.scope:global(.rulesHome) :global(.rulesSearchField) { min-height: 46px; border-radius: 22px; box-shadow: 0 2px 8px #143e2810; }
+.scope:global(.rulesHome) :global(.rulesSearchField) input { font-size: 14px; }
+.scope:global(.rulesHome) :global(.rulesHomeSectionTitle) h2, .scope:global(.rulesHome) :global(.rulesCommon) h2 { font-size: 23px; letter-spacing: -.5px; }
+.scope:global(.rulesHome) :global(.rulesTopicGrid) { gap: 5px; }
+.scope:global(.rulesHome) :global(.rulesTopicGrid) button { justify-content: flex-start; min-height: 95px; gap: 7px; }
+.scope:global(.rulesHome) :global(.rulesTopicGrid) button > .topicPhoto { width: min(64px, 100%); height: auto; aspect-ratio: 1; border: 3px solid #e5dfcb; border-radius: 50%; background-color: #e5eadf; background-repeat: no-repeat; background-size: cover; background-position: center; box-shadow: 0 2px 4px #163d2410; }
+.scope:global(.rulesHome) :global(.rulesTopicGrid) button > .brandedBall { background-image: url('/rules/ai-hero.webp'); background-size: 340% auto; background-position: 90% 76%; }
+.scope:global(.rulesHome) :global(.rulesTopicGrid) button > .bunker { background-position: 78% center; }
+.scope:global(.rulesHome) :global(.rulesTopicGrid) button > .bounds { background-position: 34% center; }
+.scope:global(.rulesHome) :global(.rulesTopicGrid) button > .penalty { background-position: 19% center; }
+.scope:global(.rulesHome) :global(.rulesTopicGrid) b { font: 600 11px/1.15 Georgia, serif; }
+.scope .situationCard { min-height: 60px; padding: 3px 10px 3px 3px; gap: 10px; border-color: #e7e8df; box-shadow: 0 1px 3px #123d2410; }
+.scope .situationCard b { font: 600 14px/1.2 Georgia, serif; }
+.scope .situationCard small { margin-top: 3px; font-size: 10px; line-height: 1.3; }
+.situationThumb { position: relative; width: 94px; height: 52px; background-position: center; background-size: cover; overflow: hidden; }
+.scope .playOverlay { display: grid; place-items: center; width: 28px; height: 28px; border: 1.5px solid #fff; border-radius: 50%; background: #0c2f21b3; color: #fff; box-shadow: 0 1px 5px #08261940; }
+.scope .playOverlay svg { width: 13px; height: 13px; fill: currentColor; stroke-width: 0; margin-left: 2px; }
+.scope:global(.rulesHome) :global(.rulesPromise) { margin: 15px 0; padding: 14px 12px; background: #f7f7f0; }
+.scope:global(.rulesHome) :global(.rulesPromise) b { font-size: 16px; }
+
+.bunkerDetail { padding-bottom: 10px; }
+.scope.bunkerDetail .back { margin-bottom: 0; font-size: 13px; min-height: 36px; }
+.scope .bunkerHeading h2 { margin: 0 0 6px; font: 600 29px/1.08 Georgia, serif; letter-spacing: -.8px; }
+.scope .bunkerHeading p { margin: 0 0 12px; color: #3f5b4d; font-size: 14px; line-height: 1.4; }
+.bunkerPhoto { position: relative; height: 173px; margin: 0 0 10px; border-radius: 14px; overflow: hidden; background: #d8d9c3 url('/rules/bunker.webp') center / cover no-repeat; }
+.bunkerPhoto::before { content: ''; position: absolute; inset: 45% 0 0; background: linear-gradient(0deg, #1d251a8c, transparent); }
+.bunkerPhoto figcaption { position: absolute; bottom: 13px; left: 13px; color: #fff; font: 500 13px/1.2 Georgia, serif; text-shadow: 0 1px 3px #203325; }
+.bunkerVideos { margin: 0 0 12px; }
+.recommendedVideo { display: grid; grid-template-columns: 43% 1fr; gap: 10px; padding: 6px; border: 1px solid #e4e7dd; border-radius: 12px; background: #f7f8f1; color: #173d2b; text-decoration: none; }
+.recommendedThumb { display: grid; position: relative; place-items: center; min-height: 134px; border-radius: 8px; background-position: center; background-size: cover; }
+.scope .recommendedThumb .playOverlay { width: 39px; height: 39px; }
+.scope .recommendedThumb .playOverlay svg { width: 19px; height: 19px; }
+.recommendedContent { display: flex; flex-direction: column; gap: 5px; justify-content: center; min-width: 0; padding: 3px 3px 3px 0; }
+.editorialLabel { display: inline-block; align-self: flex-start; padding: 3px 6px; border-radius: 9px; background: #e5eddf; color: #2e5941; font-size: 7px; font-weight: 700; letter-spacing: 1px; line-height: 1.3; }
+.recommendedContent > b { font: 600 17px/1.08 Georgia, serif; }
+.recommendedContent > span:not(.videoAction) { color: #506659; font-size: 10px; line-height: 1.3; }
+.videoSource { color: #486251; font-size: 8px; line-height: 1.4; }
+.videoAction { display: block; padding: 7px 9px; border-radius: 18px; background: #124c33; color: #fff; font-size: 11px; line-height: 1.3; text-align: center; }
+.scope .duration { position: absolute; right: 4px; bottom: 4px; padding: 2px 4px; margin: 0; border-radius: 3px; background: #10261de6; color: #fff; font-size: 9px; font-weight: 600; line-height: 1.2; }
+.miniClips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }
+.miniClips > a { padding: 3px 3px 7px; border: 1px solid #e8e9e0; border-radius: 8px; background: #fafbf6; color: #173d2b; text-decoration: none; }
+.clipThumb { position: relative; display: grid; place-items: center; height: 64px; margin-bottom: 5px; border-radius: 5px; background-position: center; background-size: cover; }
+.scope .clipThumb .playOverlay { width: 22px; height: 22px; }
+.scope .clipThumb .playOverlay svg { width: 10px; height: 10px; }
+.miniClips b { display: block; margin: 0 2px 3px; font-size: 10px; line-height: 1.2; }
+.miniClips > a > small { display: block; margin: 0 2px; color: #637064; font-size: 9px; line-height: 1.25; }
+.bunkerSummary { margin: 0 0 10px; padding: 12px 10px 5px; border: 1px solid #e6e8dc; border-radius: 13px; background: #fafbf5; }
+.scope .bunkerSummary h2 { margin: 0 0 4px; font: 600 22px/1.2 Georgia, serif; letter-spacing: -.4px; }
+.scope .bunkerSummary button { display: flex; align-items: center; gap: 9px; width: 100%; min-height: 68px; padding: 8px 0; border: 0; border-bottom: 1px solid #e9eadf; border-radius: 0; background: transparent; color: #284d38; text-align: left; font: inherit; }
+.scope .bunkerSummary button:last-child { border-bottom: 0; }
+.bunkerSummary button > span:nth-child(2) { flex: 1; min-width: 0; }
+.bunkerSummary button > span:last-child { font-size: 22px; }
+.bunkerSummary b { display: block; font-size: 11px; line-height: 1.3; }
+.bunkerSummary small { display: block; margin-top: 3px; color: #576859; font-size: 10px; line-height: 1.4; }
+.summaryIcon { display: grid; flex-shrink: 0; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #e2ecdc; color: #215539; }
+.scope .summaryIcon svg { width: 19px; height: 19px; }
+.summaryIcon.check { background: #256a3f; color: #fff; }
+.summaryIcon.ban { background: #f6e4df; color: #b35039; }
+.summaryIcon.penalty { background: #f1e6bd; color: #886b2d; }
+.bunkerReference { display: flex; align-items: center; gap: 11px; margin: 0 0 10px; padding: 13px 11px; border: 1px solid #e3e7da; border-radius: 13px; background: #f8f9f2; }
+.bunkerReference > div { flex: 1; min-width: 0; }
+.bunkerReference b { display: block; margin: 4px 0 2px; color: #2c543c; font-size: 11px; }
+.scope .bunkerReference h3 { margin: 0; font: 600 17px/1.2 Georgia, serif; }
+.bunkerReference p { margin: 3px 0 9px; color: #5e7160; font-size: 10px; }
+.scope .bunkerReference button { min-height: 36px; padding: 7px 13px; border: 0; border-radius: 20px; background: #164e35; color: #fff; font: inherit; font-size: 11px; }
+.bunkerAi { display: flex; align-items: center; gap: 9px; padding: 11px 9px; border: 1px solid #e3e7da; border-radius: 13px; background: #fafbf5; }
+.bunkerAi > div { flex: 1; min-width: 0; }
+.scope .bunkerAi .smallVisual { width: 32px; height: 32px; }
+.scope .bunkerAi .smallVisual svg { width: 21px; height: 21px; }
+.scope .bunkerAi h3 { margin: 0 0 3px; font: 600 12px/1.2 Georgia, serif; }
+.bunkerAi p { margin: 0; color: #657566; font-size: 10px; }
+.scope .bunkerAi button { flex-shrink: 0; min-height: 36px; padding: 7px 9px; border: 1px solid #aebead; border-radius: 20px; background: transparent; color: #254d36; font: inherit; font-size: 10px; }
+@media (min-width: 600px) {
+  .scope .aiHero { min-height: 290px; padding: 28px; }
+  .scope .aiHero h2 { font-size: 34px; }
+  .scope .aiHeroContent p { font-size: 14px; max-width: 330px; }
+  .scope .aiHeroQuote { right: 30px; top: 25px; width: 140px; font-size: 18px; }
+  .bunkerPhoto { height: 260px; }
+  .clipThumb { height: 110px; }
+}
 @media (max-width: 360px) {
   .heroVisual { width: 86px; }
   .scope .situationHero h2 { font-size: 21px; }

@@ -31,7 +31,7 @@ import { BackyardIcon } from "./backyard-icon";
 import { BottomBackAction } from "./bottom-back-action";
 import styles from "./rules-panel.module.css";
 
-type RuleVisualKind = RuleSituation["visual"] | "book" | "search" | "play";
+type RuleVisualKind = RuleSituation["visual"] | "book" | "search" | "play" | "check" | "ban";
 
 function RuleVisual({ kind }: { kind: RuleVisualKind }) {
   if (kind === "ball") return <BackyardIcon name="ball" />;
@@ -45,6 +45,8 @@ function RuleVisual({ kind }: { kind: RuleVisualKind }) {
     book: "M12 5c-3-2-7-2-10-1v16c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1Zm0 0v16",
     search: "M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0Zm-1 5 6 6",
     play: "m9 5 10 7-10 7V5Z",
+    check: "m5 12 4 4L19 6",
+    ban: "M20 12a8 8 0 1 1-16 0 8 8 0 0 1 16 0ZM6 6l12 12",
   };
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[kind]} /></svg>;
 }
@@ -70,6 +72,19 @@ function RulesDisclosure({ id, title, icon = "score", open, onToggle, children }
 type DictationTarget = "search" | "question";
 type RuleDetail = { chapter: NavigableGolfRule; section: NavigableRuleSection };
 type RulesHomeView = { kind: "topics" } | { kind: "situation"; situation: RuleSituation };
+
+const SITUATION_PHOTOS: Record<string, string> = {
+  bunker: "bunker", out_of_bounds: "bounds", lost_ball: "lost-ball", free_relief: "relief",
+  penalty_area: "penalty", obstructions: "obstruction", drop: "drop",
+};
+
+// Practical paraphrases of R&A 12.1/12.2; touching sand is not a blanket prohibition.
+const BUNKER_SUMMARY: readonly { title: string; text: string; icon: RuleVisualKind; reference: string }[] = [
+  { title: "Qué significa", text: "La bola está en el búnker cuando toca la arena dentro de su margen, o reposa en los supuestos de la Regla 12.1.", icon: "search", reference: "12.1" },
+  { title: "Qué sí puedes hacer", text: "Puedes jugarla como está, retirar impedimentos sueltos y obstrucciones movibles, y afirmar los pies para tomar tu stance. El alivio depende de la regla aplicable.", icon: "check", reference: "12.2" },
+  { title: "Qué no puedes hacer", text: "No pruebes la arena, ni la toques con el palo justo delante o detrás de la bola, en un swing de práctica o en el backswing. No mejores las condiciones del golpe.", icon: "ban", reference: "12.2" },
+  { title: "Cuándo aplica penalidad", text: "Por infringir 12.2: penalidad general, dos golpes en stroke play o pérdida del hoyo en match play. Otras situaciones tienen sus propias penalidades.", icon: "penalty", reference: "12.2" },
+];
 
 const CLARIFICATION_RULES = new Set([4, 5, 8, 10, 11, 14, 16, 25]);
 
@@ -130,6 +145,7 @@ export function RulesPanel({
   const recognitionRef = useRef<ReturnType<typeof createDictationSession> | null>(null);
   const askInFlight = useRef(false);
   const pendingQuestion = useRef("");
+  const pendingAiNavigation = useRef(false);
   const localRulesApply = isLaVistaCourse(courseName);
   const hasQuery = query.trim().length > 0;
   useEffect(() => {
@@ -191,6 +207,13 @@ export function RulesPanel({
     return () => { window.clearTimeout(timer); controller.abort(); };
   }, [query]);
 
+  useEffect(() => {
+    if (!pendingAiNavigation.current || detail) return;
+    if (homeView) { setHomeView(null); return; }
+    pendingAiNavigation.current = false;
+    scrollToSection("preguntar-ia");
+  }, [detail, homeView, setHomeView]);
+
   function toggleDictation(target: DictationTarget) {
     if (listeningTarget) { recognitionRef.current?.stop(); setListeningTarget(null); return; }
     const Recognition = speechRecognitionConstructor(window as typeof window & Parameters<typeof speechRecognitionConstructor>[0]);
@@ -218,8 +241,10 @@ export function RulesPanel({
   function prepareAi(prompt = query) {
     if (prompt.trim()) setQuestion(prompt.trim());
     setOpenSections(current => ({ ...current, resources: true, ai: true }));
-    setDetail(null);
-    scrollToSection("preguntar-ia");
+    pendingAiNavigation.current = true;
+    if (detail) setDetail(null);
+    else if (homeView) setHomeView(null);
+    else { pendingAiNavigation.current = false; scrollToSection("preguntar-ia"); }
   }
 
   function openRuleReference(reference: string, sourceId: OfficialRulesDocument["id"] = "official-guide-part-1", page?: number) {
@@ -352,6 +377,33 @@ export function RulesPanel({
   if (homeView?.kind === "situation") {
     const situation = homeView.situation;
     const videos = RULE_SITUATION_VIDEOS[situation.id] || [];
+    if (situation.id === "bunker") {
+      const recommended = videos[1];
+      const rule = findNavigableRule("12.2");
+      const clips = [
+        { video: videos[0], title: "Qué sí puedes hacer", description: "Alivio cuando hay agua en el búnker." },
+        { video: videos[1], title: "Penalidades", description: "Bola injugable: cuatro opciones de alivio." },
+        { video: videos[2], title: "Ejemplo rápido", description: "Del green al búnker: golpe y distancia." },
+      ];
+      return <div className={`${styles.scope} ${styles.bunkerDetail}`}>
+        <button type="button" className={styles.back} onClick={() => setHomeView(null)}>← Reglas</button>
+        <header className={styles.bunkerHeading}><h2>La bola en un búnker</h2><p>Qué se puede y qué no se puede hacer, y cuándo hay penalidad.</p></header>
+        <figure className={styles.bunkerPhoto} role="img" aria-label="Bola de golf en la arena de un búnker"><figcaption>El conocimiento también<br />te lleva más lejos.</figcaption></figure>
+        <section className={styles.bunkerVideos} aria-labelledby="situation-videos-title">
+          <h2 id="situation-videos-title" className="srOnly">Videos</h2>
+          {recommended && <a className={styles.recommendedVideo} href={`https://www.youtube.com/shorts/${recommended.id}`} target="_blank" rel="noreferrer" title={recommended.title}>
+            <span className={styles.recommendedThumb} style={{ backgroundImage: `url(https://i.ytimg.com/vi/${recommended.id}/hqdefault.jpg)` }}><span className={styles.playOverlay}><RuleVisual kind="play" /></span><small className={styles.duration}>{recommended.duration}</small></span>
+            <span className={styles.recommendedContent}><small className={styles.editorialLabel}>VIDEO RECOMENDADO</small><b>La bola en un búnker</b><span>Opciones de alivio para una bola injugable. Regla 19.3.</span><small className={styles.videoSource}>YouTube | Reglas de Golf · USGA</small><span className={styles.videoAction}>Ver video →</span></span>
+          </a>}
+          <div className={styles.miniClips}>{clips.map(({ video, title, description }) => video && <a key={video.id} href={`https://www.youtube.com/shorts/${video.id}`} target="_blank" rel="noreferrer" title={video.title}>
+            <span className={styles.clipThumb} style={{ backgroundImage: `url(https://i.ytimg.com/vi/${video.id}/hqdefault.jpg)` }}><span className={styles.playOverlay}><RuleVisual kind="play" /></span><small className={styles.duration}>{video.duration}</small></span><b>{title}</b><small>{description}</small>
+          </a>)}</div>
+        </section>
+        <section className={styles.bunkerSummary} aria-labelledby="bunker-summary-title"><h2 id="bunker-summary-title">Resumen de la situación</h2>{BUNKER_SUMMARY.map(item => <button type="button" key={item.title} onClick={() => openRuleReference(item.reference)}><span className={`${styles.summaryIcon} ${styles[item.icon]}`}><RuleVisual kind={item.icon} /></span><span><b>{item.title}</b><small>{item.text}</small></span><span aria-hidden="true">›</span></button>)}</section>
+        {rule?.section && <section className={styles.bunkerReference} aria-labelledby="situation-rules-title"><h2 id="situation-rules-title" className="srOnly">Regla relacionada</h2><span className={styles.smallVisual}><RuleVisual kind="book" /></span><div><small className={styles.editorialLabel}>REGLAS DE GOLF</small><b>Regla {rule.section.number}</b><h3>{rule.section.title}</h3><p>Texto oficial, aclaraciones y diagramas.</p><button type="button" onClick={() => openRuleReference("12.2")}>Abrir referencia ↗</button></div></section>}
+        <section className={styles.bunkerAi}><span className={styles.smallVisual}><BackyardIcon name="spark" /></span><div><h3>¿Quieres una explicación más simple?</h3><p>Pregúntale a la IA.</p></div><button type="button" onClick={() => prepareAi("Quiero una explicación más simple de la Regla 12.2: qué puedo hacer en un búnker y cuándo hay penalidad.")}>Preguntar ahora</button></section>
+      </div>;
+    }
     return <div className={`${styles.scope} ${styles.situationView}`}>
       <button type="button" className={styles.back} onClick={() => setHomeView(null)}>← {situation.id === "bunker" ? "Búnker" : "Reglas"}</button>
       <section className={styles.situationHero} aria-labelledby="situation-title">
@@ -377,6 +429,9 @@ export function RulesPanel({
   }
 
   return <div className={`rulesHome ${styles.scope}`}>
+    {!hasQuery && <><section className={styles.aiHero} aria-labelledby="rules-ai-hero-title">
+      <div className={styles.aiHeroContent}><span className={styles.aiEyebrow}>REGLAS DE GOLF, MÁS CLARAS</span><h2 id="rules-ai-hero-title">Pregúntale al juez de Reglas <em>Backyard IA</em></h2><p>Resuelve dudas de reglas y situaciones del campo en segundos.</p><button type="button" onClick={() => prepareAi("")}><BackyardIcon name="spark" />Preguntar a la IA<span aria-hidden="true">›</span></button></div><p className={styles.aiHeroQuote}>El golf se disfruta más cuando sabes las reglas.</p>
+    </section><p className={styles.aiDisclaimer}>ⓘ La IA puede equivocarse. Verifica la regla oficial.</p></>}
 <section className="rulesSearchHero" id="buscar-regla">
       <label className="srOnly" htmlFor="rules-search">Buscar en las Reglas</label>
       <div className="rulesSearchField">
@@ -411,14 +466,15 @@ export function RulesPanel({
         const situation = RULES_COMMON_SITUATIONS.find(entry => entry.id === topic.situation);
         if (situation) setHomeView({ kind: "situation", situation });
         else setQuery(topic.query || topic.label);
-      }}><span><RuleVisual kind={topic.visual as RuleVisualKind} /></span><b>{topic.label}</b></button>)}</div></section>
-      <section className="rulesCommon" aria-labelledby="rules-common-title"><h2 id="rules-common-title">Situaciones comunes</h2>{RULES_COMMON_SITUATIONS.map(situation => <button type="button" className={styles.situationCard} key={situation.id} onClick={() => setHomeView({ kind: "situation", situation })}><span className={styles.situationThumb}><RuleVisual kind={situation.visual} /></span><span><b>{situation.title}</b><small>{situation.description}</small></span><span aria-hidden="true">›</span></button>)}</section>
+      }}><span className={`${styles.topicPhoto} ${topic.visual === "ball" ? styles.brandedBall : styles[topic.visual]}`} style={topic.visual === "ball" ? undefined : { backgroundImage: `url(/rules/${topic.visual}.webp)` }} aria-hidden="true" /><b>{topic.label}</b></button>)}</div></section>
+      <section className="rulesCommon" aria-labelledby="rules-common-title"><h2 id="rules-common-title">Situaciones comunes</h2>{RULES_COMMON_SITUATIONS.map(situation => <button type="button" className={styles.situationCard} key={situation.id} onClick={() => setHomeView({ kind: "situation", situation })}><span className={styles.situationThumb} style={{ backgroundImage: `url(/rules/${SITUATION_PHOTOS[situation.id]}.webp)` }} aria-hidden="true">{RULE_SITUATION_VIDEOS[situation.id]?.length > 0 && <span className={styles.playOverlay}><RuleVisual kind="play" /></span>}</span><span><b>{situation.title}</b><small>{situation.description}</small></span><span aria-hidden="true">›</span></button>)}</section>
       <aside className="rulesPromise"><span className={styles.smallVisual}><RuleVisual kind="book" /></span><p><b>Reglas explicadas, juego más simple.</b><br />Respuestas claras para que disfrutes más el golf.</p></aside>
     </>}
     <RulesDisclosure id="rules-more-resources" title="Más recursos" open={Boolean(openSections.resources)} onToggle={() => toggleSection("resources")}>
     <RulesDisclosure id="preguntar-ia" title="Preguntar a la IA" icon="spark" open={Boolean(openSections.ai)} onToggle={() => toggleSection("ai")}>
 <section className="card">
       <div className="sectionTitle"><div><h2>Preguntar a la IA</h2><p>{localRulesApply ? "Consulta fuentes oficiales y las Reglas Locales aplicables." : "Consulta Guía Oficial, Procedimientos y Aclaraciones sin asumir Reglas Locales."}</p></div><span className={`statusPill ${aiState === "ready" ? "ready" : ""}`}>{aiState === "checking" ? "Verificando…" : aiState === "ready" ? "IA activa" : aiState === "disabled" ? "IA no activada" : aiState === "unavailable" ? "Estado no disponible" : "Falta configuración"}</span></div>
+      <p className={styles.aiNotice}>La IA puede equivocarse y no sustituye la regla oficial. Verifica la regla oficial.</p>
       <form onSubmit={ask}>
         <label htmlFor="rules-question">Describe qué pasó</label>
         <div className="dictationField"><textarea id="rules-question" rows={4} maxLength={1200} value={question} placeholder="Mi bola está fuera del camino pero mis pies están sobre el camino…" onChange={(event) => setQuestion(event.target.value)} /><button type="button" className={`dictationButton ${listeningTarget === "question" ? "listening" : ""}`} aria-pressed={listeningTarget === "question"} aria-label={listeningTarget === "question" ? "Detener dictado" : "Iniciar dictado"} onClick={() => toggleDictation("question")}>{listeningTarget === "question" ? "🔴 Detener" : "🎙"}</button></div>
