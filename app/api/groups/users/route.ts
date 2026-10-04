@@ -3,6 +3,7 @@ import { authenticatedRequest } from "../../../../lib/server-auth";
 import { isolatedPreviewDatabaseEnabled } from "../../../../lib/preview-database";
 import { BACKYARD_AI_PRIVATE_HEADERS, isCrossSiteRequest } from "../../../../lib/backyard-ai/server/http-security";
 import { normalizeSocialDirectoryQuery } from "../../../../features/social/domain";
+import { getSupabaseAdmin } from "../../../../lib/supabase/server";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -31,7 +32,12 @@ export async function GET(request: NextRequest) {
   // friends-only discovery. Reuse the existing identity-card privacy gate.
   if (!query.includes("@")) {
     const literal = query.replace(/[\\%_]/g, value => `\\${value}`);
-    const candidates = await bounded(account.client.from("social_profiles").select("user_id")
+    // RLS intentionally permits direct reads only for self/friends. Candidate
+    // IDs use the existing DEV server client; each identity is then authorized
+    // by the caller's card RPC, including lifecycle and both blocking directions.
+    const directory = getSupabaseAdmin("cloud");
+    if (!directory) throw new Error("GROUP_LOOKUP_UNAVAILABLE");
+    const candidates = await bounded(directory.from("social_profiles").select("user_id")
       .eq("privacy", "PUBLIC").neq("user_id", account.userId).ilike("display_name", `%${literal}%`)
       .order("display_name").limit(20).abortSignal(AbortSignal.timeout(8_000)));
     if (candidates.error) return NextResponse.json({ error: "No pudimos buscar usuarios. Intenta nuevamente." }, { status: 503, headers });

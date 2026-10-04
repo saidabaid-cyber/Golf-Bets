@@ -45,7 +45,7 @@ export async function verifyPersistentDevUniverse(env = process.env, { fetcher =
   const pass = label => { report.testResults[label]="PASS"; };
   for (const [index,account] of accounts.entries()) {
     const other=accounts[(index+1)%accounts.length];
-    for (const query of [other.name,other.key,`@${other.key}`]) {
+    for (const query of [other.name.split(" ")[1],other.name,other.key,`@${other.key}`]) {
       const found=(await app(account,`/api/groups/users?q=${encodeURIComponent(query)}`)).users;
       assert.ok(found.some(u=>u.user_id===other.id),"QA_SEARCH_NOT_FOUND");
       assert.ok(found.every(u=>Object.keys(u).every(k=>["user_id","username","display_name","avatar_url","is_friend"].includes(k))),"DIRECTORY_PRIVATE_FIELDS");

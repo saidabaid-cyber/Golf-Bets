@@ -45,7 +45,7 @@ function harness(route:"invitations"|"users"="invitations",options:Options={}) {
       if(id==="next/server")return{NextResponse:Response};
       if(id.endsWith("/server-auth"))return{authenticatedRequest:async(request:Request)=>{authCalls++;if(options.authThrows)throw new Error("private authentication secret");if(options.authNever)return new Promise(()=>{});return options.authMissing||!request.headers.get("authorization")?{ok:false,status:401,error:"Inicia sesión."}:{ok:true,userId:OWNER,client:{rpc:rpc(false),from}};}};
       if(id.endsWith("/preview-database"))return{isolatedPreviewDatabaseEnabled:()=>options.qa!==false};
-      if(id.endsWith("/supabase/server"))return{getSupabaseAdmin:()=>({rpc:rpc(true)})};
+      if(id.endsWith("/supabase/server"))return{getSupabaseAdmin:()=>({rpc:rpc(true),from})};
       if(id.endsWith("/frequent-templates"))return templates;
       if(id.endsWith("/group-invitations"))return invitations;
       if(id.endsWith("/features/social/domain"))return socialDomain;
