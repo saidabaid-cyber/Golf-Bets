@@ -12,6 +12,65 @@ export const OFFICIAL_RULES_SPANISH_URL = "https://www.usga.org/content/usga/hom
 export const OFFICIAL_RULES_VIDEOS_URL = "https://youtube.com/playlist?list=PLnU5qUEfww3dYQwcnZ5qoGAlwzGRtghdA&si=QuhRbedq6dIFrouW";
 export const OFFICIAL_RULES_VIDEOS_EMBED_URL = "https://www.youtube-nocookie.com/embed/videoseries?list=PLnU5qUEfww3dYQwcnZ5qoGAlwzGRtghdA";
 
+export type RuleSituation = {
+  id: string;
+  title: string;
+  description: string;
+  visual: "bunker" | "bounds" | "ball" | "relief" | "penalty" | "obstruction" | "drop";
+  references: readonly string[];
+};
+
+// References resolve through the existing official rule navigation; no new rule text.
+export const RULES_COMMON_SITUATIONS: readonly RuleSituation[] = [
+  { id: "bunker", title: "La bola en un búnker", description: "Qué se puede y qué no se puede hacer", visual: "bunker", references: ["12.2"] },
+  { id: "out_of_bounds", title: "Bola fuera de límites", description: "Reglas y opciones de alivio", visual: "bounds", references: ["18.2"] },
+  { id: "lost_ball", title: "Bola perdida", description: "Qué hacer paso a paso", visual: "ball", references: ["18.2"] },
+  { id: "free_relief", title: "Alivio sin penalidad", description: "Condiciones anormales del campo", visual: "relief", references: ["16.1"] },
+  { id: "penalty_area", title: "Zona de penalidad", description: "Agua y áreas designadas", visual: "penalty", references: ["17.1"] },
+  { id: "obstructions", title: "Obstrucciones", description: "Fijas y movibles", visual: "obstruction", references: ["15.2", "16.1"] },
+  { id: "drop", title: "Procedimiento de drop", description: "Cómo y dónde dropar", visual: "drop", references: ["14.3"] },
+];
+
+export type RuleSituationVideo = {
+  id: string;
+  title: string;
+  displayTitle: string;
+  description: string;
+};
+
+// IDs and exact titles observed in OFFICIAL_RULES_VIDEOS_URL on 2026-10-03.
+// Spanish display titles describe that same subject. Durations were not visible.
+// Lost-ball clips concern the search itself, not a replacement for Rule 18.2.
+export const RULE_SITUATION_VIDEOS: Readonly<Record<string, readonly RuleSituationVideo[]>> = {
+  bunker: [
+    { id: "fc0yMbViP4Q", title: "Water in the bunker? Here's how to handle | USGA Rules of Golf", displayTitle: "Agua en el búnker", description: "Cómo proceder cuando hay agua en el búnker." },
+    { id: "AnnGid9b-Ms", title: "Unplayable ball in a bunker? Here's all 4️⃣ options to know! #golf", displayTitle: "Bola injugable en el búnker", description: "Las cuatro opciones de alivio para esta situación." },
+    { id: "8hqhJDFwVNg", title: "Putt into a bunker? Remember: stroke-and-distance relief is always an option — even from the green.", displayTitle: "Del green al búnker", description: "La opción de alivio por golpe y distancia." },
+  ],
+  out_of_bounds: [
+    { id: "JdeUClv-nMY", title: "Blast one OB? Use stroke and distance to your advantage! | USGA Rules of Golf", displayTitle: "Bola fuera de límites", description: "Cómo usar la opción de golpe y distancia." },
+  ],
+  lost_ball: [
+    { id: "5iUHimssIcM", title: "Can you use a leaf blower to help find your ball? | USGA Rules of Golf", displayTitle: "Qué puedes usar para buscar la bola", description: "Un caso sobre el uso de un soplador durante la búsqueda." },
+    { id: "V-fwJ24Bv_4", title: "If your ball gets moved while searching for it, what's the ruling? Here's what you need to know 🔍", displayTitle: "La bola se mueve durante la búsqueda", description: "Qué ocurre cuando se mueve al intentar encontrarla." },
+  ],
+  free_relief: [
+    { id: "PHazBcxF1BE", title: "Ground Under Repair in Golf. It doesn’t have to be marked! | USGA Rules of Golf", displayTitle: "Terreno en reparación", description: "Un caso en el que el terreno no está marcado." },
+    { id: "LKpWHNQ8kh4", title: "Can you get free relief if your stance is impacted by ground under repair? 🤔 #golf", displayTitle: "El terreno afecta tu stance", description: "Alivio por interferencia de terreno en reparación." },
+  ],
+  penalty_area: [
+    { id: "kybhVYoXVNU", title: "So you've hit it into a penalty area... What next? Here's your options for relief #golf", displayTitle: "Opciones en un área de penalidad", description: "Qué opciones tienes después de enviar la bola al área." },
+    { id: "Br6WklZdIuo", title: "Know the difference between red and yellow penalty areas 🔴🟡", displayTitle: "Áreas rojas y amarillas", description: "La diferencia entre los dos tipos de área de penalidad." },
+  ],
+  obstructions: [
+    { id: "1E72iqJqu6Y", title: "Movable Obstruction vs. Immovable Obstruction | USGA Rules of Golf", displayTitle: "Obstrucciones movibles e inamovibles", description: "Cómo distinguir estos dos tipos de obstrucción." },
+    { id: "7neAG_Xni8I", title: "What's the difference between loose impediments and movable obstrucitons?", displayTitle: "Impedimentos sueltos y obstrucciones", description: "La diferencia entre impedimentos y obstrucciones movibles." },
+  ],
+  drop: [
+    { id: "CHJ3ZOs-DxA", title: "Here’s the right way to drop a ball in golf | USGA Rules of Golf", displayTitle: "Cómo dropar una bola", description: "La forma correcta de realizar el drop." },
+  ],
+};
+
 export const golfRulesCatalog: GolfRuleEntry[] = [
   {
     id: "abnormal-course-conditions",

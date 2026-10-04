@@ -12,6 +12,10 @@ import {
   OFFICIAL_RULES_URL,
   OFFICIAL_RULES_VIDEOS_EMBED_URL,
   OFFICIAL_RULES_VIDEOS_URL,
+  golfRulesCatalog,
+  RULES_COMMON_SITUATIONS,
+  RULE_SITUATION_VIDEOS,
+  type RuleSituation,
 } from "../../lib/rules-catalog";
 import { OFFICIAL_RULES_DOCUMENTS, type OfficialRulesDocument } from "../../lib/rules-documents";
 import { findNavigableRule, NAVIGABLE_GOLF_RULES, searchNavigableRules, type NavigableGolfRule, type NavigableRuleSection } from "../../lib/rules-navigation";
@@ -25,6 +29,36 @@ import { useSecondaryView } from "./use-secondary-view";
 import type { LocalRule } from "../../lib/types";
 import { BackyardIcon } from "./backyard-icon";
 import { BottomBackAction } from "./bottom-back-action";
+import styles from "./rules-panel.module.css";
+
+type RuleVisualKind = RuleSituation["visual"] | "book" | "search" | "play";
+
+function RuleVisual({ kind }: { kind: RuleVisualKind }) {
+  if (kind === "ball") return <BackyardIcon name="ball" />;
+  const paths: Record<Exclude<RuleVisualKind, "ball">, string> = {
+    bunker: "M3 17c0-3 18-3 18 0s-18 3-18 0Zm7-3V9a3 3 0 0 1 6 0v5",
+    bounds: "M6 21V3m0 0h12l-3 4 3 4H6",
+    relief: "M3 20h18M8 20c0-6-1-9-3-12m7 12V5m4 15c0-5 2-8 4-10",
+    penalty: "m12 3 10 18H2L12 3Zm0 6v5m0 3h.01",
+    obstruction: "M5 4h5v16H5zM16 8h5v12h-5M3 21h19",
+    drop: "M15 3v6m-4-6v6m-4-6v8c0 4 2 6 5 6h5l4-7-3-1-3 4M8 21h.01",
+    book: "M12 5c-3-2-7-2-10-1v16c3-1 7-1 10 1 3-2 7-2 10-1V4c-3-1-7-1-10 1Zm0 0v16",
+    search: "M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0Zm-1 5 6 6",
+    play: "m9 5 10 7-10 7V5Z",
+  };
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[kind]} /></svg>;
+}
+
+function resultVisual(reference: string): RuleVisualKind {
+  const chapter = findNavigableRule(reference)?.chapter.number;
+  if (chapter === "12") return "bunker";
+  if (chapter === "14") return "drop";
+  if (chapter === "15") return "obstruction";
+  if (chapter === "16") return "relief";
+  if (chapter === "17") return "penalty";
+  if (chapter === "18") return "bounds";
+  return chapter && ["4", "6", "7", "9"].includes(chapter) ? "ball" : "book";
+}
 
 function RulesDisclosure({ id, title, icon = "score", open, onToggle, children }: { id: string; title: string; icon?: "spark" | "players" | "score"; open: boolean; onToggle: () => void; children: ReactNode }) {
   return <section className="rulesDisclosure" id={id}>
@@ -35,6 +69,7 @@ function RulesDisclosure({ id, title, icon = "score", open, onToggle, children }
 
 type DictationTarget = "search" | "question";
 type RuleDetail = { chapter: NavigableGolfRule; section: NavigableRuleSection };
+type RulesHomeView = { kind: "topics" } | { kind: "situation"; situation: RuleSituation };
 
 const CLARIFICATION_RULES = new Set([4, 5, 8, 10, 11, 14, 16, 25]);
 
@@ -76,6 +111,7 @@ export function RulesPanel({
   const [searching, setSearching] = useState(false);
   const [expandedRule, setExpandedRule] = useState<string | null>(null);
   const [detail, setDetail] = useSecondaryView<RuleDetail>("rulesDetail");
+  const [homeView, setHomeView] = useSecondaryView<RulesHomeView>("rulesHomeView");
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [answerEvidence, setAnswerEvidence] = useState<RulesEvidenceReference[]>([]);
@@ -84,7 +120,7 @@ export function RulesPanel({
   const [showConsent, setShowConsent] = useState(false);
   const [accountConsentRequired, setAccountConsentRequired] = useState(false);
   const [aiState, setAiState] = useState<"checking" | "ready" | "disabled" | "missing_config" | "unavailable">("checking");
-  const [dictationSupported, setDictationSupported] = useState<boolean | null>(null);
+  const [, setDictationSupported] = useState<boolean | null>(null);
   const [listeningTarget, setListeningTarget] = useState<DictationTarget | null>(null);
   const [dictationMessage, setDictationMessage] = useState("");
   const [selectedDocument, setSelectedDocument] = useSecondaryView<OfficialRulesDocument>("rulesDocument");
@@ -95,6 +131,7 @@ export function RulesPanel({
   const askInFlight = useRef(false);
   const pendingQuestion = useRef("");
   const localRulesApply = isLaVistaCourse(courseName);
+  const hasQuery = query.trim().length > 0;
   useEffect(() => {
     if (!active) {
       recognitionRef.current?.dispose();
@@ -180,7 +217,7 @@ export function RulesPanel({
 
   function prepareAi(prompt = query) {
     if (prompt.trim()) setQuestion(prompt.trim());
-    setOpenSections(current => ({ ...current, ai: true }));
+    setOpenSections(current => ({ ...current, resources: true, ai: true }));
     setDetail(null);
     scrollToSection("preguntar-ia");
   }
@@ -194,7 +231,7 @@ export function RulesPanel({
       return;
     }
     if (location?.chapter) {
-      setOpenSections(current => ({ ...current, directory: true }));
+      setOpenSections(current => ({ ...current, resources: true, directory: true }));
       setExpandedRule(location.chapter.number);
       scrollToSection(`regla-${location.chapter.number}`);
       return;
@@ -205,6 +242,15 @@ export function RulesPanel({
 
   function toggleSection(key: string) {
     setOpenSections(current => ({ ...current, [key]: !current[key] }));
+  }
+
+  function clearSearch() {
+    setQuery("");
+    setResults([]);
+    setSearching(false);
+    setVisibleResults(20);
+    setExpandedRule(null);
+    setOpenSections(current => ({ ...current, resources: false, directory: false }));
   }
 
   async function requestRulesAnswer(nextQuestion = pendingQuestion.current) {
@@ -271,7 +317,7 @@ export function RulesPanel({
 
   if (detail) return <>
     <header className="rulesPageHeader">
-      <button className="rulesBackButton" onClick={closeRuleDetail}>← Regresar a Regla {detail.chapter.number}</button>
+      <button className="rulesBackButton" onClick={closeRuleDetail}>{homeView?.kind === "situation" ? `← ${homeView.situation.id === "bunker" ? "Búnker" : "Situación"}` : `← Regresar a Regla ${detail.chapter.number}`}</button>
       <div><span>THE BACKYARD</span><h1>Reglas de Golf</h1></div>
     </header>
     <section className="card ruleDetail" aria-labelledby="rule-detail-title">
@@ -291,31 +337,68 @@ export function RulesPanel({
         <a className="secondary" href={detail.chapter.sourceUrl} target="_blank" rel="noreferrer">Ver fuente oficial ↗</a>
       </div>
       <div className="notice">Resumen práctico de THE BACKYARD. En competencia, el Comité o árbitro oficial tiene la decisión final.</div>
-      <BottomBackAction label={`← Regresar a Regla ${detail.chapter.number}`} onBack={closeRuleDetail} />
+      <BottomBackAction label={homeView?.kind === "situation" ? `← ${homeView.situation.id === "bunker" ? "Búnker" : "Situación"}` : `← Regresar a Regla ${detail.chapter.number}`} onBack={closeRuleDetail} />
     </section>
   </>;
 
-  return <div className="rulesHome">
+  if (homeView?.kind === "topics") return <div className={styles.scope}>
+    <button type="button" className={styles.back} onClick={() => setHomeView(null)}>← Reglas</button>
+    <section className={styles.allTopics} aria-labelledby="all-rules-topics-title">
+      <h2 id="all-rules-topics-title">Todos los temas</h2>
+      {golfRulesCatalog.map(topic => <button type="button" key={topic.id} onClick={() => { setHomeView(null); setQuery(`Regla ${topic.rule}`); }}><span className={styles.smallVisual}><RuleVisual kind={resultVisual(topic.rule)} /></span><span><b>{topic.title}</b><small>Regla {topic.rule}</small></span><span aria-hidden="true">›</span></button>)}
+    </section>
+  </div>;
+
+  if (homeView?.kind === "situation") {
+    const situation = homeView.situation;
+    const videos = RULE_SITUATION_VIDEOS[situation.id] || [];
+    return <div className={`${styles.scope} ${styles.situationView}`}>
+      <button type="button" className={styles.back} onClick={() => setHomeView(null)}>← {situation.id === "bunker" ? "Búnker" : "Reglas"}</button>
+      <section className={styles.situationHero} aria-labelledby="situation-title">
+        <span className={styles.heroVisual}><RuleVisual kind={situation.visual} /></span>
+        <div><h2 id="situation-title">{situation.title}</h2><p>{situation.description}</p><span className={styles.situationBadge}><RuleVisual kind="ball" />Situación común</span></div>
+      </section>
+      <section className={styles.situationVideos} aria-labelledby="situation-videos-title">
+        <h2 id="situation-videos-title">Videos</h2>
+        {videos.length ? videos.map(video => <a className={styles.videoCard} key={video.id} href={`https://www.youtube.com/shorts/${video.id}`} target="_blank" rel="noreferrer" title={video.title}>
+          <span className={styles.videoThumb} style={{ backgroundImage: `url(https://i.ytimg.com/vi/${video.id}/hqdefault.jpg)` }} aria-hidden="true"><span><RuleVisual kind="play" /></span></span>
+          <span><b>{video.displayTitle}</b><small>{video.description}</small></span><span aria-hidden="true">›</span>
+        </a>) : <a className={styles.videoCard} href={OFFICIAL_RULES_VIDEOS_URL} target="_blank" rel="noreferrer"><span className={styles.smallVisual}><RuleVisual kind="play" /></span><b>Ver videos relacionados de Reglas</b><span aria-hidden="true">›</span></a>}
+      </section>
+      <section className={styles.relatedRules} aria-labelledby="situation-rules-title">
+        <h2 id="situation-rules-title">Regla relacionada</h2>
+        {situation.references.map(reference => {
+          const rule = findNavigableRule(reference);
+          if (!rule?.section) return null;
+          return <article className={styles.relatedCard} key={reference}><span className={styles.smallVisual}><RuleVisual kind="book" /></span><div><small>Regla {rule.section.number}</small><h3>{rule.section.title}</h3><p>{rule.section.summary || rule.chapter.summary}</p><button type="button" onClick={() => openRuleReference(reference)}>Abrir referencia ↗</button></div></article>;
+        })}
+      </section>
+    </div>;
+  }
+
+  return <div className={`rulesHome ${styles.scope}`}>
 <section className="rulesSearchHero" id="buscar-regla">
       <label className="srOnly" htmlFor="rules-search">Buscar en las Reglas</label>
       <div className="rulesSearchField">
-        <span className="rulesSearchIcon" aria-hidden="true">⌕</span>
+        <span className="rulesSearchIcon" aria-hidden="true"><RuleVisual kind="search" /></span>
         <input id="rules-search" type="search" autoComplete="off" value={query} placeholder="Buscar una regla, situación o palabra clave…" onChange={(event) => setQuery(event.target.value)} />
+        {hasQuery && <button type="button" className={styles.clearSearch} aria-label="Limpiar búsqueda" onClick={clearSearch}><span aria-hidden="true">×</span></button>}
       </div>
-      {dictationSupported === false && <div className="rulesSearchStatus">{DICTATION_FALLBACK}</div>}
-      {dictationMessage && dictationSupported !== false && <div className="rulesSearchStatus" role="status">{dictationMessage}</div>}
     </section>
-{query && <section className="card rulesSearchResults" aria-live="polite">
+{hasQuery && <section className="card rulesSearchResults" aria-live="polite">
       <div className="sectionTitle"><div><h2>Resultados</h2><p>Búsqueda local en Reglas, Procedimientos del Comité y Aclaraciones 2026.</p></div>{searching && <span className="statusPill">Buscando…</span>}</div>
       {!searching && !results.length && <div className="empty">No hay una coincidencia suficiente para “{query}”. <button className="textButton" onClick={() => prepareAi(query)}>Preguntar a IA</button></div>}
       <div className="rulesResults">{results.slice(0, visibleResults).map((entry) => <article className="ruleResult" key={entry.id}>
         <button className="ruleResultOpen" onClick={() => openRuleReference(entry.rule, entry.sourceId, entry.page)}>
+          <span className={styles.resultVisual}><RuleVisual kind={resultVisual(entry.rule)} /></span>
+          <span className={styles.resultContent}>
           <span className={`rulesSourceBadge ${entry.documentType}`}>{resultLabel(entry.documentType)}</span>
           <b>{entry.rule === "Fuente oficial" ? entry.rule : `Regla ${entry.rule}`}</b>
           <h3>{entry.title}</h3>
           <p>{entry.explanation}</p>
           <small>{entry.source}{entry.page ? ` · p. ${entry.page}` : ""}</small>
           <span className="ruleOpenLabel">Abrir referencia →</span>
+          </span>
         </button>
       </article>)}</div>
       {results.length > visibleResults && <button className="secondary big" onClick={() => setVisibleResults(count => count + 20)}>Mostrar más · {visibleResults} de {results.length} coincidencias</button>}
@@ -323,9 +406,16 @@ export function RulesPanel({
       {!searching && <div className="rulesAiFallback"><span>¿No encontraste lo que buscabas?</span><button className="textButton" onClick={() => prepareAi(query)}>Preguntar a IA</button></div>}
     </section>}
 
-    <section className="rulesTopics" aria-labelledby="rules-topics-title"><div className="rulesHomeSectionTitle"><h2 id="rules-topics-title">Temas principales</h2><button type="button" onClick={() => { setOpenSections(current => ({ ...current, directory: true })); document.getElementById("reglamento-navegable")?.scrollIntoView({ block: "start" }); }}>Ver todos ›</button></div><div className="rulesTopicGrid">{[{ label: "Bolas", icon: "ball" }, { label: "Alivio", icon: "approach" }, { label: "Búnker", icon: "bunker" }, { label: "Fuera de límites", icon: "strategy" }, { label: "Penalidades", icon: "score" }].map(topic => <button type="button" key={topic.label} onClick={() => setQuery(topic.label)}><span><BackyardIcon name={topic.icon as "ball" | "approach" | "bunker" | "strategy" | "score"} /></span><b>{topic.label}</b></button>)}</div></section>
-    <section className="rulesCommon" aria-labelledby="rules-common-title"><h2 id="rules-common-title">Situaciones comunes</h2>{[{ label: "Bola en búnker", reference: "12.2", icon: "bunker" }, { label: "Bola fuera de límites", reference: "18.2", icon: "strategy" }, { label: "Bola perdida", reference: "18.2", icon: "ball" }, { label: "Alivio sin penalidad", reference: "16.1", icon: "approach" }, { label: "Zona de penalidad", reference: "17.1", icon: "flag" }, { label: "Obstrucciones", reference: "16.1", icon: "club" }, { label: "Procedimiento de drop", reference: "14.3", icon: "score" }].map(situation => <button type="button" key={situation.label} onClick={() => openRuleReference(situation.reference)}><span className="rulesSituationIcon"><BackyardIcon name={situation.icon as "bunker" | "strategy" | "ball" | "approach" | "flag" | "club" | "score"} /></span><span><b>{situation.label}</b><small>Regla {situation.reference} · Ver referencia</small></span><span aria-hidden="true">›</span></button>)}</section>
-    <aside className="rulesPromise"><BackyardIcon name="score" /><p><b>Reglas explicadas, juego más simple.</b><br />Consulta las fuentes y juega con confianza.</p></aside>
+    {!hasQuery && <>
+      <section className="rulesTopics" aria-labelledby="rules-topics-title"><div className="rulesHomeSectionTitle"><h2 id="rules-topics-title">Temas principales</h2><button type="button" onClick={() => setHomeView({ kind: "topics" })}>Ver todos ›</button></div><div className="rulesTopicGrid">{[{ label: "Bolas", visual: "ball", query: "bola" }, { label: "Alivio", visual: "relief", query: "alivio" }, { label: "Búnker", visual: "bunker", situation: "bunker" }, { label: "Fuera de límites", visual: "bounds", situation: "out_of_bounds" }, { label: "Penalidades", visual: "penalty", query: "penalidad" }].map(topic => <button type="button" key={topic.label} onClick={() => {
+        const situation = RULES_COMMON_SITUATIONS.find(entry => entry.id === topic.situation);
+        if (situation) setHomeView({ kind: "situation", situation });
+        else setQuery(topic.query || topic.label);
+      }}><span><RuleVisual kind={topic.visual as RuleVisualKind} /></span><b>{topic.label}</b></button>)}</div></section>
+      <section className="rulesCommon" aria-labelledby="rules-common-title"><h2 id="rules-common-title">Situaciones comunes</h2>{RULES_COMMON_SITUATIONS.map(situation => <button type="button" className={styles.situationCard} key={situation.id} onClick={() => setHomeView({ kind: "situation", situation })}><span className={styles.situationThumb}><RuleVisual kind={situation.visual} /></span><span><b>{situation.title}</b><small>{situation.description}</small></span><span aria-hidden="true">›</span></button>)}</section>
+      <aside className="rulesPromise"><span className={styles.smallVisual}><RuleVisual kind="book" /></span><p><b>Reglas explicadas, juego más simple.</b><br />Respuestas claras para que disfrutes más el golf.</p></aside>
+    </>}
+    <RulesDisclosure id="rules-more-resources" title="Más recursos" open={Boolean(openSections.resources)} onToggle={() => toggleSection("resources")}>
     <RulesDisclosure id="preguntar-ia" title="Preguntar a la IA" icon="spark" open={Boolean(openSections.ai)} onToggle={() => toggleSection("ai")}>
 <section className="card">
       <div className="sectionTitle"><div><h2>Preguntar a la IA</h2><p>{localRulesApply ? "Consulta fuentes oficiales y las Reglas Locales aplicables." : "Consulta Guía Oficial, Procedimientos y Aclaraciones sin asumir Reglas Locales."}</p></div><span className={`statusPill ${aiState === "ready" ? "ready" : ""}`}>{aiState === "checking" ? "Verificando…" : aiState === "ready" ? "IA activa" : aiState === "disabled" ? "IA no activada" : aiState === "unavailable" ? "Estado no disponible" : "Falta configuración"}</span></div>
@@ -422,6 +512,7 @@ export function RulesPanel({
       <div className="videoFrame"><iframe src={OFFICIAL_RULES_VIDEOS_EMBED_URL} title="Playlist Videos de Reglas" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowFullScreen /></div>
       <a className="primary big" href={OFFICIAL_RULES_VIDEOS_URL} target="_blank" rel="noreferrer">Ver videos de Reglas ↗</a>
     </section>
+    </RulesDisclosure>
 
     <BottomBackAction label="← Regresar" onBack={onBack} />
 
