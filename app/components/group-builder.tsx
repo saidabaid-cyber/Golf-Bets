@@ -19,10 +19,11 @@ import {
 } from "../../lib/group-generator";
 import { BottomBackAction } from "./bottom-back-action";
 import { NumericCaptureInput } from "./numeric-capture-input";
-import { ModalCloseButton, ModalShell } from "./modal-shell";
-import { GroupInvitationInbox, GroupInviteManager } from "./group-invitations";
+import { ModalShell } from "./modal-shell";
+import { GroupInviteManager } from "./group-invitations";
 import { useBackyardAccount } from "./account-provider";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
+import styles from "./group-builder.module.css";
 
 const id = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
 
@@ -49,10 +50,53 @@ export function GroupDetailDialog({ group, created, onClose, onEdit, onPlay }: {
   </ModalShell>;
 }
 
+function MemberInitial({ name }: { name: string }) {
+  return <span className="groupPersonAvatar" aria-hidden="true">{name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("")}</span>;
+}
+
+export function compactGroupBetSummary(group: FrequentGroup) {
+  const details = groupTemplatePresentationDetails(group);
+  const labels = details.slice(0, 2).map(detail => detail.replace(/^Foursome · .*? · /, "Foursome ").replace(/ · \d+ hoyos$/, ""));
+  return labels.length ? `${labels.join(" · ")}${details.length > 2 ? ` · +${details.length - 2}` : ""}` : "Sin apuestas";
+}
+
+export function GroupLibraryView({ groups, onCreate, onDraw, onOpen, onPlay }: {
+  groups: FrequentGroup[]; onCreate: () => void; onDraw: () => void;
+  onOpen: (group: FrequentGroup) => void; onPlay: (group: FrequentGroup) => void;
+}) {
+  return <section className={styles.library} aria-labelledby="groups-library-title">
+    <header className={styles.header}><h1 id="groups-library-title">Mis grupos</h1><p>Crea y administra tus grupos de jugadores para rondas y apuestas.</p><div className={styles.actions}><button type="button" className="primary" onClick={onCreate}>+ Crear grupo</button><button type="button" className="secondary" onClick={onDraw}>Armar grupos</button></div></header>
+    {!groups.length && <p className="card">Todavía no tienes grupos guardados. Crea uno con tus jugadores y apuestas habituales.</p>}
+    <div className={styles.libraryList}>{groups.map(group => <article className={styles.libraryCard} key={group.id}>
+      <button type="button" className={styles.cardOpen} aria-label={`Abrir grupo ${group.name}`} onClick={() => onOpen(group)}>
+        <strong className={styles.cardName}>{group.name}</strong><span className={styles.avatarStack} aria-hidden="true">{group.players.slice(0, 3).map((member, index) => <MemberInitial key={member.memberId || index} name={member.name} />)}{group.players.length > 3 && <span>+{group.players.length - 3}</span>}</span>
+        <span className={styles.cardCount}>{group.players.length} jugadores</span><span className={styles.cardHcp}>HCP · {group.gameTemplate?.roundDefaults.handicapBasis === "course" ? "Completo" : "Diferencial"}</span><span className={styles.cardBets}>{compactGroupBetSummary(group)}</span>
+      </button><button type="button" className={styles.quickPlay} aria-label={`Crear ronda con ${group.name}`} onClick={() => onPlay(group)}>Crear ronda</button>
+    </article>)}</div>
+  </section>;
+}
+
+export function GroupDetailView({ group, onBack, onEdit, onPlay, onDelete, onAcceptedMembers }: {
+  group: FrequentGroup; onBack: () => void; onEdit: () => void; onPlay: () => void; onDelete: () => void;
+  onAcceptedMembers: (members: FrequentGroupMember[]) => void;
+}) {
+  const { identity } = useBackyardAccount();
+  const [managing, setManaging] = useState(false);
+  if (managing) return <section className={styles.detail}><button type="button" className="textButton" onClick={() => setManaging(false)}>← {group.name}</button><header className={styles.header}><h1>Invitar / administrar integrantes</h1><p>{group.name}</p></header><GroupInviteManager group={group} accessToken={identity.accessToken} onAcceptedMembers={onAcceptedMembers} /></section>;
+  return <section className={styles.detail} aria-labelledby="group-detail-page-title"><button type="button" className="textButton" onClick={onBack}>← Mis grupos</button>
+    <header className={styles.header}><h1 id="group-detail-page-title">{group.name}</h1><p>{group.players.length} jugadores</p></header>
+    <section className="card"><h2>Jugadores</h2><div className="groupSelectedList">{group.players.map((member, index) => <div className="groupPersonRow" key={member.memberId || index}><MemberInitial name={member.name} /><span><b>{member.name}</b><small>{member.username ? `@${member.username} · ` : ""}{typeof member.handicap === "number" ? `HCP ${member.handicap}` : "HCP por completar"}{!member.accountUserId && <span className="groupGuestBadge">Sin app</span>}</small></span></div>)}</div></section>
+    <section className="card"><h2>Configuración de HCP</h2><p>{HANDICAP_BASIS_LABELS[group.gameTemplate?.roundDefaults.handicapBasis ?? "relative"]}</p></section>
+    <section className="card"><h2>Apuestas habituales</h2><GroupPresetBetSummary group={group} /></section>
+    <div className={styles.detailActions}><button type="button" className="primary" onClick={onPlay}>Crear ronda con este grupo</button><button type="button" className="secondary" onClick={onEdit}>Editar grupo</button><button type="button" className="secondary" onClick={() => setManaging(true)}>Invitar / administrar integrantes</button><button type="button" className="dangerGhost" onClick={onDelete}>Eliminar grupo</button></div>
+  </section>;
+}
+
 /** Read-only discovery. Adding a player changes the owner's draft, never social membership. */
-export function GroupMemberSelection({ group, frequentPlayers, accessToken, onAdd, onRemove }: {
+export function GroupMemberSelection({ group, frequentPlayers, accessToken, onAdd, onRemove, friendsOnly = false }: {
   group: FrequentGroup; frequentPlayers: FrequentPlayer[]; accessToken?: string | null;
   onAdd: (member: FrequentGroupMember) => void; onRemove: (index: number) => void;
+  friendsOnly?: boolean;
 }) {
   const [friends, setFriends] = useState<SocialPerson[]>([]);
   const [friendQuery, setFriendQuery] = useState("");
@@ -93,13 +137,15 @@ export function GroupMemberSelection({ group, frequentPlayers, accessToken, onAd
   const filteredFriends = friends.filter(person => `${person.display_name} @${person.username}`.toLocaleLowerCase("es-MX").includes(friendQuery.trim().toLocaleLowerCase("es-MX")));
   return <>
     <section className="groupWizardBlock" aria-label="Mis amigos"><h3>Mis amigos</h3>{accessToken ? <><label>Buscar entre mis amigos<input type="search" value={friendQuery} onChange={event => setFriendQuery(event.target.value)} placeholder="Buscar entre mis amigos" /></label>{loadingFriends ? <p role="status">Cargando amigos…</p> : <><ul className="groupPeopleList">{filteredFriends.map(person => renderPerson(person, true))}</ul>{!friends.length && !friendMessage && <p className="hint">Todavía no tienes amigos guardados. Puedes buscar a un jugador en Backyard.</p>}{friends.length > 0 && !filteredFriends.length && <p className="hint">No hay amigos que coincidan.</p>}</>}{friendMessage && <p role="status">{friendMessage}</p>}</> : <p>Inicia sesión para ver tus amigos.</p>}</section>
-    <section className="groupWizardBlock" aria-label="Buscar jugador en Backyard"><h3>Buscar jugador en Backyard</h3><label>Nombre o @usuario<input type="search" value={query} disabled={!accessToken} onChange={event => setQuery(event.target.value)} placeholder="Nombre o @usuario" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} /></label>{searching && <p role="status">Buscando…</p>}<ul className="groupPeopleList">{results.map(person => renderPerson(person, false))}</ul>{searchMessage && <p role="status">{searchMessage}</p>}<small>Agregar a tu plantilla no envía una invitación ni una solicitud de amistad.</small></section>
+    {!friendsOnly && <section className="groupWizardBlock" aria-label="Buscar jugador en Backyard"><h3>Buscar jugador en Backyard</h3><label>Nombre o @usuario<input type="search" value={query} disabled={!accessToken} onChange={event => setQuery(event.target.value)} placeholder="Nombre o @usuario" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} /></label>{searching && <p role="status">Buscando…</p>}<ul className="groupPeopleList">{results.map(person => renderPerson(person, false))}</ul>{searchMessage && <p role="status">{searchMessage}</p>}<small>Agregar a tu plantilla no envía una invitación ni una solicitud de amistad.</small></section>}
   </>;
 }
 
-export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, onSaveFrequentGroup, onCreateFrequentGroup, onOpenFrequentGroup, onStartFrequentGroup, onEditFrequentGroup, onDeleteFrequentGroup, onAcceptedMembers }: {
+export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, onSaveFrequentGroup, onCreateFrequentGroup, onOpenFrequentGroup, onStartFrequentGroup, onEditFrequentGroup, onDeleteFrequentGroup, onAcceptedMembers, detailGroup, onCloseDetail }: {
   frequentPlayers: FrequentPlayer[];
   frequentGroups: FrequentGroup[];
+  detailGroup?: FrequentGroup;
+  onCloseDetail: () => void;
   onBack: () => void;
   onPlay: (players: Player[]) => void;
   onSaveFrequentGroup: (name: string, players: Array<Pick<Player, "name" | "handicap" | "accountUserId">>) => boolean;
@@ -110,7 +156,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   onDeleteFrequentGroup: (group: FrequentGroup) => void;
   onAcceptedMembers: (group: FrequentGroup, members: FrequentGroupMember[]) => void;
 }) {
-  const { identity, retryCloudSync } = useBackyardAccount();
+  const { identity } = useBackyardAccount();
   const [players, setPlayers] = useState<GroupPlayer[]>([]);
   const [manualName, setManualName] = useState("");
   const [manualHandicap, setManualHandicap] = useState<number | null>(null);
@@ -125,9 +171,8 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   const [saveName, setSaveName] = useState("");
   const [saveAllOpen, setSaveAllOpen] = useState(false);
   const [saveAllNames, setSaveAllNames] = useState<string[]>([]);
-  const [openSavedGroupMenu, setOpenSavedGroupMenu] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<"groups" | "invitations">("groups");
-  const [inviteGroupId, setInviteGroupId] = useState("");
+  const [view, setView] = useState<"library" | "draw">("library");
+  const libraryScroll = useRef(0);
   const drawSequence = useRef(0);
   const allHaveHcp = players.length > 0 && players.every((player) => typeof player.handicap === "number" && Number.isFinite(player.handicap));
   const playerOptions = useMemo(() => groups.flat(), [groups]);
@@ -150,8 +195,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
     setPlayers(next);
     if (next.some((item) => typeof item.handicap !== "number" || !Number.isFinite(item.handicap))) setMode("random");
     setGroups([]);
-    setOpenSavedGroupMenu(null);
-    setMessage(next.length === players.length ? "Todos los integrantes de ese grupo ya estaban incluidos." : "Grupo agregado sin duplicados.");
+    setMessage(next.length === players.length ? "Esos jugadores ya estaban seleccionados." : "Grupo agregado sin duplicados.");
   }
 
   function draw() {
@@ -223,53 +267,31 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
     setSaveAllOpen(false); setSaveAllNames([]); setMessage("Todos los grupos se guardaron como grupos frecuentes.");
   }
 
-  return <>
-    <section className="hero groupsHero"><div><h1>Mis grupos</h1><p>Crea y administra tus grupos de jugadores para rondas y apuestas.</p></div><div className="groupsHeroActions"><button className="secondary" onClick={onBack}>← Inicio</button><button className="primary" onClick={onCreateFrequentGroup}>+ Crear grupo</button></div></section>
-    <div className="groupsLibraryTabs" role="tablist" aria-label="Secciones de Grupos">
-      <button type="button" role="tab" aria-selected={activeSection === "groups"} className={activeSection === "groups" ? "active" : ""} onClick={() => setActiveSection("groups")}>Mis grupos</button>
-      <button type="button" role="tab" aria-selected={activeSection === "invitations"} className={activeSection === "invitations" ? "active" : ""} onClick={() => setActiveSection("invitations")}>Invitaciones</button>
-    </div>
-    {activeSection === "invitations" && <div role="tabpanel"><GroupInvitationInbox accessToken={identity.accessToken} onAccepted={retryCloudSync} />{frequentGroups.length > 0 && <section className="card"><label>Administrar invitaciones de un grupo<select value={inviteGroupId} onChange={event => setInviteGroupId(event.target.value)}><option value="">Seleccionar grupo</option>{frequentGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>{frequentGroups.filter(group => group.id === inviteGroupId).map(group => <GroupInviteManager key={group.id} group={group} accessToken={identity.accessToken} onAcceptedMembers={members => onAcceptedMembers(group, members)} />)}</section>}</div>}
-    <div hidden={activeSection !== "groups"} role="tabpanel">
-    {frequentGroups.length === 0 && <section className="card groupPresetEmpty"><h2>Mis grupos</h2><p>Todavía no tienes grupos guardados. Crea uno con tus jugadores y apuestas habituales.</p><button type="button" className="primary" onClick={onCreateFrequentGroup}>Crear grupo</button></section>}
-    {frequentGroups.length > 0 && <section className="card groupPresetLibrary"><div className="groupPresetGrid">{frequentGroups.map((group) => <article className="groupPresetCard" key={`preset-${group.id}`}>
-      <div><span className="templateSectionLabel">GRUPO</span><h3>{group.name}</h3><p>{group.players.length} miembros</p></div>
-      <div className="groupPresetMembers" aria-label={`Jugadores de ${group.name}`}>{group.players.slice(0, 6).map((member, index) => <span key={member.memberId || `${member.name}-${index}`}>{member.name}</span>)}{group.players.length > 6 && <span>+{group.players.length - 6}</span>}</div>
-      <p className="hint">HCP: {HANDICAP_BASIS_LABELS[group.gameTemplate?.roundDefaults.handicapBasis ?? "relative"]}</p><GroupPresetBetSummary group={group} />
-      <div className="groupPresetActions"><button type="button" className="secondary" onClick={() => onOpenFrequentGroup(group)}>Ver grupo →</button><button type="button" className="primary" onClick={() => onStartFrequentGroup(group)}>Crear ronda</button></div>
-    </article>)}</div></section>}
-    <details className="groupDrawTools"><summary>Armar grupos · Sorteo y balanceado por HCP</summary><section className="card groupCapture"><div className="sectionTitle"><div><h2>Jugadores</h2><p>Frecuentes, grupos guardados o captura manual.</p></div><strong className="playerCounter">{players.length} jugadores</strong></div>
-      {frequentPlayers.length > 0 && <details className="frequentDisclosure groupBuilderDisclosure"><summary><span>Jugadores frecuentes ({frequentPlayers.length})<small>Toca aquí para agregar un jugador</small></span></summary><div className="chips">{frequentPlayers.map((player) => <button className="chipButton" key={player.id} onClick={() => add({ id: id(), name: player.name, handicap: player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}) })}>+ {player.name}{typeof player.handicap === "number" ? ` · HCP ${player.handicap}` : ""}</button>)}</div></details>}
-      {frequentGroups.length > 0 && <details className="frequentDisclosure groupBuilderDisclosure"><summary><span>Grupos guardados ({frequentGroups.length})<small>Toca aquí para agregar un grupo</small></span></summary><div className="savedGroupManager">{frequentGroups.map((group) => <div className="savedGroupItem" key={group.id}>
-        <button className="savedGroupLoad" onClick={() => addFrequentGroup(group)}><b>{group.name}</b><span>{group.players.length} jugadores · Toca para cargar</span></button>
-        <button className="savedGroupMenuButton" aria-label={`Administrar ${group.name}`} aria-expanded={openSavedGroupMenu === group.id} onClick={() => setOpenSavedGroupMenu((current) => current === group.id ? null : group.id)}>⋮</button>
-        {openSavedGroupMenu === group.id && <div className="savedGroupMenu" role="menu" aria-label={`Opciones de ${group.name}`}>
-          <button role="menuitem" onClick={() => { setOpenSavedGroupMenu(null); onEditFrequentGroup(group); }}>Editar grupo</button>
-          <button className="dangerGhost" role="menuitem" onClick={() => { setOpenSavedGroupMenu(null); onDeleteFrequentGroup(group); }}>Eliminar grupo</button>
-        </div>}
-      </div>)}</div></details>}
-      <div className="manualGroupPlayer"><label>Nombre<input value={manualName} onChange={(event) => setManualName(event.target.value)} placeholder="Nombre del jugador" /></label><label>HCP opcional<NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={36} value={manualHandicap} emptyWhenZero={false} placeholder="HCP" onValueChange={setManualHandicap} /></label><button className="secondary" disabled={!manualName.trim()} onClick={() => { add({ id: id(), name: manualName, handicap: manualHandicap }); setManualName(""); setManualHandicap(null); }}>Agregar</button></div>
-      <div className="selectedGroupPlayers">{players.map((player) => <span key={player.id}>{player.name}<small>{typeof player.handicap === "number" ? `HCP ${player.handicap}` : "Sin HCP"}</small><button aria-label={`Quitar ${player.name}`} onClick={() => { setPlayers((current) => current.filter((item) => item.id !== player.id)); setGroups([]); }}>×</button></span>)}</div>
+
+  const detailId = detailGroup?.id;
+  useEffect(() => { window.scrollTo({ top: detailId || view === "draw" ? 0 : libraryScroll.current }); }, [view, detailId]);
+  const selection: FrequentGroup = { id: "draw-selection", name: "Armar grupos", uses: 0, updatedAt: "", players: players.map(player => ({ memberId: player.id, name: player.name, handicap: player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId, kind: "account" as const } : { kind: "guest" as const }) })) };
+  const knownPlayers = useMemo(() => [...frequentPlayers, ...frequentGroups.flatMap(group => group.players.map((member, index) => ({ id: member.memberId || String(index), name: member.name, handicap: member.handicap, accountUserId: member.accountUserId, uses: 0, updatedAt: group.updatedAt })))], [frequentPlayers, frequentGroups]);
+  if (detailGroup) return <GroupDetailView key={detailGroup.id} group={detailGroup} onBack={onCloseDetail} onEdit={() => onEditFrequentGroup(detailGroup)} onPlay={() => onStartFrequentGroup(detailGroup)} onDelete={() => onDeleteFrequentGroup(detailGroup)} onAcceptedMembers={members => onAcceptedMembers(detailGroup, members)} />;
+  if (view === "library") return <div className={styles.screen}><GroupLibraryView groups={frequentGroups} onCreate={onCreateFrequentGroup} onDraw={() => { libraryScroll.current = window.scrollY; setView("draw"); }} onOpen={group => { libraryScroll.current = window.scrollY; onOpenFrequentGroup(group); }} onPlay={onStartFrequentGroup} /><BottomBackAction label="← Inicio" onBack={onBack} /></div>;
+
+  return <section className={styles.screen} aria-labelledby="group-draw-title">
+    <button type="button" className="textButton" onClick={() => setView("library")}>← Mis grupos</button><header className={styles.header}><h1 id="group-draw-title">Armar grupos</h1><p>Sortea o balancea jugadores por HCP.</p></header>
+    <section className="card"><div className="sectionTitle"><h2>Jugadores</h2><strong>{players.length} seleccionados</strong></div>
+      <div className={styles.friendSource}><GroupMemberSelection friendsOnly group={selection} frequentPlayers={knownPlayers} accessToken={identity.accessToken} onAdd={member => add({ id: member.memberId || id(), name: member.name, handicap: member.handicap, ...(member.accountUserId ? { accountUserId: member.accountUserId } : {}) })} onRemove={index => { setPlayers(current => current.filter((_, i) => i !== index)); setGroups([]); }} /></div>
+      <section className={styles.source}><h3>Grupos guardados</h3><div className={styles.savedSources}>{frequentGroups.map(group => <button type="button" className="secondary" key={group.id} onClick={() => addFrequentGroup(group)}><b>{group.name}</b><span>{group.players.length} jugadores · + Cargar</span></button>)}</div>{!frequentGroups.length && <p className="hint">Todavía no tienes grupos guardados.</p>}</section>
+      {frequentPlayers.length > 0 && <section className={styles.source}><h3>Jugadores frecuentes / sin app guardados</h3><div className={styles.frequentSource}>{frequentPlayers.map(player => <div className="groupPersonRow" key={player.id}><MemberInitial name={player.name} /><span><b>{player.name}</b><small>{typeof player.handicap === "number" ? `HCP ${player.handicap}` : "HCP por completar"}</small></span><button type="button" className="groupPersonAdd" aria-label={`Agregar frecuente ${player.name}`} onClick={() => add({ id: id(), name: player.name, handicap: player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}) })}>+</button></div>)}</div></section>}
+      <section className={styles.source}><h3>Jugador sin app</h3><div className={styles.guestFields}><label>Nombre<input value={manualName} onChange={event => setManualName(event.target.value)} placeholder="Nombre del jugador" /></label><label>HCP opcional<NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={36} value={manualHandicap} emptyWhenZero={false} placeholder="HCP" onValueChange={setManualHandicap} /></label></div><button type="button" className="secondary" disabled={!manualName.trim()} onClick={() => { add({ id: id(), name: manualName.trim(), handicap: manualHandicap }); setManualName(""); setManualHandicap(null); }}>+ Agregar</button></section>
     </section>
-
-    <section className="card"><h2>Configuración del sorteo</h2><div className="groupSettings"><div><label>Tamaño preferido</label><div className="segmented">{([3,4,5] as GroupTarget[]).map((size) => <button key={size} className={target === size ? "active" : ""} onClick={() => setTarget(size)}>Grupos de {size}</button>)}</div></div><div><label>Modo</label><div className="segmented"><button className={mode === "random" ? "active" : ""} onClick={() => setMode("random")}>Aleatorio</button><button className={mode === "balanced" ? "active" : ""} disabled={!allHaveHcp} onClick={() => setMode("balanced")}>Balanceado por HCP</button></div>{!allHaveHcp && <small className="hint">Captura HCP de todos para habilitar balanceado.</small>}</div></div><button className="primary big" onClick={draw}>Armar grupos</button></section>
-
+    <section className="card" aria-label="Jugadores seleccionados"><h2>Seleccionados · {players.length}</h2>{!players.length && <p className="hint">Agrega amigos, carga un grupo o agrega un jugador sin app.</p>}<div className="groupSelectedList">{players.map(player => <div className="groupPersonRow" key={player.id}><MemberInitial name={player.name} /><span><b>{player.name}</b><small>{typeof player.handicap === "number" ? `HCP ${player.handicap}` : "HCP por completar"}{!player.accountUserId && <span className="groupGuestBadge">Sin app</span>}</small></span><button type="button" className="groupPersonRemove" aria-label={`Quitar seleccionado ${player.name}`} onClick={() => { setPlayers(current => current.filter(item => item.id !== player.id)); setGroups([]); }}>×</button></div>)}</div></section>
+    <section className="card"><h2>Configuración del sorteo</h2><div className="groupSettings"><div><label>Tamaño preferido</label><div className="segmented">{([3,4,5] as GroupTarget[]).map(size => <button type="button" key={size} aria-pressed={target === size} className={target === size ? "active" : ""} onClick={() => setTarget(size)}>Grupos de {size}</button>)}</div></div><div><label>Modo</label><div className="segmented"><button type="button" aria-pressed={mode === "random"} className={mode === "random" ? "active" : ""} onClick={() => setMode("random")}>Aleatorio</button><button type="button" aria-pressed={mode === "balanced"} className={mode === "balanced" ? "active" : ""} disabled={!allHaveHcp} onClick={() => setMode("balanced")}>Balanceado por HCP</button></div>{!allHaveHcp && <small className="hint">Completa el HCP de todos para balancear.</small>}</div></div><button type="button" className="primary big" onClick={draw}>Armar grupos</button></section>
     {message && <div className="notice" role="status">{message}</div>}
-    {groups.length > 0 && <section className="generatedGroups"><div className="sectionTitle"><div><h2>Resultado</h2><p>Todos aparecen una sola vez.</p></div><button className="secondary" onClick={draw}>Volver a sortear</button></div>
-      <div className="generatedGroupGrid">{groups.map((group, groupIndex) => <article className="generatedGroupCard" key={`group-${groupIndex}`}><div className="groupCardHead"><div><span>GRUPO {groupIndex + 1}</span><b>{group.length} jugadores</b></div><button className="secondary" onClick={() => onPlay(group.map((player) => ({ ...player })))}>Jugar con este grupo</button></div><ul>{group.map((player) => <li key={player.id}><span>{player.name}<small>{typeof player.handicap === "number" ? `HCP ${player.handicap}` : ""}</small></span></li>)}</ul>{saveIndex === groupIndex ? <div className="saveGeneratedGroup"><input value={saveName} onChange={(event) => setSaveName(event.target.value)} placeholder="Ej. Miércoles 8am" /><button className="primary" onClick={() => saveGroup(groupIndex)}>Guardar</button><button className="textButton" onClick={() => setSaveIndex(null)}>Cancelar</button></div> : <button className="textButton" onClick={() => { setSaveIndex(groupIndex); setSaveName(""); }}>Guardar como grupo frecuente</button>}</article>)}</div>
-      {editing && <div className="swapEditor"><h3>Intercambiar jugadores</h3><select aria-label="Primer jugador a intercambiar" value={swapA} onChange={(event) => setSwapA(event.target.value)}><option value="">Primer jugador</option>{playerOptions.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select><select aria-label="Segundo jugador a intercambiar" value={swapB} onChange={(event) => setSwapB(event.target.value)}><option value="">Segundo jugador</option>{playerOptions.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select><button className="secondary" disabled={!swapA || !swapB} onClick={() => { setGroups(swapGroupPlayers(groups, swapA, swapB)); setSwapA(""); setSwapB(""); }}>Intercambiar</button></div>}
-      <div className="groupResultActions"><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Terminar edición" : "Editar manualmente"}</button><button className="secondary" onClick={openSaveAll}>Guardar grupos</button><button className="secondary" onClick={copySummary}>Copiar texto</button><button className="primary" onClick={share}>Compartir</button></div>
+    {groups.length > 0 && <section className="generatedGroups"><div className="sectionTitle"><div><h2>Resultado</h2><p>Todos aparecen una sola vez.</p></div><button type="button" className="secondary" onClick={draw}>Volver a sortear</button></div>
+      <div className="generatedGroupGrid">{groups.map((group, groupIndex) => <article className="generatedGroupCard" key={`group-${groupIndex}`}><div className="groupCardHead"><div><span>GRUPO {groupIndex + 1}</span><b>{group.length} jugadores</b></div><button type="button" className="secondary" onClick={() => onPlay(group.map(player => ({ ...player })))}>Jugar con este grupo</button></div><ul>{group.map(player => <li key={player.id}><MemberInitial name={player.name} /><span>{player.name}<small>{typeof player.handicap === "number" ? `HCP ${player.handicap}` : "HCP por completar"}</small></span></li>)}</ul>{saveIndex === groupIndex ? <div className="saveGeneratedGroup"><input aria-label={`Nombre del grupo generado ${groupIndex + 1}`} value={saveName} onChange={event => setSaveName(event.target.value)} placeholder="Ej. Miércoles 8am" /><button type="button" className="primary" onClick={() => saveGroup(groupIndex)}>Guardar</button><button type="button" className="textButton" onClick={() => setSaveIndex(null)}>Cancelar</button></div> : <button type="button" className="textButton" onClick={() => { setSaveIndex(groupIndex); setSaveName(""); }}>Guardar como grupo frecuente</button>}</article>)}</div>
+      {editing && <div className="swapEditor"><h3>Intercambiar jugadores</h3><select aria-label="Primer jugador a intercambiar" value={swapA} onChange={event => setSwapA(event.target.value)}><option value="">Primer jugador</option>{playerOptions.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select><select aria-label="Segundo jugador a intercambiar" value={swapB} onChange={event => setSwapB(event.target.value)}><option value="">Segundo jugador</option>{playerOptions.map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select><button type="button" className="secondary" disabled={!swapA || !swapB} onClick={() => { setGroups(swapGroupPlayers(groups, swapA, swapB)); setSwapA(""); setSwapB(""); }}>Intercambiar</button></div>}
+      <div className="groupResultActions"><button type="button" className="secondary" onClick={() => setEditing(value => !value)}>{editing ? "Terminar edición" : "Intercambiar jugadores"}</button><button type="button" className="secondary" onClick={openSaveAll}>Guardar grupos</button><button type="button" className="secondary" onClick={copySummary}>Copiar texto</button><button type="button" className="primary" onClick={share}>Compartir</button></div>
     </section>}
-
-    </details><BottomBackAction label="← Inicio" onBack={onBack} />
-
-    {saveAllOpen && <div className="modalBackdrop"><section className="confirmDialog saveGroupsDialog" role="dialog" aria-modal="true" aria-labelledby="save-groups-title">
-      <ModalCloseButton onClose={closeSaveAll} />
-      <h2 id="save-groups-title">Guardar grupos frecuentes</h2>
-      <p>Asigna un nombre distinto a cada grupo. Esto no inicia ni modifica una ronda.</p>
-      <div className="saveAllGroupNames">{groups.map((group, index) => <label key={`save-${index}`}>Grupo {index + 1} · {group.length} jugadores<input value={saveAllNames[index] || ""} onChange={(event) => setSaveAllNames((current) => current.map((name, itemIndex) => itemIndex === index ? event.target.value : name))} placeholder={`Nombre del Grupo ${index + 1}`} /></label>)}</div>
-      <div className="dialogActions"><button className="secondary" onClick={closeSaveAll}>Cancelar</button><button className="primary" onClick={saveAllGroups}>Guardar todos</button></div>
-    </section></div>}
-    </div>
-  </>;
+    <BottomBackAction label="← Mis grupos" onBack={() => setView("library")} />
+    {saveAllOpen && <ModalShell open onClose={closeSaveAll} className="confirmDialog saveGroupsDialog" labelledBy="save-groups-title"><h2 id="save-groups-title">Guardar grupos frecuentes</h2><p>Asigna un nombre distinto a cada grupo. Esto no inicia ni modifica una ronda.</p><div className="saveAllGroupNames">{groups.map((group, index) => <label key={`save-${index}`}>Grupo {index + 1} · {group.length} jugadores<input value={saveAllNames[index] || ""} onChange={event => setSaveAllNames(current => current.map((name, itemIndex) => itemIndex === index ? event.target.value : name))} placeholder={`Nombre del Grupo ${index + 1}`} /></label>)}</div><div className="dialogActions"><button type="button" className="secondary" onClick={closeSaveAll}>Cancelar</button><button type="button" className="primary" onClick={saveAllGroups}>Guardar todos</button></div></ModalShell>}
+  </section>;
 }

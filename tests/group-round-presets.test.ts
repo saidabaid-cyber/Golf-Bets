@@ -29,12 +29,13 @@ test("Index y HCP permanecen compactos; tee y Rating/Slope se consultan al expan
   assert.match(css, /\.compactPlayingHcp summary\{display:flex;[^}]*min-height:44px/);
 });
 
-test("Grupos expone roster, apuestas y el inicio de ronda desde la misma tarjeta", () => {
-  for (const copy of ["Mis grupos", "Invitaciones", "Crear grupo", "Apuestas del grupo", "Editar grupo", "Crear ronda", "Ver grupo"]) {
+test("Grupos expone biblioteca compacta y conserva detalle e inicio de ronda", () => {
+  for (const copy of ["Mis grupos", "Crear grupo", "Apuestas del grupo", "Editar grupo", "Crear ronda", "Abrir grupo"]) {
     assert.match(builder, new RegExp(copy));
   }
   assert.match(builder, /groupTemplatePresentationDetails/);
-  assert.match(builder, /<GroupInvitationInbox accessToken=\{identity\.accessToken\} onAccepted=\{retryCloudSync\}/);
+  assert.doesNotMatch(builder, /GroupInvitationInbox|role="tab"/);
+  assert.match(builder, /<GroupInviteManager group=\{group\}/);
   assert.doesNotMatch(builder, /PENDING_CONTROLLED_DB_APPLY|Invitación local/, "live invitations replace obsolete pending/local placeholders");
   assert.match(page, /<GroupBetTemplateEditor/);
   assert.match(page, /createEmptyGroupGameTemplate/);

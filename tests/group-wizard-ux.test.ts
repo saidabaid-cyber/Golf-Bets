@@ -119,7 +119,7 @@ test("wizard retains validation, private default, legacy invite_only and first-e
   assert.doesNotMatch(save, /setCourse|setPlayers|setBets|setScores|requestNewRoundIntent/);
   const createGuest = page.split("function addNewPlayerToFrequentGroup()")[1].split("function editFrequentGroupMember")[0];
   assert.match(createGuest, /kind: "guest"/); assert.doesNotMatch(createGuest, /accountUserId|fetch\(|auth\.|invitation/i);
-  assert.match(readFileSync("app/components/group-builder.tsx", "utf8"), /activeSection === "invitations"[\s\S]*GroupInviteManager/);
+  assert.match(readFileSync("app/components/group-builder.tsx", "utf8"), /if \(managing\)[\s\S]*GroupInviteManager/);
 });
 
 test("guest, Foursome and personal values survive serialization; editing group cannot mutate round snapshot", () => {

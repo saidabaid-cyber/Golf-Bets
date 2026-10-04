@@ -131,10 +131,11 @@ test("grupo generado puede compartirse, guardarse y cargarse a una ronda", () =>
   assert.match(builder, /Jugar con este grupo/);
 });
 
-test("grupos guardados se cargan por nombre y se administran desde Armar grupos", () => {
+test("grupos guardados se cargan por nombre y se administran desde su detalle", () => {
   const builder = read("app/components/group-builder.tsx");
-  assert.match(builder, /savedGroupLoad/);
-  assert.match(builder, /Administrar \$\{group\.name\}/);
+  assert.match(builder, /styles\.savedSources/);
+  assert.match(builder, /aria-label=\{`Abrir grupo \$\{group\.name\}`\}/);
+  assert.match(builder, /GroupDetailView/);
   assert.match(builder, /Editar grupo/);
   assert.match(builder, /Eliminar grupo/);
   assert.match(builder, /onEditFrequentGroup\(group\)/);

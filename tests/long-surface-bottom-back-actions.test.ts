@@ -13,13 +13,13 @@ const equipmentOnboarding = readFileSync("app/components/equipment-onboarding.ts
 test("long PDF and group surfaces repeat their top destination at the bottom", () => {
   assert.match(viewer, /onClick=\{onBack\}>\u2190 Regresar a Reglas<\/button>/);
   assert.match(viewer, /<BottomBackAction label="\u2190 Regresar a Reglas" onBack=\{onBack\} \/>/);
-  assert.match(groups, /onClick=\{onBack\}>\u2190 Inicio<\/button>/);
+  assert.match(groups, /onClick=\{onBack\}>\u2190 Mis grupos<\/button>/);
   assert.match(groups, /<BottomBackAction label="\u2190 Inicio" onBack=\{onBack\} \/>/);
 });
 
 test("group save dialog shares one close handler", () => {
   assert.match(groups, /function closeSaveAll\(\) \{[\s\S]*setSaveAllOpen\(false\);[\s\S]*setSaveAllNames\(\[\]\);[\s\S]*\}/);
-  assert.match(groups, /<ModalCloseButton onClose=\{closeSaveAll\} \/>/);
+  assert.match(groups, /<ModalShell open onClose=\{closeSaveAll\}/);
   assert.match(groups, /onClick=\{closeSaveAll\}>Cancelar<\/button>/);
 });
 
