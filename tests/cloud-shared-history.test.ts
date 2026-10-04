@@ -39,6 +39,27 @@ function fixtures() {
   return db;
 }
 
+test("new live canonical cards stay out of saved history until completion for both owner and participant", async () => {
+  const db = new CloudDb();
+  const live = { ...card("a", "active-group-round"), lifecycleState: "live" as const,
+    completedAt: undefined, scorekeeping: { version: 1 as const, mode: "owner" as const, organizerAccountUserId: A } };
+  db.rows("rounds_cloud").push({ id: SHARED_DB_ID, owner_id: A, local_id: live.id, local_round_id: live.id, snapshot: live, updated_at: time });
+  db.rows("round_participants_v2").push({ round_id: SHARED_DB_ID, user_id: B });
+  const before = structuredClone(db.rows("rounds_cloud"));
+  assert.deepEqual(await readCloudRoundHistory(db.client, A), []);
+  assert.deepEqual(await readCloudRoundHistory(db.client, B), []);
+  assert.deepEqual(db.rows("rounds_cloud"), before, "history reads preserve the canonical live card");
+  const completed = { ...live, lifecycleState: "completed" as const, completedAt: time };
+  db.rows("rounds_cloud")[0].snapshot = completed;
+  assert.equal((await readCloudRoundHistory(db.client, A)).length, 1);
+  const shared = await readCloudRoundHistory(db.client, B);
+  assert.equal(shared.length, 1);
+  assert.equal(shared[0].cloudRoundId, SHARED_DB_ID);
+  assert.equal(attributableHistory(shared, B).length, 0, "completion alone never grants personal attribution");
+  db.rows("social_round_account_links_v3").push({ round_id: SHARED_DB_ID, user_id: B, player_key: "b", verified_by: "SELF_CONFIRMED" });
+  assert.equal(attributableHistory(await readCloudRoundHistory(db.client, B), B).length, 1);
+});
+
 test("participant history preserves owner-null shared card and avoids same-local-ID collision without rewriting canonical snapshot", async () => {
   const db = fixtures(), before = structuredClone(db.rows("rounds_cloud"));
   const history = await readCloudRoundHistory(db.client, B);

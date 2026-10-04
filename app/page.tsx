@@ -2267,7 +2267,7 @@ function GolfBetsApp() {
     const snapshot = currentSnapshot();
     if (!snapshot) return;
     const storedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, []);
-    if (Array.isArray(storedHistory) && storedHistory.some((round) => round && typeof round === "object" && (round as RoundSnapshot).id === roundId)) {
+    if (Array.isArray(storedHistory) && storedHistory.some((round) => round && typeof round === "object" && (round as RoundSnapshot).id === roundId && (round as RoundSnapshot).lifecycleState !== "live")) {
       setPendingRoundAction({ message: "¿Sobrescribir esta ronda terminada? Se actualizarán sus resultados e histórico Personal con el mismo ID; se conservará la foto. No se creará otra ronda.", run: () => { void saveConfirmedRound(snapshot); } }); return;
     }
     void saveConfirmedRound(snapshot);

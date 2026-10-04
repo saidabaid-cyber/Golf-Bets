@@ -67,6 +67,9 @@ export async function readCloudRoundHistory(client: SupabaseClient, userId: stri
   const history = owned.data.flatMap(row => {
     const snapshot = row.snapshot as RoundSnapshot;
     if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) || !localId(snapshot)) return [];
+    // New live canonical cards are recovered through the active-round API,
+    // not imported as saved history before their first completion.
+    if (snapshot.scorekeeping?.version === 1 && snapshot.lifecycleState === "live") return [];
     if (!Object.hasOwn(snapshot, "cloudParticipant")) return [snapshot];
     const { cloudParticipant: ignored, ...canonical } = snapshot;
     void ignored;
@@ -101,6 +104,7 @@ export async function readCloudRoundHistory(client: SupabaseClient, userId: stri
       if (row.owner_id === userId || typeof row.id !== "string" || !row.snapshot
         || typeof row.snapshot !== "object" || Array.isArray(row.snapshot) || !localId(row.snapshot)) continue;
       const source = row.snapshot as RoundSnapshot;
+      if (source.scorekeeping?.version === 1 && source.lifecycleState === "live") continue;
       const matches = source.players?.filter(player => player.accountUserId === userId) || [];
       const player = source.lifecycleState === "completed" && matches.length === 1
         && matches[0].id === confirmations.get(row.id) ? matches[0] : null;
