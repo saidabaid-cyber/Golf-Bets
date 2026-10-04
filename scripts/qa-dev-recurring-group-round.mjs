@@ -75,7 +75,7 @@ export async function runRecurringGroupRoundQa({ env = process.env, credentialsP
     const segments = d.segmentDefinitions(order, 6).map(segment => ({ ...segment, basePair: ids.slice(0, 2) }));
     loaded.bets.foursome.participantIds = ids; loaded.bets.skins.participantIds = ids;
     const now = new Date().toISOString();
-    const live = { id: localRoundId, snapshotVersion: 2, lifecycleState: "live", scorekeeping: { version: 1, mode: "owner" }, date: now.slice(0, 10), startedAt: now, updatedAt: now,
+    const live = { id: localRoundId, snapshotVersion: 2, lifecycleState: "live", scorekeeping: { version: 1, mode: "owner", organizerAccountUserId: diego.id }, date: now.slice(0, 10), startedAt: now, updatedAt: now,
       ownerId: ids[0], ownerName: diego.name, courseName: course.name, teeName: course.teeName, courseSnapshot: course, roundHoles: 18, startHole: 1, handicapBasis: "relative",
       players, order, scores: {}, segments, betConfig: loaded.bets, personalBets: loaded.personalBets, supplementalBets: [], manualBets: [],
       expenses: { caddie: 0, food: 0, drinks: 0, greenFee: 0, cartRental: 0, other: 0 }, expenseTotal: 0, betResult: 0, netResult: 0, categoryResults: {},

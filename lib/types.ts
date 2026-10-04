@@ -756,7 +756,7 @@ export type PersonalOpponentResult = {
 
 export type RoundSnapshot = {
   /** Owner capture is available; participant multiwriter is not advertised. */
-  scorekeeping?: { version: 1; mode: "owner" };
+  scorekeeping?: { version: 1; mode: "owner"; organizerAccountUserId?: string };
   /** In-progress rounds can be parked in history without entering statistics. */
   pausedAt?: string;
   resumeHoleIndex?: number;

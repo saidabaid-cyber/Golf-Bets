@@ -17,12 +17,21 @@ export async function auditOwnerScores(client: SupabaseClient, ownerId: string, 
   const previous = await client.from("live_round_operations_v2").select("player_key,hole,payload,resulting_version")
     .eq("round_id", row.id).eq("operation_kind", "SCORE_SET").order("resulting_version", { ascending: false }).limit(500);
   if (previous.error) throw previous.error;
-  const latest = new Map<string, number>();
+  const latest = new Map<string, number | null>();
   for (const item of previous.data || []) {
     const cell = `${item.player_key}:${item.hole}`;
-    if (!latest.has(cell)) latest.set(cell, Number(item.payload?.score));
+    if (!latest.has(cell)) latest.set(cell, item.payload?.score == null ? null : Number(item.payload.score));
   }
   const operations = [];
+  for (const [cell, previousScore] of latest) {
+    const colon = cell.lastIndexOf(":");
+    const playerKey = cell.slice(0, colon), hole = Number(cell.slice(colon + 1));
+    if (previousScore === null || row.snapshot.scores?.[hole]?.[playerKey] != null
+      || !row.snapshot.players?.some(player => player.id === playerKey)) continue;
+    operations.push({ id: eventId(row.id, ownerId, `score:${row.version}:${playerKey}:${hole}`), round_id: row.id,
+      actor_id: ownerId, operation_kind: "SCORE_SET", player_key: playerKey, hole, payload: { score: null, source: "CANONICAL_OWNER_SAVE" },
+      base_version: Math.max(0, Number(row.version) - 1), resulting_version: Number(row.version) });
+  }
   for (const [holeText, scores] of Object.entries(row.snapshot.scores || {})) {
     const hole = Number(holeText);
     if (!Number.isInteger(hole) || hole < 1 || hole > 18) continue;

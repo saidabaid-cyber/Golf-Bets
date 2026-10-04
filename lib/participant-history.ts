@@ -12,15 +12,29 @@ export function confirmedHistoryPlayer(round: RoundSnapshot, userId?: string) {
 }
 
 export function attributableHistory(rounds: readonly RoundSnapshot[], userId?: string) {
-  return rounds.filter(round => !round.cloudReadOnly && !round.id.startsWith("shared:")
-    || Boolean(confirmedHistoryPlayer(round, userId)));
+  return rounds.flatMap(round => {
+    if (round.cloudReadOnly || round.id.startsWith("shared:")) return confirmedHistoryPlayer(round, userId) ? [round] : [];
+    const organizer = round.scorekeeping?.organizerAccountUserId;
+    // Organizing a card without playing never attributes another player's score.
+    if (!organizer) return [round];
+    if (userId !== undefined && organizer !== userId) return [];
+    const perspective = personalRoundPerspective(round);
+    return perspective ? [perspective] : [];
+  });
 }
 
 /** Ephemeral analytical perspective, never written back. Do not attribute the
  * organizer's expenses/personal side bets to a participant. Unknown != zero. */
 export function personalRoundPerspective(round: RoundSnapshot): RoundSnapshot | null {
-  if (!round.cloudReadOnly && !round.id.startsWith("shared:")) return round;
-  const player = confirmedHistoryPlayer(round);
+  let player;
+  if (!round.cloudReadOnly && !round.id.startsWith("shared:")) {
+    const organizer = round.scorekeeping?.organizerAccountUserId;
+    if (!organizer) return round;
+    const matches = round.players?.filter(player => player.accountUserId === organizer);
+    if (matches?.length !== 1) return null;
+    player = matches[0];
+    if (player.id === round.ownerId) return round;
+  } else player = confirmedHistoryPlayer(round);
   if (!player) return null;
   const { expenses: _expenses, expenseTotal: _expenseTotal, netResult: _netResult,
     betResult: _betResult, personalResults: _personalResults,

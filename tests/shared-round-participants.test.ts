@@ -13,6 +13,7 @@ import { CloudDb } from "./helpers/cloud-db";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { createHash } from "node:crypto";
 
 const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222", C = "33333333-3333-4333-8333-333333333333";
 test("withheld notification privileges preserve card access without bypassing preferences", async () => {
@@ -34,11 +35,31 @@ test("withheld notification privileges preserve card access without bypassing pr
   // No audit write needed for this empty live card.
   snapshot.scores = {};
   const admin = { from: (table: string) => { assert.equal(table, "notification_preferences_v2"); return chain({ data: null, error: { code: "42501" } }); } };
-  const output = ts.transpileModule(readFileSync("lib/shared-round-participants.server.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const output = ts.transpileModule(readFileSync("lib/shared-round-participants.server.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
   runInNewContext(output, { exports, require: (name: string) => name === "server-only" ? {} : name === "node:crypto" ? {} : name === "./supabase/server" ? { getSupabaseAdmin: () => admin } : name === "./shared-round-participants" ? { linkedRoundPlayers } : {}, Map, Set });
   assert.deepEqual(JSON.parse(JSON.stringify(await exports.syncSharedRoundParticipants(client, A, [snapshot.id]))), { notifications: "BLOCKED_EXTERNAL_NOTIFICATION_PERMISSIONS" });
   assert.deepEqual(updates, ["a", "b"]);
+});
+test("clearing a committed score records the authenticated author and is retry-safe", async () => {
+  const snapshot = round(); snapshot.scores = {};
+  let previousScore: number | null = 5;
+  const captured: Array<{ actor_id: string; player_key: string; payload: { score: number | null }; resulting_version: number }> = [];
+  const client = { from: (table: string) => {
+    assert.equal(table, "live_round_operations_v2");
+    const value: Record<string, unknown> = {};
+    for (const method of ["select", "eq", "order", "limit"]) value[method] = () => value;
+    value.then = (resolve: (result: unknown) => unknown) => Promise.resolve({ data: [{ player_key: "b", hole: 1, payload: { score: previousScore } }], error: null }).then(resolve);
+    value.upsert = async (rows: typeof captured) => { captured.push(...rows); previousScore = rows[0].payload.score; return { error: null }; };
+    return value;
+  } };
+  const output = ts.transpileModule(readFileSync("lib/shared-round-participants.server.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+  runInNewContext(output, { exports, require: (name: string) => name === "node:crypto" ? { createHash } : {}, Map, Set });
+  await exports.auditOwnerScores(client, A, { id: "cloud-one", version: 2, snapshot });
+  await exports.auditOwnerScores(client, A, { id: "cloud-one", version: 2, snapshot });
+  assert.equal(captured.length, 1); assert.equal(captured[0].actor_id, A); assert.equal(captured[0].player_key, "b");
+  assert.equal(captured[0].payload.score, null); assert.equal(captured[0].resulting_version, 2);
 });
 function round(): RoundSnapshot {
   return { id: "local-one", date: "2026-10-04", courseName: "QA catalog course", teeName: "QA catalog tee", lifecycleState: "completed", completedAt: "2026-10-04T12:00:00Z",
@@ -61,6 +82,18 @@ test("12-member recurring roster serializes while today's outing remains at most
   assert.equal(today.players.filter(player => player.accountUserId).length, 2);
   assert.equal(today.players.filter(player => !player.accountUserId).length, 2);
   assert.equal(today.origin.groupId, saved.id);
+});
+test("a non-playing organizer keeps the canonical card without acquiring personal stats", () => {
+  const snapshot = round(); snapshot.scorekeeping = { version: 1, mode: "owner", organizerAccountUserId: C };
+  assert.equal(attributableHistory([snapshot], C).length, 0);
+  assert.equal(personalRoundPerspective(snapshot), null);
+  snapshot.scorekeeping.organizerAccountUserId = A;
+  assert.equal(attributableHistory([snapshot], A).length, 1);
+  assert.equal(personalRoundPerspective(snapshot), snapshot);
+  snapshot.ownerId = "b"; snapshot.betResult = -100;
+  const source = JSON.stringify(snapshot), own = attributableHistory([snapshot], A)[0];
+  assert.equal(own.ownerId, "a"); assert.equal(own.betResult, 100);
+  assert.equal(JSON.stringify(snapshot), source);
 });
 test("runtime stake changes and later template edits do not mutate each other's snapshots", () => {
   const saved = group(), before = JSON.stringify(saved);
