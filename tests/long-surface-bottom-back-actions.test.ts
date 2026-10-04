@@ -32,8 +32,8 @@ test("secondary social-feed views share their top and bottom activity handler", 
 test("personal QR uses the same close callback for top and bottom actions", () => {
   const personal = socialQr.slice(socialQr.indexOf("export function PersonalQr"), socialQr.indexOf("export function SocialQrScanner"));
 
-  assert.match(personal, /onClick=\{onClose\}>\u2190 Social<\/button>/);
-  assert.match(personal, /<BottomBackAction label="\u2190 Social" onBack=\{onClose\} \/>/);
+  assert.match(personal, /onClick=\{onClose\}>\u2190 \{backLabel\}<\/button>/);
+  assert.match(personal, /<BottomBackAction label=\{`\u2190 \$\{backLabel\}`\} onBack=\{onClose\} \/>/);
 });
 
 test("QR scanner shares its stop-and-close handler between top and bottom actions", () => {

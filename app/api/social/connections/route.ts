@@ -3,7 +3,15 @@ import type { SocialContext } from "../../../../lib/social-activity.server";
 async function profile(ctx:SocialContext, id:string) {
  const result = await ctx.client.rpc("social_profile_card_v1", { target:id });
  if (result.error) throw result.error;
- return result.data?.[0] || null;
+ const card = result.data?.[0];
+ if (!card) return null;
+ // The identity-card RPC remains the privacy/lifecycle/blocking gate. Only an
+ // already-public club label may accompany that authorized identity.
+ const visibleClub = await ctx.admin.from("social_profiles").select("club_name")
+  .eq("user_id",id).eq("privacy","PUBLIC").maybeSingle();
+ if (visibleClub.error) throw visibleClub.error;
+ return { user_id:card.user_id, username:card.username, display_name:card.display_name,
+  avatar_url:card.avatar_url, club_name:visibleClub.data?.club_name || null };
 }
 async function graph(ctx:SocialContext) {
  const [requests,friendships,blocked] = await Promise.all([
@@ -27,7 +35,7 @@ export async function GET(request:Request) { return socialHttp(request, async ct
   const candidates=await ctx.admin.from("social_profiles").select("user_id").eq("privacy","PUBLIC").eq("club_name",club).neq("user_id",ctx.userId).order("display_name").limit(40);
   if(candidates.error) throw candidates.error;
   // Existing card RPC enforces active accounts, privacy and blocking both ways.
-  const users=(await Promise.all((candidates.data||[]).map(row=>profile(ctx,row.user_id)))).filter(Boolean).slice(0,20)
+  const users=(await Promise.all((candidates.data||[]).map(row=>profile(ctx,row.user_id)))).filter(person => person !== null).slice(0,20)
    .map(person=>({user_id:person.user_id,username:person.username,display_name:person.display_name,avatar_url:person.avatar_url,area_label:"Mismo club"}));
   return {users,label:"Golfistas de tu mismo club. No compartimos ubicación exacta."};
  }

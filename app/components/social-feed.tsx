@@ -3,28 +3,27 @@ import { useState } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import type { PersonalActivity } from "../../lib/golf-insights";
 import type { SocialProfile } from "../../features/social/domain";
-import { SocialConnectionsPanel } from "./social-connections-panel";
+import type { FriendsView } from "./social-connections-panel";
 import { CloudSocialNotifications, SocialSharingPreferences } from "./cloud-social-activity";
 import { BottomBackAction } from "./bottom-back-action";
 import { GroupInvitationInbox, useGroupNotificationsBadge } from "./group-invitations";
-import { PersonalQr, SocialQrScanner } from "./social-qr";
 import { useBackyardAccount } from "./account-provider";
 import styles from "./social-feed.module.css";
 export type SocialView = "activity" | "friends" | "notifications" | "qr" | "scan" | "preferences";
 export type SocialFeedProps = {
-  initialView?: SocialView; targetId?: string | null; onCloseTarget?: () => void;
+  initialView?: SocialView; onOpenFriends: (view?: FriendsView, targetId?: string) => void;
   activity: PersonalActivity[]; identityUserId: string; accessToken?: string; knownProfiles: SocialProfile[];
   notificationsEnabled: boolean; onNotificationsEnabledChange: (value: boolean) => void;
   onOpenRound: (roundId: string) => void; onOpenGroup: (groupId: string) => void;
   onCreateRound: () => void; onOpenGroups: () => void; onPrivacy?: () => void;
   onHome?: () => void;
 };
-export function SocialFeed({ initialView = "activity", targetId, onCloseTarget, identityUserId, accessToken, onOpenGroups, onPrivacy, onHome }: SocialFeedProps) {
-  const { identity, retryCloudSync } = useBackyardAccount();
-  const [view, setView] = useState<SocialView>(initialView), [menu, setMenu] = useState(false), [target, setTarget] = useState(targetId);
+export function SocialFeed({ initialView = "activity", onOpenFriends, identityUserId, accessToken, onOpenGroups, onPrivacy, onHome }: SocialFeedProps) {
+  const { retryCloudSync } = useBackyardAccount();
+  const [view, setView] = useState<SocialView>(initialView), [menu, setMenu] = useState(false);
   const { unread, refreshUnread } = useGroupNotificationsBadge(accessToken);
-  useViewScrollReset(`${view}:${target ?? ""}`);
-  function open(next: SocialView) { setMenu(false); setView(next); }
+  useViewScrollReset(view);
+  function open(next: SocialView) { setMenu(false); if (next === "friends" || next === "qr" || next === "scan") { onOpenFriends(next === "friends" ? "list" : next); return; } setView(next); }
   function backToActivity() { if (onHome) onHome(); else open("activity"); }
   return <section className={styles.screen} aria-labelledby="social-title">
     <header className={styles.header}><div><span>THE BACKYARD</span><h1 id="social-title">Comunidad</h1></div><div className={styles.actions}>
@@ -34,10 +33,10 @@ export function SocialFeed({ initialView = "activity", targetId, onCloseTarget, 
     {menu && <nav className={styles.menu} aria-label="Agregar y compartir"><button type="button" onClick={() => open("friends")}>Agregar amigos</button><button type="button" onClick={() => open("scan")}>Escanear QR</button><button type="button" onClick={() => open("qr")}>Mi QR</button></nav>}
     {view !== "activity" && view !== "qr" && view !== "scan" && <button type="button" className="textButton" onClick={backToActivity}>← Feed de amigos</button>}
     {view === "activity" && <div className={styles.links}><button type="button" onClick={onHome}>Feed de Inicio</button><button type="button" onClick={() => open("friends")}>Amigos y solicitudes</button><button type="button" onClick={() => open("qr")}>Mi QR</button><button type="button" onClick={() => open("scan")}>Escanear QR</button><button type="button" onClick={() => open("preferences")}>Qué comparto</button></div>}
-    {view === "friends" && <SocialConnectionsPanel key={identityUserId} ownerId={identityUserId} accessToken={accessToken} targetId={target} onCloseTarget={() => { setTarget(null); onCloseTarget?.(); }} onChanged={() => void refreshUnread().catch(() => {})} />}
+    {view === "friends" && <button type="button" className="primary" onClick={() => onOpenFriends()}>Abrir Carrera → Amigos</button>}
     {view === "notifications" && <><CloudSocialNotifications key={identityUserId} viewerId={identityUserId} accessToken={accessToken} onFriends={() => open("friends")} onReadChange={() => void refreshUnread().catch(() => {})} /><GroupInvitationInbox accessToken={accessToken} onAccepted={async () => { await retryCloudSync(); await refreshUnread(); }} /><button type="button" className="secondary" onClick={onOpenGroups}>Ver mis grupos</button></>}
-    {view === "qr" && <PersonalQr userId={identityUserId} name={identity.displayName} username={identity.username || ""} avatar={identity.avatarUrl || ""} onClose={backToActivity} />}
-    {view === "scan" && <SocialQrScanner onFound={id => { setTarget(id); open("friends"); }} onClose={backToActivity} />}
+    {view === "qr" && <button type="button" className="primary" onClick={() => onOpenFriends("qr")}>Mi código QR en Amigos</button>}
+    {view === "scan" && <button type="button" className="primary" onClick={() => onOpenFriends("scan")}>Escanear QR en Amigos</button>}
     {view === "preferences" && <section className="card"><h2>Privacidad y notificaciones</h2><button type="button" className="secondary" onClick={onPrivacy}>Privacidad del perfil</button>{accessToken && <SocialSharingPreferences accessToken={accessToken} />}</section>}
     {view !== "activity" && view !== "qr" && view !== "scan" && <BottomBackAction label="← Feed de amigos" onBack={backToActivity} />}
   </section>;

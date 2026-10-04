@@ -106,10 +106,12 @@ test("first-experience wiring preserves the round and reuses existing friends, Q
   const close = page.split("async function closeFirstExperienceGroupEditor()")[1].split("\n  }")[0];
   assert.doesNotMatch(close, /resetRound|applyNewRoundIntent|setPlayers|setCourse|setBets|setScores/);
   assert.match(close, /setTab\(context.tab\)/);
-  assert.match(page, /setSocialInitialView\("friends"\)/);
+  assert.match(page, /if \(await firstSocialExperience.resolve\("friendDiscovery", "opened"\)\) openCareerFriends\(\)/);
   assert.match(page, /<GroupBuilder/);
   const social = readFileSync("app/components/social-feed.tsx", "utf8");
-  assert.match(social, /<SocialConnectionsPanel/); assert.match(social, /<PersonalQr/); assert.match(social, /<SocialQrScanner/);
+  assert.match(social, /onOpenFriends/);
+  const friends = readFileSync("app/components/social-connections-panel.tsx", "utf8");
+  assert.match(friends, /<PersonalQr/); assert.match(friends, /<SocialQrScanner/);
 });
 test("nearby discovery returns only public club identities, with the existing card privacy gate", () => {
   const source = readFileSync("app/api/social/connections/route.ts", "utf8");

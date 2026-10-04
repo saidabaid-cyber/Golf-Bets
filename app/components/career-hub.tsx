@@ -1,5 +1,5 @@
 "use client";
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { GolfInsights } from "../../lib/golf-insights";
 import { deriveRoundAchievements, roundAchievementLabels } from "../../lib/round-achievements";
 import type { RoundSnapshot } from "../../lib/types";
@@ -11,10 +11,10 @@ import styles from "./career-hub.module.css";
 export type CareerHubProps = {
   displayName: string; avatarUrl?: string | null; userId: string; index: SelectedHandicapIndex;
   insights: GolfInsights; rounds: RoundSnapshot[]; ready: boolean;
-  view: "summary" | "trophy"; onView: (view: "summary" | "trophy") => void;
+  view: "friends" | "summary" | "trophy"; onView: (view: "friends" | "summary" | "trophy") => void; friends?: ReactNode;
   onOpenStats: () => void; onOpenHistory: () => void; onOpenRound: (id: string) => void;
 };
-export function CareerHub({ displayName, avatarUrl, userId, index, insights, rounds, ready, view, onView, onOpenStats, onOpenHistory, onOpenRound }: CareerHubProps) {
+export function CareerHub({ displayName, avatarUrl, userId, index, insights, rounds, ready, view, onView, friends, onOpenStats, onOpenHistory, onOpenRound }: CareerHubProps) {
   const achievements = useMemo(() => rounds.flatMap(round => {
     const summary = deriveRoundAchievements(round, rounds, userId);
     return summary ? roundAchievementLabels(summary).map(label => ({ id: round.id + ":" + label, roundId: round.id, date: round.date, course: round.courseName, label })) : [];
@@ -30,8 +30,8 @@ export function CareerHub({ displayName, avatarUrl, userId, index, insights, rou
   }
   return <section className={styles.screen} aria-label="Carrera">
     <div className={styles.player}><ProfileAvatarMedia className={styles.avatar} value={avatarUrl} fallback={displayName.trim()[0] || "G"} /><div><b>{displayName}</b><small>Tu historia en el golf</small></div><span className={styles.index}>{index.source || "Index"}<strong>{index.value === null ? "—" : index.value.toFixed(1)}</strong></span></div>
-    <nav className={styles.tabs} aria-label="Secciones de Carrera"><button type="button" aria-current={view === "summary" ? "page" : undefined} onClick={() => onView("summary")}>Resumen</button><button type="button" onClick={onOpenStats}>Estadísticas</button><button type="button" onClick={onOpenHistory}>Historial</button></nav>
-    {!ready ? <section className={styles.panel}><h2>Preparando tu Carrera</h2><p role="status">Esperando confirmar tus preferencias de estadísticas. Tus rondas guardadas siguen en Historial.</p><button type="button" onClick={onOpenHistory}>Abrir historial</button></section> : view === "trophy" ? <>
+    <nav className={styles.tabs} aria-label="Secciones de Carrera"><button type="button" aria-current={view === "friends" ? "page" : undefined} onClick={() => onView("friends")}>Amigos</button><button type="button" aria-current={view === "summary" ? "page" : undefined} onClick={() => onView("summary")}>Resumen</button><button type="button" onClick={onOpenStats}>Estadísticas</button><button type="button" onClick={onOpenHistory}>Historial</button></nav>
+    {view === "friends" ? friends : !ready ? <section className={styles.panel}><h2>Preparando tu Carrera</h2><p role="status">Esperando confirmar tus preferencias de estadísticas. Tus rondas guardadas siguen en Historial.</p><button type="button" onClick={onOpenHistory}>Abrir historial</button></section> : view === "trophy" ? <>
       <button type="button" className="textButton" onClick={() => onView("summary")}>← Volver a Carrera</button>
       <section className={styles.panel}><h2>Trophy Room</h2><p className={styles.caption}>Logros y momentos respaldados por tus tarjetas.</p>{renderAchievements(achievements)}</section>
       <section className={styles.panel}><h2>Récords personales</h2><div className={styles.records}>{records.map(record => <div key={record.label}><span>{record.label}</span><b>{record.value ?? "—"}</b></div>)}</div><p className={styles.caption}>Rachas y premios del club · Próximamente.</p></section>

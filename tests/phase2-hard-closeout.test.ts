@@ -176,7 +176,7 @@ test("priority UX keeps searches anchored and avoids loading a round course drop
   assert.match(roundPicker, /Más resultados/);
   assert.match(page, /<RoundCoursePicker/);
   assert.doesNotMatch(page, /<select id="round-course"/);
-  assert.match(social, /<AnchoredSearch label="Nombre, @usuario o correo exacto"/);
+  assert.match(social, /Nombre, @usuario o correo exacto<span><input type="search"/);
   assert.match(social, /setTimeout/);
   assert.doesNotMatch(social, /className="socialSearchRow"/);
 });
