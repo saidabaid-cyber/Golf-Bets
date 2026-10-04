@@ -81,6 +81,21 @@ test("Foursome first level has real basics; advanced HCP/rounding/pressure are c
   for (const name of ["Valor fijo", "Valor por punto / patada"]) assert.doesNotMatch(text(advanced), new RegExp(name));
 });
 
+test("Nassau keeps its amount and components visible, with pressure and advantage in collapsed advanced options", () => {
+  const group = fixture(); let value = templates.createEmptyGroupGameTemplate(group);
+  const h = componentHarness("app/components/group-bet-template-editor.tsx");
+  const props = { players: templates.groupTemplatePlayers(group), ownerId: "owner", onChange: (update: any) => { value = update(value); } };
+  const selection = h.render("GroupBetTemplateEditor", { ...props, value, mode: "complete" });
+  find(selection, node => node.props.label === "Nassau / Personal").props.onChange();
+  const tree = h.render("GroupBetTemplateEditor", { ...props, value, mode: "details", onlyBetId: "personals" });
+  const advanced = find(tree, node => node.type === "details" && node.props.className === "advanced");
+  assert.equal(advanced.props.open, undefined); assert.match(text(advanced), /Presión[\s\S]*Ventaja para/);
+  assert.doesNotMatch(text(advanced), /Valor por componente|Match Primera/);
+  assert.ok(nodes(tree).some(node => node.props.label === "Valor por componente"));
+  assert.match(text(tree), /Match Primera[\s\S]*Medal Total/);
+  assert.equal(value.personalBets[0].baseValue, 100); assert.equal(value.personalBets[0].pressureMultiplier, 1);
+});
+
 test("shared HCP mapping is relative/course and money prefix keeps capture callback unchanged", () => {
   assert.deepEqual(editor.HANDICAP_BASIS_LABELS, { relative: "Diferencial · Entre jugadores", course: "Completo · Contra el campo" });
   const h = componentHarness("app/components/round-handicap-basis-control.tsx"); let saved = "";
