@@ -15,6 +15,31 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 
 const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222", C = "33333333-3333-4333-8333-333333333333";
+test("withheld notification privileges preserve card access without bypassing preferences", async () => {
+  const snapshot = { ...round(), lifecycleState: "live" }, updates: string[] = [];
+  const chain = (result: unknown) => {
+    const value: Record<string, unknown> = {};
+    for (const method of ["select", "eq", "in", "order", "limit"]) value[method] = () => value;
+    value.then = (resolve: (result: unknown) => unknown) => Promise.resolve(result).then(resolve);
+    return value;
+  };
+  const client = { from: (table: string) => {
+    if (table === "rounds_cloud") return chain({ data: [{ id: "cloud-one", version: 1, snapshot }], error: null });
+    if (table === "live_round_operations_v2") return chain({ data: [], error: null });
+    assert.equal(table, "round_participants_v2");
+    const value = chain({ data: [{ id: "pa", user_id: A }, { id: "pb", user_id: B }], error: null });
+    value.update = (patch: { player_key: string }) => { updates.push(patch.player_key); return chain({ error: null }); };
+    return value;
+  } };
+  // No audit write needed for this empty live card.
+  snapshot.scores = {};
+  const admin = { from: (table: string) => { assert.equal(table, "notification_preferences_v2"); return chain({ data: null, error: { code: "42501" } }); } };
+  const output = ts.transpileModule(readFileSync("lib/shared-round-participants.server.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const exports: Record<string, (...args: unknown[]) => Promise<unknown>> = {};
+  runInNewContext(output, { exports, require: (name: string) => name === "server-only" ? {} : name === "node:crypto" ? {} : name === "./supabase/server" ? { getSupabaseAdmin: () => admin } : name === "./shared-round-participants" ? { linkedRoundPlayers } : {}, Map, Set });
+  assert.deepEqual(JSON.parse(JSON.stringify(await exports.syncSharedRoundParticipants(client, A, [snapshot.id]))), { notifications: "BLOCKED_EXTERNAL_NOTIFICATION_PERMISSIONS" });
+  assert.deepEqual(updates, ["a", "b"]);
+});
 function round(): RoundSnapshot {
   return { id: "local-one", date: "2026-10-04", courseName: "QA catalog course", teeName: "QA catalog tee", lifecycleState: "completed", completedAt: "2026-10-04T12:00:00Z",
     ownerId: "a", ownerName: "A", players: [{ id: "a", name: "A", handicap: 5, accountUserId: A }, { id: "b", name: "B", handicap: 15, accountUserId: B }, { id: "guest", name: "Juan Guest", handicap: 14 }],

@@ -43,7 +43,8 @@ export async function auditOwnerScores(client: SupabaseClient, ownerId: string, 
 /** Only project an owner-authenticated canonical row. This grants card access,
  * never SELF_CONFIRMED attribution or score-writing permission to another user. */
 export async function syncSharedRoundParticipants(client: SupabaseClient, ownerId: string, localIds: string[]) {
-  if (!localIds.length) return;
+  const delivery = { notifications: "DELIVERED" as "DELIVERED" | "BLOCKED_EXTERNAL_NOTIFICATION_PERMISSIONS" };
+  if (!localIds.length) return delivery;
   const admin = getSupabaseAdmin("cloud");
   if (!admin) throw new Error("SHARED_ROUND_UNAVAILABLE");
   const result = await client.from("rounds_cloud").select("id,owner_id,snapshot,version").eq("owner_id", ownerId).in("local_id", [...new Set(localIds)]);
@@ -80,6 +81,12 @@ export async function syncSharedRoundParticipants(client: SupabaseClient, ownerI
     const recipients = linked.filter(player => player.accountUserId !== ownerId);
     const preferences = recipients.length ? await admin.from("notification_preferences_v2").select("user_id,in_app")
       .eq("event_type", type).in("user_id", recipients.map(player => player.accountUserId!)) : { data: [], error: null };
+    if (preferences.error?.code === "42501") {
+      // DEV deliberately withholds these privileges from service_role. Do not
+      // bypass recipient preferences or fail an already saved canonical card.
+      delivery.notifications = "BLOCKED_EXTERNAL_NOTIFICATION_PERMISSIONS";
+      continue;
+    }
     if (preferences.error) throw preferences.error;
     const notifications = recipients.filter(player => !(preferences.data || []).some(preference => preference.user_id === player.accountUserId && preference.in_app === false)).map(player => ({
       id: eventId(row.id, player.accountUserId!, type), recipient_id: player.accountUserId,
@@ -88,9 +95,11 @@ export async function syncSharedRoundParticipants(client: SupabaseClient, ownerI
     if (notifications.length) {
       // A retry does not duplicate the notification or reset its read marker.
       const notified = await admin.from("notification_events_v2").upsert(notifications, { onConflict: "recipient_id,id", ignoreDuplicates: true });
-      if (notified.error) throw notified.error;
+      if (notified.error?.code === "42501") delivery.notifications = "BLOCKED_EXTERNAL_NOTIFICATION_PERMISSIONS";
+      else if (notified.error) throw notified.error;
     }
   }
+  return delivery;
 }
 
 export async function readSharedRoundCard(ctx: SocialContext, identifier: string, local = false) {

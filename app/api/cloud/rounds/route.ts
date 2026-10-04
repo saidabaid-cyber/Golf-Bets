@@ -51,10 +51,11 @@ export async function POST(request: NextRequest) {
   if (existing) return NextResponse.json({ duplicate: true }, { status: 409 });
   const { data, error } = await supabase.from("rounds_cloud").insert({ owner_id: userId, local_round_id: body.round.id, local_id: body.round.id, snapshot: body.round }).select("id,version").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  try { await syncSharedRoundParticipants(supabase, userId, [body.round.id]); }
+  let delivery;
+  try { delivery = await syncSharedRoundParticipants(supabase, userId, [body.round.id]); }
   catch { return NextResponse.json({ roundId: data.id, error: "Ronda guardada; la entrega a participantes sigue pendiente." }, { status: 503 }); }
   if (hasCompletedRoundPublicationCandidate([body.round])) scheduleSocialPublication(userId, "round");
-  return NextResponse.json({ roundId: data.id, version: Number(data.version) }, { status: 201 });
+  return NextResponse.json({ roundId: data.id, version: Number(data.version), delivery }, { status: 201 });
 }
 
 /** Owner scorekeeper only. A stale device must reconcile; never silently win. */
@@ -77,9 +78,10 @@ export async function PUT(request: NextRequest) {
     .eq("id", existing.data.id).eq("owner_id", authenticated.userId).eq("version", body.expectedVersion).select("id,version").maybeSingle();
   if (saved.error) return NextResponse.json({ error: "Captura conservada localmente; nube pendiente." }, { status: 503 });
   if (!saved.data) return NextResponse.json({ code: "STALE_REVISION", error: "La ronda cambió durante la escritura. Revisa antes de reintentar." }, { status: 409 });
-  try { await syncSharedRoundParticipants(authenticated.supabase, authenticated.userId, [round.id]); }
+  let delivery;
+  try { delivery = await syncSharedRoundParticipants(authenticated.supabase, authenticated.userId, [round.id]); }
   catch { return NextResponse.json({ version: Number(saved.data.version), error: "Scores guardados; la entrega a participantes sigue pendiente." }, { status: 503 }); }
-  return NextResponse.json({ roundId: saved.data.id, version: Number(saved.data.version) });
+  return NextResponse.json({ roundId: saved.data.id, version: Number(saved.data.version), delivery });
 }
 
 export async function DELETE(request: NextRequest) {

@@ -29,7 +29,9 @@ export function OwnerRoundSync({ snapshot, accessToken, userId }: { snapshot: Ro
       // canonical revision. Preserve it for a safe retry, never assume success.
       if (result.version) localStorage.setItem(cacheKey, String(result.version));
       if (!response.ok) throw new Error(result.error || "Sincronización pendiente.");
-      if (active) setMessage("Scores sincronizados en una sola ronda. El organizador lleva la captura.");
+      if (active) setMessage(result.delivery?.notifications === "BLOCKED_EXTERNAL_NOTIFICATION_PERMISSIONS"
+        ? "Scores sincronizados en una sola ronda. La notificación a participantes sigue pendiente."
+        : "Scores sincronizados en una sola ronda. El organizador lleva la captura.");
     }
     const timer = setTimeout(() => { queue.current = queue.current.catch(() => {}).then(sync).catch(error => { if (active) setMessage(error.message || "Nube pendiente; tu captura local se conserva."); }); }, 750);
     return () => { active = false; clearTimeout(timer); };

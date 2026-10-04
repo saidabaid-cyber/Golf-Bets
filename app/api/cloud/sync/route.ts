@@ -85,9 +85,9 @@ export async function POST(request: NextRequest) {
 
 
     const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string }, { extendedSchema: true });
-    await syncSharedRoundParticipants(account.client, account.userId, (body.data.history || []).filter(round => !round.cloudReadOnly && round.scorekeeping?.version === 1).map(round => String(round.id)));
+    const delivery = await syncSharedRoundParticipants(account.client, account.userId, (body.data.history || []).filter(round => !round.cloudReadOnly && round.scorekeeping?.version === 1).map(round => String(round.id)));
     if (hasCompletedRoundPublicationCandidate(body.data.history)) scheduleSocialPublication(account.userId, "round");
-    return NextResponse.json(result, { headers: { "cache-control": "private, no-store" } });
+    return NextResponse.json({ ...result, delivery }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     logFailure("write", error);
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
