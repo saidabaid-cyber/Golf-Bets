@@ -37,7 +37,14 @@ export async function controlledE2e(env, outDir = ".qa-artifacts") {
   };
   if (existsSync(reportFile)) {
     const prior = JSON.parse(readFileSync(reportFile, "utf8"));
-    if (prior.status === "complete") { assert.equal(prior.userId, fixture.id); const state = await app("/api/social/first-experience"); assert.equal(state.state.firstGroup, "created"); return { ...prior, buildSha: config.expectedSha, reread: true }; }
+    if (prior.status === "complete") {
+      assert.equal(prior.userId, fixture.id); const state = await app("/api/social/first-experience");
+      assert.equal(state.state.firstGroup, "created"); assert.equal(state.state.firstRoundGroup, "created");
+      assert.equal((await app("/api/cloud/sync")).data.activeDraft, null);
+      assert.equal((await app("/api/cloud/rounds")).rounds.filter(round => round.id === prior.roundId).length, 1);
+      const reread = { ...prior, executionBuildSha: prior.executionBuildSha || prior.buildSha, buildSha: config.expectedSha, verifiedAt: new Date().toISOString(), reread: true };
+      writeFileSync(reportFile, JSON.stringify(reread, null, 2) + "\n"); return reread;
+    }
   }
   const { saveCloudProfile } = require("../.test-dist/lib/cloud-account.js");
   const { createBetaOnboardingProgress, completeBetaOnboarding } = require("../.test-dist/lib/beta-onboarding.js");
@@ -68,8 +75,12 @@ export async function controlledE2e(env, outDir = ".qa-artifacts") {
   report.testResults.NEW_REQUEST_NOTIFICATION_ACCEPT_BIDIRECTIONAL = "PASS"; report.testResults.CONCURRENT_REQUEST_NO_DUPLICATES = "PASS"; save();
   await app("/api/social/first-experience", "PUT", { field: "firstGroup", value: "skipped" });
   const source = checked(await client.from("rounds_cloud").select("snapshot").eq("owner_id", fixture.id), "CONTROL_HISTORY_READ");
-  const qaSource = await app("/api/courses/catalog?courseId=" + encodeURIComponent((await app("/api/courses/catalog?q=La%20Vista%20Country%20Club")).courses.find(course => course.clubName === "La Vista Country Club").id));
+  const catalog = await app("/api/courses/catalog?q=La%20Vista%20Country%20Club");
+  const selected = catalog.courses.find(course => course.clubName?.toLowerCase() === "la vista country club");
+  assert.ok(selected?.id, "CONTROL_REAL_COURSE_NOT_FOUND");
+  const qaSource = await app("/api/courses/catalog?courseId=" + encodeURIComponent(selected.id));
   const course = qaSource.cards.find(card => card.holes.length === 18 && card.catalogTeeId);
+  assert.ok(course, "CONTROL_REAL_TEE_NOT_FOUND");
   const account = { id: fixture.id, name: "QA First Experience Control", hcp: 15 };
   const round = qaRound({ id: "controlled-dev-first-round-v1", accounts: [account], course, completedAt: now });
   const draft = { roundId: round.id, course, courseSelected: true, players: round.players, ownerId: round.ownerId, startHole: 1, roundHoles: 18, roundHandicapBasis: "relative", scoreOnly: true, bets: round.betConfig, personalBets: [], supplementalBets: [], manualBets: [], segments: [], scores: { 1: round.scores[1] }, putts: { 1: round.putts[1] }, startedAt: now, lifecycleState: "live" };
