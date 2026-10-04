@@ -24,7 +24,7 @@ function harness(path: string, boundaries: Record<string, any> = {}) {
     "account-provider": { useBackyardAccount: () => ({ identity: { accessToken: "controlled-qa" } }) }, ...boundaries };
   const code = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   let uuid = 0;
-  runInNewContext(code, { exports, Date, Set, Promise, AbortController, AbortSignal, window: { scrollY: 200, scrollTo() {}, addEventListener() {}, removeEventListener() {} }, document: { visibilityState: "visible", addEventListener() {}, removeEventListener() {} }, navigator: { clipboard: { writeText: async (value: string) => { clipboardWrites.push(value); } } }, setInterval: () => 1, clearInterval() {}, setTimeout, clearTimeout, crypto: { randomUUID: () => `qa-id-${++uuid}` }, fetch: boundaries.fetch,
+  runInNewContext(code, { exports, Date, Set, Promise, AbortController, AbortSignal, window: { scrollY: 200, scrollTo() {}, addEventListener() {}, removeEventListener() {} }, document: { visibilityState: "visible", addEventListener() {}, removeEventListener() {} }, navigator: { share: boundaries.navigatorShare, clipboard: { writeText: async (value: string) => { clipboardWrites.push(value); } } }, setInterval: () => 1, clearInterval() {}, setTimeout, clearTimeout, crypto: { randomUUID: () => `qa-id-${++uuid}` }, fetch: boundaries.fetch,
     require: (id: string) => {
       if (id === "react") return react;
       if (id === "next/dynamic") return { __esModule: true, default: () => () => null };
@@ -89,6 +89,19 @@ test("detail is full page, shows every member and opens the existing editor, sel
   assert.doesNotMatch(text(tree), /ModalShell/); assert.equal(nodes(tree).some(n => n.props.role === "dialog"), false); assert.match(text(tree), /Jugadores[\s\S]*QA Player 0[\s\S]*Juan Pérez[\s\S]*Sin app/);
   for (const label of ["← Mis grupos", "Editar grupo", "Crear ronda con este grupo", "Eliminar grupo"]) click(tree, label); assert.deepEqual(events, ["back", "edit", "play", "delete"]);
   click(tree, "Invitar / administrar integrantes"); tree = h.render("GroupDetailView", props); assert.ok(nodes(tree).some(n => n.type === "GroupInviteManager")); assert.doesNotMatch(text(tree), /Configuración de HCP/);
+});
+
+test("Share uses native Web Share with the generated result when available", async () => {
+  const shares: any[] = [];
+  const h = harness("app/components/group-builder.tsx", { navigatorShare: async (payload: any) => { shares.push(payload); } });
+  const props = { frequentGroups: [fixture()], frequentPlayers: [], onBack() {}, onPlay() {}, onSaveFrequentGroup() {}, onCreateFrequentGroup() {}, onOpenFrequentGroup() {}, onStartFrequentGroup() {}, onEditFrequentGroup() {}, onDeleteFrequentGroup() {}, onAcceptedMembers() {}, onCloseDetail() {} };
+  let tree = h.render("GroupBuilder", props); find(tree, n => n.type?.name === "GroupLibraryView").props.onDraw();
+  tree = h.render("GroupBuilder", props); find(tree, n => n.type === "button" && text(n).includes("Domingo")).props.onClick();
+  tree = h.render("GroupBuilder", props); click(tree, "Armar grupos"); tree = h.render("GroupBuilder", props);
+  await click(tree, "Compartir"); tree = h.render("GroupBuilder", props);
+  assert.equal(shares.length, 1); assert.equal(shares[0].title, "The Backyard · Grupos");
+  for (let i = 0; i < 5; i++) assert.ok(shares[0].text.includes(`QA Player ${i}`));
+  assert.equal(h.clipboardWrites.length, 0); assert.match(text(tree), /Resumen compartido/);
 });
 
 test("badge composes unread socials plus only pending incoming invitations and refreshes after acceptance", async () => {
