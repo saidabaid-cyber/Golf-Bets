@@ -92,7 +92,7 @@ import { NumericCaptureInput } from "./components/numeric-capture-input";
 import { HcpPercentageInput } from "./components/hcp-percentage-input";
 import { SignedMoneyInput } from "./components/signed-money-input";
 import { AccountProvider, useBackyardAccount } from "./components/account-provider";
-import { CaptureGroupInvitationLink, PendingGroupInvitation } from "./components/group-invitations";
+import { CaptureGroupInvitationLink, PendingGroupInvitation, useGroupNotificationsBadge } from "./components/group-invitations";
 import { resolveRoundDraftCore, resolvedOwnerIdForRoundDraft } from "./draft-restoration";
 import { accountDeletionMarkerKey } from "../lib/account-state";
 import { ProfileAccountPanel } from "./components/profile-account-panel";
@@ -463,6 +463,7 @@ function GolfBetsApp() {
   const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
   const ghinControl = useGhinReadOnlyProfile(identity.mode === "authenticated" ? identity.accessToken : null);
   const { tab, setTab, goBack, setNavigationGuard, historyDetailId } = useScreenNavigation();
+  const { unread: groupNotificationsUnread } = useGroupNotificationsBadge(identity.accessToken, isPrimaryTab(tab));
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const [profileCompletionTarget, setProfileCompletionTarget] = useState<CompletionSection | null>(null);
   const [profileRootRevision, setProfileRootRevision] = useState(0);
@@ -3806,7 +3807,7 @@ function GolfBetsApp() {
       scoreOnly={roundPresentation.playMode === "score_only"} canBet={bettingConsentGranted} onFriends={() => void openFirstExperienceFriends()}
       onCreateGroup={() => void openFirstExperienceGroup()} onSkip={() => void skipFirstSocialExperience()} />
     <FeedbackDialog key={`feedback:${identity.userId}`} token={identity.accessToken} email={identity.email} screen={tab} />
-    {isPrimaryTab(tab) && <PrimaryHeader tab={tab} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => setTab("welcome")} onNotifications={() => { setSocialInitialView("notifications"); setTab("social"); }} />}
+    {isPrimaryTab(tab) && <PrimaryHeader tab={tab} notificationCount={groupNotificationsUnread} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => setTab("welcome")} onNotifications={() => { setSocialInitialView("notifications"); setTab("social"); }} />}
     {!isPrimaryTab(tab) && tab !== "round" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BackyardWordmark /></button>
       <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><ProfileNavigationButton avatarUrl={identity.avatarUrl} displayName={identity.displayName} onClick={openProfileRoot} /></div>

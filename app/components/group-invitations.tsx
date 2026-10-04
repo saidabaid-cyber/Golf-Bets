@@ -5,6 +5,8 @@ import type { FrequentGroup, FrequentGroupMember } from "../../lib/types";
 import { invitationStatus, normalizedInvitationEmail, parseGroupInvitationLink, type BackyardGroupUser, type GroupInvitation } from "../../lib/group-invitations";
 import type { SocialPerson } from "../../lib/social-connections";
 import { useBackyardAccount } from "./account-provider";
+import type { SocialNotificationPage } from "../../lib/social-activity-contract";
+import { socialRequest } from "../../lib/social-activity-client";
 import styles from "./group-invitations.module.css";
 
 const SocialQrScanner = dynamic(() => import("./social-qr").then((module) => module.SocialQrScanner), { ssr: false });
@@ -16,6 +18,39 @@ async function api(token: string, body?: Record<string, unknown>, signal?: Abort
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "No pudimos confirmar la invitación.");
   return data;
+}
+
+export function pendingIncomingGroupInvitations(invitations: GroupInvitation[], now = Date.now()) {
+  return invitations.filter(invite => !invite.outgoing && invite.state === "PENDING" && Date.parse(invite.expires_at) > now);
+}
+
+/** Composes existing inboxes; outgoing, accepted and expired invitations never count. */
+export function useGroupNotificationsBadge(accessToken?: string | null, active = true) {
+  const [counts, setCounts] = useState({ social: 0, groups: 0 });
+  const revision = useRef(0);
+  const refreshUnread = useCallback(async (signal?: AbortSignal) => {
+    if (!accessToken) return;
+    const request = ++revision.current;
+    const [social, groups] = await Promise.allSettled([
+      socialRequest<SocialNotificationPage>("/api/social/notifications", accessToken, { signal }),
+      api(accessToken, undefined, signal),
+    ]);
+    if (signal?.aborted || request !== revision.current) return;
+    setCounts(current => ({ social: social.status === "fulfilled" ? social.value.data.filter(item => !item.readAt).length : current.social,
+      groups: groups.status === "fulfilled" ? new Set(pendingIncomingGroupInvitations(groups.value.invitations || []).map(invite => invite.id)).size : current.groups }));
+  }, [accessToken]);
+  useEffect(() => {
+    setCounts({ social: 0, groups: 0 });
+    if (!accessToken || !active) return;
+    const controller = new AbortController();
+    const refresh = () => { if (document.visibilityState !== "hidden") void refreshUnread(controller.signal); };
+    refresh();
+    const timer = setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => { controller.abort(); clearInterval(timer); window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", refresh); };
+  }, [accessToken, active, refreshUnread]);
+  return { unread: counts.social + counts.groups, refreshUnread };
 }
 
 export function GroupInviteManager({ group, accessToken, onAcceptedMembers }: { group: FrequentGroup; accessToken?: string | null; onAcceptedMembers?: (members: FrequentGroupMember[]) => void }) {
@@ -118,7 +153,7 @@ export function GroupInvitationInbox({ accessToken, onAccepted }: { accessToken?
   const pending = useRef(false);
   const reload = useCallback(async () => {
     if (!accessToken) return;
-    const data = await api(accessToken); setInvitations(data.invitations || []); setLoadedAt(Date.now());
+    const data = await api(accessToken); setInvitations((data.invitations || []).filter((invite: GroupInvitation) => !invite.outgoing)); setLoadedAt(Date.now());
   }, [accessToken]);
   useEffect(() => { void reload().catch(error => setMessage(error.message)); }, [reload]);
   async function accept(invitationId: string) {
@@ -130,7 +165,7 @@ export function GroupInvitationInbox({ accessToken, onAccepted }: { accessToken?
   }
   return <section className={styles.panel}><h2>Invitaciones</h2>{!accessToken ? <p>Inicia sesión para consultar tus invitaciones.</p> : <>
     {!invitations.length && <p>No hay invitaciones para esta cuenta.</p>}
-    <ul className={styles.results}>{invitations.map(invite => <li key={invite.id}><span><b>{invite.group_name}</b><small>{invite.outgoing ? `Para ${invite.recipient_label} · ` : "Recibida · "}{invitationStatus(invite)}</small></span>{!invite.outgoing && invite.state === "PENDING" && Date.parse(invite.expires_at) > loadedAt && <button type="button" className="primary" disabled={busy} onClick={() => void accept(invite.id)}>Aceptar</button>}</li>)}</ul>
+    <ul className={styles.results}>{invitations.map(invite => <li key={invite.id}><span><b>{invite.group_name}</b><small>Te invitaron al grupo · {invite.state === "PENDING" && Date.parse(invite.expires_at) > loadedAt ? "Pendiente de aceptar" : invitationStatus(invite)}</small></span>{invite.state === "PENDING" && Date.parse(invite.expires_at) > loadedAt && <button type="button" className="primary" disabled={busy} onClick={() => void accept(invite.id)}>Aceptar</button>}</li>)}</ul>
     <button type="button" className="textButton" disabled={busy} onClick={() => void reload().catch(error => setMessage(error.message))}>Actualizar invitaciones</button>
   </>}{message && <p role="status">{message}</p>}</section>;
 }

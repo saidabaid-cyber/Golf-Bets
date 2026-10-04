@@ -138,8 +138,8 @@ test("grupos guardados se cargan por nombre y se administran desde su detalle", 
   assert.match(builder, /GroupDetailView/);
   assert.match(builder, /Editar grupo/);
   assert.match(builder, /Eliminar grupo/);
-  assert.match(builder, /onEditFrequentGroup\(group\)/);
-  assert.match(builder, /onDeleteFrequentGroup\(group\)/);
+  assert.match(builder, /onEditFrequentGroup\(detailGroup\)/);
+  assert.match(builder, /onDeleteFrequentGroup\(detailGroup\)/);
   assert.match(page, /onEditFrequentGroup=\{beginEditFrequentGroup\}/);
   assert.match(page, /onDeleteFrequentGroup=\{setFrequentGroupToDelete\}/);
   assert.match(page, /¿Eliminar grupo guardado\?/);

@@ -1,14 +1,12 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import type { PersonalActivity } from "../../lib/golf-insights";
 import type { SocialProfile } from "../../features/social/domain";
-import type { SocialNotificationPage } from "../../lib/social-activity-contract";
-import { socialRequest } from "../../lib/social-activity-client";
 import { SocialConnectionsPanel } from "./social-connections-panel";
 import { CloudSocialNotifications, SocialSharingPreferences } from "./cloud-social-activity";
 import { BottomBackAction } from "./bottom-back-action";
-import { GroupInvitationInbox } from "./group-invitations";
+import { GroupInvitationInbox, useGroupNotificationsBadge } from "./group-invitations";
 import { PersonalQr, SocialQrScanner } from "./social-qr";
 import { useBackyardAccount } from "./account-provider";
 import styles from "./social-feed.module.css";
@@ -23,14 +21,9 @@ export type SocialFeedProps = {
 };
 export function SocialFeed({ initialView = "activity", targetId, onCloseTarget, identityUserId, accessToken, onOpenGroups, onPrivacy, onHome }: SocialFeedProps) {
   const { identity, retryCloudSync } = useBackyardAccount();
-  const [view, setView] = useState<SocialView>(initialView), [menu, setMenu] = useState(false), [unread, setUnread] = useState(0), [target, setTarget] = useState(targetId);
+  const [view, setView] = useState<SocialView>(initialView), [menu, setMenu] = useState(false), [target, setTarget] = useState(targetId);
+  const { unread, refreshUnread } = useGroupNotificationsBadge(accessToken);
   useViewScrollReset(`${view}:${target ?? ""}`);
-  const refreshUnread = useCallback(async (signal?: AbortSignal) => {
-    if (!accessToken) return;
-    const result = await socialRequest<SocialNotificationPage>("/api/social/notifications", accessToken, { signal });
-    if (!signal?.aborted) setUnread(result.data.filter(item => !item.readAt).length);
-  }, [accessToken]);
-  useEffect(() => { const controller = new AbortController(); void refreshUnread(controller.signal).catch(() => {}); return () => controller.abort(); }, [refreshUnread]);
   function open(next: SocialView) { setMenu(false); setView(next); }
   function backToActivity() { if (onHome) onHome(); else open("activity"); }
   return <section className={styles.screen} aria-labelledby="social-title">
@@ -42,7 +35,7 @@ export function SocialFeed({ initialView = "activity", targetId, onCloseTarget, 
     {view !== "activity" && view !== "qr" && view !== "scan" && <button type="button" className="textButton" onClick={backToActivity}>← Feed de amigos</button>}
     {view === "activity" && <div className={styles.links}><button type="button" onClick={onHome}>Feed de Inicio</button><button type="button" onClick={() => open("friends")}>Amigos y solicitudes</button><button type="button" onClick={() => open("qr")}>Mi QR</button><button type="button" onClick={() => open("scan")}>Escanear QR</button><button type="button" onClick={() => open("preferences")}>Qué comparto</button></div>}
     {view === "friends" && <SocialConnectionsPanel key={identityUserId} ownerId={identityUserId} accessToken={accessToken} targetId={target} onCloseTarget={() => { setTarget(null); onCloseTarget?.(); }} onChanged={() => void refreshUnread().catch(() => {})} />}
-    {view === "notifications" && <><CloudSocialNotifications key={identityUserId} viewerId={identityUserId} accessToken={accessToken} onFriends={() => open("friends")} onReadChange={() => void refreshUnread().catch(() => {})} /><GroupInvitationInbox accessToken={accessToken} onAccepted={retryCloudSync} /><button type="button" className="secondary" onClick={onOpenGroups}>Ver mis grupos</button></>}
+    {view === "notifications" && <><CloudSocialNotifications key={identityUserId} viewerId={identityUserId} accessToken={accessToken} onFriends={() => open("friends")} onReadChange={() => void refreshUnread().catch(() => {})} /><GroupInvitationInbox accessToken={accessToken} onAccepted={async () => { await retryCloudSync(); await refreshUnread(); }} /><button type="button" className="secondary" onClick={onOpenGroups}>Ver mis grupos</button></>}
     {view === "qr" && <PersonalQr userId={identityUserId} name={identity.displayName} username={identity.username || ""} avatar={identity.avatarUrl || ""} onClose={backToActivity} />}
     {view === "scan" && <SocialQrScanner onFound={id => { setTarget(id); open("friends"); }} onClose={backToActivity} />}
     {view === "preferences" && <section className="card"><h2>Privacidad y notificaciones</h2><button type="button" className="secondary" onClick={onPrivacy}>Privacidad del perfil</button>{accessToken && <SocialSharingPreferences accessToken={accessToken} />}</section>}
