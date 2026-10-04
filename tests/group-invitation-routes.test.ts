@@ -9,7 +9,7 @@ import * as templates from "../lib/frequent-templates";
 import * as socialDomain from "../features/social/domain";
 
 const OWNER="11111111-1111-4111-8111-111111111111", OTHER="22222222-2222-4222-8222-222222222222", INVITE="33333333-3333-4333-8333-333333333333", GROUP="44444444-4444-4444-8444-444444444444";
-type Options={ authMissing?:boolean; authThrows?:boolean; authNever?:boolean; rpcThrows?:boolean; rpcNever?:boolean; qa?:boolean; providerError?:string; noSend?:boolean; createData?:unknown; finishError?:boolean; rpcError?:{code:string;message:string} };
+type Options={ partialName?:boolean; hiddenCard?:boolean; authMissing?:boolean; authThrows?:boolean; authNever?:boolean; rpcThrows?:boolean; rpcNever?:boolean; qa?:boolean; providerError?:string; noSend?:boolean; createData?:unknown; finishError?:boolean; rpcError?:{code:string;message:string} };
 function harness(route:"invitations"|"users"="invitations",options:Options={}) {
   let authCalls=0,sendCalls=0;
   const calls:{service:boolean; name:string; args:Record<string,unknown>; aborted:boolean}[]=[],logs:unknown[]=[];
@@ -20,6 +20,8 @@ function harness(route:"invitations"|"users"="invitations",options:Options={}) {
       if(options.rpcThrows) return Promise.reject(new Error("private server data secret")).then(resolve,reject);
       let data:unknown={};let error:unknown=options.rpcError||null;
       if(name==="search_group_users_v1")data=[{user_id:OTHER,username:"golfer",display_name:"Golfer",avatar_url:null,is_friend:false,email:"private@example.invalid",password:"private"}];
+      if(name==="search_group_users_v1" && options.partialName)data=[];
+      if(name==="social_profile_card_v1")data=options.hiddenCard?[]:[{user_id:OTHER,username:"qa_diego_green",display_name:"QA Diego Green",avatar_url:null}];
       else if(args.action==="list")data={invitations:[],groupId:GROUP,acceptedMembers:[]};
       else if(args.action==="ensure")data={groupId:GROUP};
       else if(args.action==="accept")data={accepted:true,groupId:GROUP};
@@ -29,13 +31,19 @@ function harness(route:"invitations"|"users"="invitations",options:Options={}) {
       return Promise.resolve({data,error}).then(resolve,reject);
     }};return query;
   };
+  const from=(table:string)=>{
+    const query={select(){return query;},eq(key:string,value:string){assert.equal(key,"privacy");assert.equal(value,"PUBLIC");return query;},
+      neq(key:string,value:string){assert.equal(key,"user_id");assert.equal(value,OWNER);return query;},ilike(key:string,value:string){assert.equal(key,"display_name");assert.ok(value.startsWith("%")&&value.endsWith("%"));return query;},
+      or(value:string){assert.ok(value.includes(OWNER));return query;},order(){return query;},limit(){return query;},abortSignal(){return query;},
+      then(resolve:(value:unknown)=>unknown){return Promise.resolve({data:table==="social_profiles"&&options.partialName?[{user_id:OTHER}]:[],error:null}).then(resolve);}};return query;
+  };
   const exports:Record<string,(request:Request)=>Promise<Response>>={};
   runInNewContext(ts.transpileModule(readFileSync(`app/api/groups/${route}/route.ts`,"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,{
     exports,Request,Response,URL,AbortSignal,process:{env:{}},console:{error:(...args:unknown[])=>logs.push(args)},
     setTimeout:(callback:()=>void,delay:number)=>setTimeout(callback,options.authNever||options.rpcNever?1:delay),clearTimeout,
     require:(id:string)=>{
       if(id==="next/server")return{NextResponse:Response};
-      if(id.endsWith("/server-auth"))return{authenticatedRequest:async(request:Request)=>{authCalls++;if(options.authThrows)throw new Error("private authentication secret");if(options.authNever)return new Promise(()=>{});return options.authMissing||!request.headers.get("authorization")?{ok:false,status:401,error:"Inicia sesión."}:{ok:true,userId:OWNER,client:{rpc:rpc(false)}};}};
+      if(id.endsWith("/server-auth"))return{authenticatedRequest:async(request:Request)=>{authCalls++;if(options.authThrows)throw new Error("private authentication secret");if(options.authNever)return new Promise(()=>{});return options.authMissing||!request.headers.get("authorization")?{ok:false,status:401,error:"Inicia sesión."}:{ok:true,userId:OWNER,client:{rpc:rpc(false),from}};}};
       if(id.endsWith("/preview-database"))return{isolatedPreviewDatabaseEnabled:()=>options.qa!==false};
       if(id.endsWith("/supabase/server"))return{getSupabaseAdmin:()=>({rpc:rpc(true)})};
       if(id.endsWith("/frequent-templates"))return templates;
@@ -69,6 +77,13 @@ test("invitation listing forwards localGroupId without accepting an actor select
 test("directory projects identity fields only, even if an RPC mistakenly returns private columns",async()=>{
   const h=harness("users");const response=await h.run("GET",undefined,"?q=User%40Example.invalid");assert.equal(response.status,200);const body=await response.json();
   assert.deepEqual(Object.keys(body.users[0]).sort(),["avatar_url","display_name","is_friend","user_id","username"]);assert.doesNotMatch(JSON.stringify(body),/private|email|password/);assert.equal(h.calls[0].args.query_text,"user@example.invalid");
+});
+test("partial public display names reuse the identity card gate without exposing private or blocked cards",async()=>{
+  const h=harness("users",{partialName:true});const response=await h.run("GET",undefined,"?q=Diego");assert.equal(response.status,200);
+  const body=await response.json();assert.equal(body.users[0].display_name,"QA Diego Green");assert.equal(body.users[0].is_friend,false);
+  assert.deepEqual(Object.keys(body.users[0]).sort(),["avatar_url","display_name","is_friend","user_id","username"]);
+  assert.ok(h.calls.some(call=>call.name==="social_profile_card_v1"));
+  const hidden=harness("users",{partialName:true,hiddenCard:true});assert.deepEqual((await (await hidden.run("GET",undefined,"?q=Diego")).json()).users,[]);
 });
 test("authentication and isolated-Preview gates prevent writes or emails",async()=>{
   for(const options of [{authMissing:true},{qa:false}]){const h=harness("invitations",options);assert.equal((await h.run("POST",{action:"create",groupId:GROUP,email:"valid@example.invalid"})).status,options.authMissing?401:503);assert.equal(h.calls.length,0);assert.equal(h.sendCalls(),0);}
