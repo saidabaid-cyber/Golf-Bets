@@ -200,6 +200,7 @@ import { normalizeHistoricalRoundLifecycle, normalizeRoundStartedAt, withDerived
 import { preserveUnfinishedRound, unfinishedRoundDraft } from '../lib/unfinished-round';
 import { hasRoundToPreserve } from '../lib/new-round-safety';
 import { hasSeenFirstRoundExperience, markFirstRoundExperienceSeen } from "../lib/round-first-experience";
+import { FirstSocialExperience, useFirstSocialExperience } from "./components/first-social-experience";
 import { normalizeAdvancedStats, normalizeScoreCaptureMode, updateAdvancedHoleStat } from "../lib/advanced-stats";
 import { viperQuantityFromPutts } from "../lib/round-capture";
 import { groupNassauPresentation, normalizeRoundPresentation } from "../lib/round-presentation";
@@ -619,6 +620,32 @@ function GolfBetsApp() {
   const [showDeleteRoundConfirm, setShowDeleteRoundConfirm] = useState(false);
   const [showNewRoundConfirm, setShowNewRoundConfirm] = useState(false);
   const [showFirstRoundExperience, setShowFirstRoundExperience] = useState(false);
+  const firstExperienceGroupReturn = useRef<{ tab: AppTab; origin: "home" | "round" } | null>(null);
+  useEffect(() => { firstExperienceGroupReturn.current = null; }, [identity.userId]);
+  const firstSocialExperience = useFirstSocialExperience({ userId: identity.userId, token: identity.mode === "authenticated" ? identity.accessToken : null,
+    home: tab === "welcome", setup: tab === "setup" && !editingRound, hasGroup: frequentGroups.some(group => group.players.length > 0 && group.name.trim()) });
+
+  async function skipFirstSocialExperience() {
+    const prompt = firstSocialExperience.prompt;
+    if (prompt && await firstSocialExperience.resolve(prompt === "friends" ? "friendDiscovery" : prompt === "group" ? "firstGroup" : "firstRoundGroup", "skipped")) firstSocialExperience.dismiss();
+  }
+  async function openFirstExperienceFriends() {
+    if (await firstSocialExperience.resolve("friendDiscovery", "opened")) { setSocialInitialView("friends"); setTab("social"); }
+  }
+  async function openFirstExperienceGroup() {
+    const fromRound = firstSocialExperience.prompt === "roundGroup";
+    if (!fromRound && !await firstSocialExperience.resolve("firstGroup", "opened")) return;
+    firstExperienceGroupReturn.current = { tab, origin: fromRound ? "round" : "home" };
+    firstSocialExperience.dismiss();
+    setTab("groups");
+    beginCreateFrequentGroup();
+  }
+  async function closeFirstExperienceGroupEditor() {
+    const context = firstExperienceGroupReturn.current;
+    if (context?.origin === "round" && !await firstSocialExperience.resolve("firstRoundGroup", "skipped")) { setFrequentGroupEditError("No pudimos guardar tu decisión. Reintenta."); return; }
+    resetFrequentGroupEditor();
+    if (context) { firstExperienceGroupReturn.current = null; setTab(context.tab); }
+  }
   const [roundSetupInitialStep, setRoundSetupInitialStep] = useState<WizardStep>(1);
   const [newRoundBackupError, setNewRoundBackupError] = useState("");
   const [pendingNewRoundIntent, setPendingNewRoundIntent] = useState<NewRoundIntent | null>(null);
@@ -3174,6 +3201,15 @@ function GolfBetsApp() {
         ));
       }
       setFeedback(saved.notice);
+      const firstContext = firstExperienceGroupReturn.current;
+      if (firstContext) {
+        // Group creation edits its own draft only; the existing round draft,
+        // selected course, tees, players and scores are never reset here.
+        const confirmed = await firstSocialExperience.resolve(firstContext.origin === "round" ? "firstRoundGroup" : "firstGroup", "created");
+        if (!confirmed) { setFrequentGroupEditError("El grupo está guardado. Reintenta para confirmar tu regreso."); return; }
+        firstExperienceGroupReturn.current = null;
+        setTab(firstContext.tab);
+      }
       resetFrequentGroupEditor();
     } catch (error) {
       if (liveIdentity.current.userId === savingUserId) setFrequentGroupEditError(error instanceof Error ? error.message : "No pudimos guardar el grupo. Conservamos el borrador.");
@@ -3773,6 +3809,9 @@ function GolfBetsApp() {
   ].filter((item) => item.visible);
 
   return <main className={`app backyardApp ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
+    <FirstSocialExperience prompt={(tab === "welcome" && firstSocialExperience.prompt !== "roundGroup") || (tab === "setup" && !editingRound && firstSocialExperience.prompt === "roundGroup") ? firstSocialExperience.prompt : null} busy={firstSocialExperience.busy} error={firstSocialExperience.error}
+      scoreOnly={roundPresentation.playMode === "score_only"} canBet={bettingConsentGranted} onFriends={() => void openFirstExperienceFriends()}
+      onCreateGroup={() => void openFirstExperienceGroup()} onSkip={() => void skipFirstSocialExperience()} />
     <FeedbackDialog key={`feedback:${identity.userId}`} token={identity.accessToken} email={identity.email} screen={tab} />
     {isPrimaryTab(tab) && <PrimaryHeader tab={tab} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => setTab("welcome")} onNotifications={() => { setSocialInitialView("notifications"); setTab("social"); }} />}
     {!isPrimaryTab(tab) && tab !== "round" && <header className="topbar">
@@ -4487,7 +4526,7 @@ function GolfBetsApp() {
     {groupRoundSelection && <GroupRoundSelector group={groupRoundSelection} onCancel={() => setGroupRoundSelection(null)} onConfirm={(selectedMemberIds) => confirmFrequentGroupRoundSelection(groupRoundSelection, selectedMemberIds)} />}
 
     {frequentGroupDraft && <div className="modalBackdrop" role="presentation"><section ref={groupEditorRef} className="groupEditorDialog" role="dialog" aria-modal="true" aria-labelledby="edit-group-title" aria-describedby="edit-group-description">
-      <ModalCloseButton onClose={() => { if (!frequentGroupSaveInFlight.current) resetFrequentGroupEditor(); }} />
+      <ModalCloseButton onClose={() => { if (!frequentGroupSaveInFlight.current) void closeFirstExperienceGroupEditor(); }} />
       <div className="groupEditorHeader"><h2 id="edit-group-title">{frequentGroupDraftIsNew ? "Crear grupo" : "Editar grupo"}</h2><p id="edit-group-description">Jugadores y apuestas forman una plantilla. Las rondas ya iniciadas o históricas nunca cambian.</p></div>
       <fieldset disabled={frequentGroupSaving} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <label>Nombre del grupo<input value={frequentGroupDraft.name} onChange={(event) => setFrequentGroupDraft((group) => group ? { ...group, name: event.target.value } : group)} /></label>
@@ -4519,7 +4558,7 @@ function GolfBetsApp() {
         />
       </div> : <div className="empty">Agrega integrantes antes de configurar apuestas.</div>}
       {frequentGroupEditError && <div className="notice bad" role="alert">{frequentGroupEditError}</div>}
-      <div className="dialogActions"><button className="secondary" onClick={resetFrequentGroupEditor}>Cancelar</button><button className="primary" disabled={!frequentGroupDraft.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some((member) => !member.name.trim())} onClick={saveFrequentGroupEdit}>{frequentGroupSaving ? "Guardando…" : "Guardar"}</button></div>
+      <div className="dialogActions"><button className="secondary" onClick={() => void closeFirstExperienceGroupEditor()}>Cancelar</button><button className="primary" disabled={!frequentGroupDraft.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some((member) => !member.name.trim())} onClick={saveFrequentGroupEdit}>{frequentGroupSaving ? "Guardando…" : "Guardar"}</button></div>
       </fieldset>
     </section></div>}
 

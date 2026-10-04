@@ -18,6 +18,19 @@ async function graph(ctx:SocialContext) {
  return {people,requests:requests.data||[],friends,blocked:(blocked.data||[]).map(b => b.blocked_user_id)};
 }
 export async function GET(request:Request) { return socialHttp(request, async ctx => {
+ if(new URL(request.url).searchParams.get("discovery")==="nearby") {
+  // Match only an already-public club label, never private profile geography/GPS.
+  const own=await ctx.client.from("social_profiles").select("club_name").eq("user_id",ctx.userId).maybeSingle();
+  if(own.error) throw own.error;
+  const club=own.data?.club_name?.trim();
+  if(!club) return {users:[],label:"Guarda tu club para encontrar golfistas de tu zona."};
+  const candidates=await ctx.admin.from("social_profiles").select("user_id").eq("privacy","PUBLIC").eq("club_name",club).neq("user_id",ctx.userId).order("display_name").limit(40);
+  if(candidates.error) throw candidates.error;
+  // Existing card RPC enforces active accounts, privacy and blocking both ways.
+  const users=(await Promise.all((candidates.data||[]).map(row=>profile(ctx,row.user_id)))).filter(Boolean).slice(0,20)
+   .map(person=>({user_id:person.user_id,username:person.username,display_name:person.display_name,avatar_url:person.avatar_url,area_label:"Mismo club"}));
+  return {users,label:"Golfistas de tu mismo club. No compartimos ubicación exacta."};
+ }
  const target = new URL(request.url).searchParams.get("target");
  if(target) { const person = await profile(ctx,socialId(target)); if(!person) throw Object.assign(new Error(),{code:"NOT_FOUND",status:404}); return {person}; }
  return graph(ctx);
