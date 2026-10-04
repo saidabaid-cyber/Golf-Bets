@@ -1,23 +1,24 @@
 "use client";
 
 import type { RoundHandicapBasis } from "../../lib/types";
+import { HANDICAP_BASIS_LABELS } from "../../lib/group-template-editor";
 
 const explanations: Record<RoundHandicapBasis, string> = {
-  course: "Cada jugador recibe los golpes de su HCP según la ventaja de cada hoyo. No se resta un jugador base.",
-  relative: "Se toma como base el menor HCP de los participantes de cada apuesta y se calculan las diferencias.",
+  course: "Cada jugador utiliza su HCP de juego completo según el campo y tee.",
+  relative: "Los golpes se calculan por diferencia respecto al HCP de juego más bajo del grupo.",
 };
 
-export function RoundHandicapBasisControl({ value, onChange }: {
+export function RoundHandicapBasisControl({ value, onChange, disabled = false }: {
   value: RoundHandicapBasis;
   onChange: (value: RoundHandicapBasis) => void;
+  disabled?: boolean;
 }) {
   return <div className="roundHandicapBasisControl">
-    <span className="miniLabel" id="round-handicap-basis-label">Aplicación del HCP</span>
-    <div className="handicapBaseChoices" role="group" aria-labelledby="round-handicap-basis-label">
-      <button type="button" aria-pressed={value === "course"} onClick={() => onChange("course")}>Ventajas sobre el campo</button>
-      <button type="button" aria-pressed={value === "relative"} onClick={() => onChange("relative")}>Ventajas entre jugadores</button>
+    <h3>¿Cómo aplicamos el HCP?</h3>
+    <div className="groupHcpBasisChoices" role="group" aria-label="¿Cómo aplicamos el HCP?">
+      {(["relative", "course"] as const).map((basis) => <button type="button" key={basis} disabled={disabled} aria-pressed={value === basis} onClick={() => onChange(basis)}>
+        <span aria-hidden="true">{value === basis ? "✓" : "○"}</span><span><b>{HANDICAP_BASIS_LABELS[basis]}</b><small>{explanations[basis]}</small><small>{basis === "relative" ? "HCP 5 vs HCP 15 → recibe 10 golpes." : "HCP de juego 15 → recibe sus 15 golpes."}</small></span>
+      </button>)}
     </div>
-    <p aria-live="polite">{explanations[value]}</p>
-    <small>Cambiar esta opción recalcula las apuestas de la ronda que usan HCP.</small>
   </div>;
 }

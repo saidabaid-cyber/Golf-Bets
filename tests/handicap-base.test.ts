@@ -114,9 +114,9 @@ test("UI controles visibles sin motores internos y ayuda independiente para amba
   assert.doesNotMatch(ui, /Modalidad del Excel|Modalidad Excel|Excel original|<option[^>]*>legacy/);
   assert.match(ui, /HandicapBaseControl name="Foursome"/);
   assert.match(ui, /HandicapBaseControl name="Bola Amiga"/);
-  assert.match(control, /Base fija/); assert.match(control, /Base movible/);
+  assert.match(control, /Base fija/); assert.match(control, /Base móvil/);
   assert.match(control, /Quien descansa no cuenta/);
   assert.doesNotMatch(control, /Daniel \(0\)|Tamayo \(9\)|Flavio \(14\)/);
-  assert.match(control, /Ayuda de base de HCP/);
+  assert.match(control, /Ayuda de base del juego/);
   assert.match(ui, /freezeRoundHandicapBases\(current, players, roundHandicapBasis\)/);
 });

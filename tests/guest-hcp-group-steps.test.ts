@@ -47,8 +47,8 @@ test("el onboarding no captura grupos ni apuestas; el editor completo permanece 
   assert.doesNotMatch(source, /Configura tu primer grupo|GroupBetTemplateEditor|progress\.step === "bets"/);
   const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
   assert.match(editor, /groupTemplateSelectionSections\(\)/);
-  assert.match(editor, /Apuestas de grupo \/ generales/);
-  assert.match(editor, /Individuales \/ Personales/);
+  assert.match(editor, /Apuestas grupales/);
+  assert.match(editor, /Apuestas personales/);
   assert.match(editor, /activeGroupTemplateDefinitions\(value\).map/);
   assert.match(editor, /Editar personales/);
   assert.match(editor, /onlyBetId=\{item.id\}/);

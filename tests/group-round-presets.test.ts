@@ -30,10 +30,10 @@ test("Index y HCP permanecen compactos; tee y Rating/Slope se consultan al expan
 });
 
 test("Grupos expone roster, apuestas y el inicio de ronda desde la misma tarjeta", () => {
-  for (const copy of ["Mis grupos", "Invitaciones", "Crear grupo", "Apuestas del grupo", "Editar jugadores y apuestas", "Iniciar ronda"]) {
+  for (const copy of ["Mis grupos", "Invitaciones", "Crear grupo", "Apuestas del grupo", "Editar grupo", "Crear ronda", "Ver grupo"]) {
     assert.match(builder, new RegExp(copy));
   }
-  assert.match(builder, /frequentGroupTemplateDetails/);
+  assert.match(builder, /groupTemplatePresentationDetails/);
   assert.match(builder, /<GroupInvitationInbox accessToken=\{identity\.accessToken\} onAccepted=\{retryCloudSync\}/);
   assert.doesNotMatch(builder, /PENDING_CONTROLLED_DB_APPLY|Invitación local/, "live invitations replace obsolete pending/local placeholders");
   assert.match(page, /<GroupBetTemplateEditor/);

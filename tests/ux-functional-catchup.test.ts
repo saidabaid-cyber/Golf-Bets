@@ -97,7 +97,8 @@ test("habitual bets edit inline with slots, money affordance and five-percent HC
   assert.match(editor, /Match Primera/);
   assert.match(editor, /Medal Total/);
   assert.match(editor, /Carry/);
-  assert.match(editor, /<span>\$<\/span>/);
+  assert.match(editor, /<BetMoneyInput/);
+  assert.match(source("app/components/bet-money-input.tsx"), /<span aria-hidden="true">\$<\/span>/);
   assert.match(editor, /Unidades positivas y negativas/);
   assert.match(hcp, /min=\{5\}/);
   assert.match(hcp, /max=\{100\}/);

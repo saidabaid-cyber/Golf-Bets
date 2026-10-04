@@ -187,9 +187,9 @@ test("onboarding, groups and account deletion expose explicit safe choices", () 
   const account = readFileSync("app/components/account-panel.tsx", "utf8");
   const accountDialog = readFileSync("app/components/profile-data-dialogs.tsx", "utf8");
   assert.doesNotMatch(onboarding, /GroupInviteManager|Configurar grupos y apuestas/);
-  assert.match(page, /<b>Privado<\/b>/);
-  assert.match(page, /<b>Por invitación<\/b>/);
-  assert.match(page, /<GroupInviteManager/);
+  assert.doesNotMatch(page, /<b>Privado<\/b>|<b>Por invitación<\/b>/);
+  assert.match(page, /privacy: "private"/);
+  assert.match(readFileSync("app/components/group-builder.tsx", "utf8"), /<GroupInviteManager/);
   assert.match(page, /<CaptureGroupInvitationLink \/><AccountProvider><PendingGroupInvitation \/>/);
   const invitations = readFileSync("app/api/groups/invitations/route.ts", "utf8");
   assert.match(invitations, /authenticatedRequest\(request\)/);
@@ -211,7 +211,7 @@ test("onboarding, groups and account deletion expose explicit safe choices", () 
 
 test("group bet templates retain advanced configuration instead of flattened numbers", () => {
   const editor = readFileSync("app/components/group-bet-template-editor.tsx", "utf8");
-  assert.match(editor, /Redondeo HCP/);
+  assert.match(editor, /Redondeo del cálculo/);
   assert.match(editor, /Mantener decimales/);
   assert.match(editor, /Modalidad/);
   assert.match(editor, /Fijo \+ Patada/);

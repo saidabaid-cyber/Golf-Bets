@@ -1,6 +1,25 @@
 import { collectBetConfigurationIssues, type BetConfigurationIssue } from "./bet-config-validation";
 import { groupTemplateSelectionDefinitions, type GroupTemplateCoreKey } from "./bets/registry";
-import type { GroupGameTemplate, Player } from "./types";
+import type { FrequentGroup, GroupGameTemplate, Player, RoundHandicapBasis } from "./types";
+import { frequentGroupTemplateDetails } from "./group-game-template";
+
+export const HANDICAP_BASIS_LABELS: Record<RoundHandicapBasis, string> = {
+  relative: "Diferencial · Entre jugadores",
+  course: "Completo · Contra el campo",
+};
+
+/** Display only: saved amounts, modes and calculation inputs are not changed. */
+export function groupTemplatePresentationDetails(group: FrequentGroup) {
+  return frequentGroupTemplateDetails(group).map((detail) => {
+    if (!detail.startsWith("Foursome")) return detail;
+    const config = group.gameTemplate!.betConfig.foursome;
+    const modes = { fixed: "Fijo", fixed_points: "Fijo + Patada", points: "Solo puntos / patada", match: "Match" };
+    const amount = (value: number) => `$${value.toLocaleString("es-MX", { maximumFractionDigits: 2 })}`;
+    const values = config.mode === "fixed_points" ? `${amount(config.fixedValue)} + ${amount(config.pointValue)} por punto`
+      : amount(config.mode === "points" ? config.pointValue : config.fixedValue);
+    return `Foursome · ${modes[config.mode]} · ${values} · ${config.mode === "match" ? 18 : config.segmentSize} hoyos`;
+  });
+}
 
 /** One activation source for the selection step, detail step and summary. */
 export function activeGroupTemplateDefinitions(template: GroupGameTemplate) {

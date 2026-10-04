@@ -10,9 +10,10 @@ test("el editor de apuestas permite borrar cero, retirar y editar las reglas rel
   assert.match(editor, /emptyWhenZero/);
   assert.doesNotMatch(editor, /<input[^>]+type="number"[^>]+value=\{value\}/);
   assert.match(editor, /Quitar esta apuesta/);
-  assert.match(editor, /Base de ventajas/);
-  assert.match(editor, /Entre jugadores/);
-  assert.match(editor, /Sobre campo/);
+  assert.match(editor, /<RoundHandicapBasisControl/);
+  const basisLabels = read("lib/group-template-editor.ts");
+  assert.match(basisLabels, /Diferencial · Entre jugadores/);
+  assert.match(basisLabels, /Completo · Contra el campo/);
   assert.match(editor, /Carry al siguiente hoyo/);
   assert.match(editor, /Los jugadores y parejas se eligen al iniciar/);
   assert.match(editor, /assignmentMode="template"/);

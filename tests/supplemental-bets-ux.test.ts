@@ -88,10 +88,12 @@ test("Personal and Manual switches retain their editors and move inactive record
 });
 
 test("importes ordinarios tienen mínimo cero y Manuales conserva captura firmada", () => {
-  const moneyInput = page.slice(page.indexOf("function MoneyInput"), page.indexOf("function GolfBetsApp"));
+  const moneyInput = readFileSync("app/components/bet-money-input.tsx", "utf8");
   const moneyField = editor.slice(editor.indexOf("function MoneyField"), editor.indexOf("function NumberField"));
   const signedInput = readFileSync("app/components/signed-money-input.tsx", "utf8");
-  assert.match(moneyInput, /<NumericCaptureInput[^>]+min=\{0\}/);
+  assert.match(page, /const MoneyInput = BetMoneyInput/);
+  assert.match(moneyInput, /min = 0/);
+  assert.match(moneyInput, /<NumericCaptureInput[^>]+min=\{min\}/);
   assert.match(moneyField, /<NumericCaptureInput[^>]+min=\{0\}/);
   assert.doesNotMatch(signedInput, /min=\{0\}/);
   assert.match(page, /manualGrid[\s\S]{0,500}<SignedMoneyInput/);

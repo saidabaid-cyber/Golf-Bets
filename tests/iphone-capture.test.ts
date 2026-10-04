@@ -91,7 +91,8 @@ test("nuevas rondas usan controles acordados sin selector interno; snapshots man
   assert.doesNotMatch(app, /HCP de Foursome|Excel original · rebasing|Porcentaje \/ redondeo acordado/);
   assert.match(app, /const restored = restoreBetConfig\(draft\.bets, draftPlayerIds, \{[\s\S]{0,120}startHole: draftCore\.startHole,[\s\S]{0,80}roundHoles: draftCore\.roundHoles/);
   assert.match(app, /foursome: restored\.foursome/);
-  assert.match(app, /DecimalModeSelect label="Decimales Foursome"/);
+  assert.match(app, /<DecimalModeSelect value=\{bets\.foursome\.decimals\}/);
+  assert.match(app, /label = "Redondeo del cálculo"/);
   const scores = { 1: { said:4, cuau:4, armando:4, jesus:4 } };
   const legacy = { ...cfg, handicapMethod:"configured" as const, hcpPct:0 };
   const saved = JSON.parse(JSON.stringify({ scores, config: legacy }));

@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import type { FrequentGroup, FrequentPlayer, Player } from "../../lib/types";
-import { frequentGroupTemplateDetails, frequentGroupTemplateSummary } from "../../lib/group-game-template";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { FrequentGroup, FrequentGroupMember, FrequentPlayer, Player } from "../../lib/types";
+import { frequentGroupTemplateSummary } from "../../lib/group-game-template";
+import { HANDICAP_BASIS_LABELS, groupTemplatePresentationDetails } from "../../lib/group-template-editor";
+import type { ConnectionPage, SocialPerson } from "../../lib/social-connections";
+import { socialRequest } from "../../lib/social-activity-client";
 import {
   appendUniquePlayer,
   generateBalancedGroups,
@@ -16,29 +19,96 @@ import {
 } from "../../lib/group-generator";
 import { BottomBackAction } from "./bottom-back-action";
 import { NumericCaptureInput } from "./numeric-capture-input";
-import { ModalCloseButton } from "./modal-shell";
-import { GroupInvitationInbox } from "./group-invitations";
+import { ModalCloseButton, ModalShell } from "./modal-shell";
+import { GroupInvitationInbox, GroupInviteManager } from "./group-invitations";
 import { useBackyardAccount } from "./account-provider";
+import { ProfileAvatarMedia } from "./profile-avatar-media";
 
 const id = () => globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2, 10);
 
 function GroupPresetBetSummary({ group }: { group: FrequentGroup }) {
-  const details = frequentGroupTemplateDetails(group);
+  const details = groupTemplatePresentationDetails(group);
   return <div className="groupPresetBetSummary"><b>Apuestas del grupo</b>{details.length
     ? <ul>{details.map((detail, index) => <li key={`${detail}-${index}`}>{detail}</li>)}</ul>
     : <span>{frequentGroupTemplateSummary(group)}</span>}</div>;
 }
 
-export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, onSaveFrequentGroup, onCreateFrequentGroup, onStartFrequentGroup, onEditFrequentGroup, onDeleteFrequentGroup }: {
+export function GroupSummary({ group }: { group: FrequentGroup }) {
+  return <section className="groupWizardSummary" aria-label="Resumen del grupo"><h3>Resumen del grupo</h3><p>{group.players.length} jugadores</p><p><b>HCP:</b> {HANDICAP_BASIS_LABELS[group.gameTemplate?.roundDefaults.handicapBasis ?? "relative"]}</p><GroupPresetBetSummary group={group} /></section>;
+}
+
+export function GroupDetailDialog({ group, created, onClose, onEdit, onPlay }: {
+  group: FrequentGroup; created: boolean; onClose: () => void; onEdit: () => void; onPlay: () => void;
+}) {
+  return <ModalShell open onClose={onClose} className="groupEditorDialog groupWizard" labelledBy="group-detail-title">
+    {created && <div className="groupCreatedHeading"><span aria-hidden="true">✓</span><h2 id="group-detail-title">¡Grupo creado!</h2></div>}
+    <h2 id={created ? undefined : "group-detail-title"}>{group.name}</h2><p>{group.players.length} jugadores</p>
+    <div className="groupSelectedList">{group.players.map((member, index) => <div className="groupPersonRow" key={member.memberId || index}><span className="groupPersonAvatar" aria-hidden="true">{member.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("")}</span><span><b>{member.name}</b><small>{member.username ? `@${member.username} · ` : ""}{typeof member.handicap === "number" ? `HCP ${member.handicap}` : "HCP por completar"}{!member.accountUserId && <span className="groupGuestBadge">Sin app</span>}</small></span></div>)}</div>
+    <GroupSummary group={group} />
+    <div className="groupWizardActions">{created ? <button type="button" className="primary" onClick={onEdit}>Ver grupo</button> : <button type="button" className="secondary" onClick={onEdit}>Editar grupo</button>}<button type="button" className={created ? "secondary" : "primary"} onClick={onPlay}>Crear ronda con este grupo</button></div>
+  </ModalShell>;
+}
+
+/** Read-only discovery. Adding a player changes the owner's draft, never social membership. */
+export function GroupMemberSelection({ group, frequentPlayers, accessToken, onAdd, onRemove }: {
+  group: FrequentGroup; frequentPlayers: FrequentPlayer[]; accessToken?: string | null;
+  onAdd: (member: FrequentGroupMember) => void; onRemove: (index: number) => void;
+}) {
+  const [friends, setFriends] = useState<SocialPerson[]>([]);
+  const [friendQuery, setFriendQuery] = useState("");
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<SocialPerson[]>([]);
+  const [friendMessage, setFriendMessage] = useState("");
+  const [searchMessage, setSearchMessage] = useState("");
+  const [loadingFriends, setLoadingFriends] = useState(Boolean(accessToken));
+  const [searching, setSearching] = useState(false);
+  useEffect(() => {
+    const controller = new AbortController();
+    setFriends([]); setFriendMessage(""); setLoadingFriends(Boolean(accessToken));
+    if (accessToken) void socialRequest<ConnectionPage>("/api/social/connections", accessToken, { signal: controller.signal }).then(data => {
+      if (!controller.signal.aborted) setFriends(data.people.filter(person => data.friends.includes(person.user_id) && !data.blocked.includes(person.user_id)));
+    }).catch(() => { if (!controller.signal.aborted) setFriendMessage("No pudimos cargar tus amigos. Puedes buscar en Backyard y reabrir el grupo para reintentar."); }).finally(() => { if (!controller.signal.aborted) setLoadingFriends(false); });
+    return () => controller.abort();
+  }, [accessToken]);
+  useEffect(() => {
+    const controller = new AbortController();
+    setResults([]); setSearchMessage(""); setSearching(false);
+    if (!accessToken || query.trim().length < 2) return;
+    const timer = setTimeout(() => {
+      setSearching(true);
+      void socialRequest<{ users: SocialPerson[] }>(`/api/groups/users?q=${encodeURIComponent(query.trim())}`, accessToken, { signal: controller.signal }).then(data => {
+        if (!controller.signal.aborted) { setResults(data.users); setSearchMessage(data.users.length ? "" : "Sin coincidencias visibles."); }
+      }).catch(() => { if (!controller.signal.aborted) setSearchMessage("No pudimos buscar. Reintenta con nombre o @usuario."); }).finally(() => { if (!controller.signal.aborted) setSearching(false); });
+    }, 300);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [accessToken, query]);
+  const knownHandicap = (person: SocialPerson) => group.players.find(member => member.accountUserId === person.user_id)?.handicap
+    ?? frequentPlayers.find(member => member.accountUserId === person.user_id)?.handicap ?? null;
+  const renderPerson = (person: SocialPerson, friend: boolean) => {
+    const selectedIndex = group.players.findIndex(member => member.accountUserId === person.user_id);
+    const selected = selectedIndex >= 0;
+    const handicap = knownHandicap(person);
+    return <li key={person.user_id} className="groupPersonRow"><span className="groupPersonAvatar"><ProfileAvatarMedia value={person.avatar_url} fallback={person.display_name[0] || "J"} /></span><span><b>{person.display_name}</b><small>@{person.username} · {typeof handicap === "number" ? `HCP ${handicap}` : "HCP por completar"}</small></span><button type="button" className="groupPersonAdd" aria-label={`${selected ? "Quitar" : "Agregar"} ${person.display_name}`} aria-pressed={selected} onClick={() => selected ? onRemove(selectedIndex) : onAdd({ memberId: `member-${id()}`, kind: "account", accountUserId: person.user_id, name: person.display_name, username: person.username, handicap })}>{selected ? "✓" : friend ? "+" : "+ Agregar"}</button></li>;
+  };
+  const filteredFriends = friends.filter(person => `${person.display_name} @${person.username}`.toLocaleLowerCase("es-MX").includes(friendQuery.trim().toLocaleLowerCase("es-MX")));
+  return <>
+    <section className="groupWizardBlock" aria-label="Mis amigos"><h3>Mis amigos</h3>{accessToken ? <><label>Buscar entre mis amigos<input type="search" value={friendQuery} onChange={event => setFriendQuery(event.target.value)} placeholder="Buscar entre mis amigos" /></label>{loadingFriends ? <p role="status">Cargando amigos…</p> : <><ul className="groupPeopleList">{filteredFriends.map(person => renderPerson(person, true))}</ul>{!friends.length && !friendMessage && <p className="hint">Todavía no tienes amigos guardados. Puedes buscar a un jugador en Backyard.</p>}{friends.length > 0 && !filteredFriends.length && <p className="hint">No hay amigos que coincidan.</p>}</>}{friendMessage && <p role="status">{friendMessage}</p>}</> : <p>Inicia sesión para ver tus amigos.</p>}</section>
+    <section className="groupWizardBlock" aria-label="Buscar jugador en Backyard"><h3>Buscar jugador en Backyard</h3><label>Nombre o @usuario<input type="search" value={query} disabled={!accessToken} onChange={event => setQuery(event.target.value)} placeholder="Nombre o @usuario" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} /></label>{searching && <p role="status">Buscando…</p>}<ul className="groupPeopleList">{results.map(person => renderPerson(person, false))}</ul>{searchMessage && <p role="status">{searchMessage}</p>}<small>Agregar a tu plantilla no envía una invitación ni una solicitud de amistad.</small></section>
+  </>;
+}
+
+export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, onSaveFrequentGroup, onCreateFrequentGroup, onOpenFrequentGroup, onStartFrequentGroup, onEditFrequentGroup, onDeleteFrequentGroup, onAcceptedMembers }: {
   frequentPlayers: FrequentPlayer[];
   frequentGroups: FrequentGroup[];
   onBack: () => void;
   onPlay: (players: Player[]) => void;
   onSaveFrequentGroup: (name: string, players: Array<Pick<Player, "name" | "handicap" | "accountUserId">>) => boolean;
   onCreateFrequentGroup: () => void;
+  onOpenFrequentGroup: (group: FrequentGroup) => void;
   onStartFrequentGroup: (group: FrequentGroup) => void;
   onEditFrequentGroup: (group: FrequentGroup) => void;
   onDeleteFrequentGroup: (group: FrequentGroup) => void;
+  onAcceptedMembers: (group: FrequentGroup, members: FrequentGroupMember[]) => void;
 }) {
   const { identity, retryCloudSync } = useBackyardAccount();
   const [players, setPlayers] = useState<GroupPlayer[]>([]);
@@ -57,6 +127,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   const [saveAllNames, setSaveAllNames] = useState<string[]>([]);
   const [openSavedGroupMenu, setOpenSavedGroupMenu] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<"groups" | "invitations">("groups");
+  const [inviteGroupId, setInviteGroupId] = useState("");
   const drawSequence = useRef(0);
   const allHaveHcp = players.length > 0 && players.every((player) => typeof player.handicap === "number" && Number.isFinite(player.handicap));
   const playerOptions = useMemo(() => groups.flat(), [groups]);
@@ -153,21 +224,21 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
   }
 
   return <>
-    <section className="hero groupsHero"><div><div className="eyebrow">THE BACKYARD · GOLF</div><h1>Grupos</h1><p>Guarda jugadores y apuestas habituales; elige hasta 5 para cada salida.</p></div><div className="groupsHeroActions"><button className="secondary" onClick={onBack}>← Inicio</button><button className="primary" onClick={onCreateFrequentGroup}>Crear grupo</button></div></section>
+    <section className="hero groupsHero"><div><h1>Mis grupos</h1><p>Crea y administra tus grupos de jugadores para rondas y apuestas.</p></div><div className="groupsHeroActions"><button className="secondary" onClick={onBack}>← Inicio</button><button className="primary" onClick={onCreateFrequentGroup}>+ Crear grupo</button></div></section>
     <div className="groupsLibraryTabs" role="tablist" aria-label="Secciones de Grupos">
       <button type="button" role="tab" aria-selected={activeSection === "groups"} className={activeSection === "groups" ? "active" : ""} onClick={() => setActiveSection("groups")}>Mis grupos</button>
       <button type="button" role="tab" aria-selected={activeSection === "invitations"} className={activeSection === "invitations" ? "active" : ""} onClick={() => setActiveSection("invitations")}>Invitaciones</button>
     </div>
-    {activeSection === "invitations" && <div role="tabpanel"><GroupInvitationInbox accessToken={identity.accessToken} onAccepted={retryCloudSync} /></div>}
+    {activeSection === "invitations" && <div role="tabpanel"><GroupInvitationInbox accessToken={identity.accessToken} onAccepted={retryCloudSync} />{frequentGroups.length > 0 && <section className="card"><label>Administrar invitaciones de un grupo<select value={inviteGroupId} onChange={event => setInviteGroupId(event.target.value)}><option value="">Seleccionar grupo</option>{frequentGroups.map(group => <option key={group.id} value={group.id}>{group.name}</option>)}</select></label>{frequentGroups.filter(group => group.id === inviteGroupId).map(group => <GroupInviteManager key={group.id} group={group} accessToken={identity.accessToken} onAcceptedMembers={members => onAcceptedMembers(group, members)} />)}</section>}</div>}
     <div hidden={activeSection !== "groups"} role="tabpanel">
     {frequentGroups.length === 0 && <section className="card groupPresetEmpty"><h2>Mis grupos</h2><p>Todavía no tienes grupos guardados. Crea uno con tus jugadores y apuestas habituales.</p><button type="button" className="primary" onClick={onCreateFrequentGroup}>Crear grupo</button></section>}
-    {frequentGroups.length > 0 && <section className="card groupPresetLibrary"><div className="sectionTitle"><div><h2>Mis grupos</h2><p>Plantillas mutables; cada ronda conserva su propio snapshot.</p></div></div><div className="groupPresetGrid">{frequentGroups.map((group) => <article className="groupPresetCard" key={`preset-${group.id}`}>
+    {frequentGroups.length > 0 && <section className="card groupPresetLibrary"><div className="groupPresetGrid">{frequentGroups.map((group) => <article className="groupPresetCard" key={`preset-${group.id}`}>
       <div><span className="templateSectionLabel">GRUPO</span><h3>{group.name}</h3><p>{group.players.length} miembros</p></div>
       <div className="groupPresetMembers" aria-label={`Jugadores de ${group.name}`}>{group.players.slice(0, 6).map((member, index) => <span key={member.memberId || `${member.name}-${index}`}>{member.name}</span>)}{group.players.length > 6 && <span>+{group.players.length - 6}</span>}</div>
-      <GroupPresetBetSummary group={group} />
-      <div className="groupPresetActions"><button type="button" className="secondary" onClick={() => onEditFrequentGroup(group)}>Editar jugadores y apuestas</button><button type="button" className="primary" onClick={() => onStartFrequentGroup(group)}>Iniciar ronda</button></div>
+      <p className="hint">HCP: {HANDICAP_BASIS_LABELS[group.gameTemplate?.roundDefaults.handicapBasis ?? "relative"]}</p><GroupPresetBetSummary group={group} />
+      <div className="groupPresetActions"><button type="button" className="secondary" onClick={() => onOpenFrequentGroup(group)}>Ver grupo →</button><button type="button" className="primary" onClick={() => onStartFrequentGroup(group)}>Crear ronda</button></div>
     </article>)}</div></section>}
-    <section className="card groupCapture"><div className="sectionTitle"><div><h2>Jugadores</h2><p>Frecuentes, grupos guardados o captura manual.</p></div><strong className="playerCounter">{players.length} jugadores</strong></div>
+    <details className="groupDrawTools"><summary>Armar grupos · Sorteo y balanceado por HCP</summary><section className="card groupCapture"><div className="sectionTitle"><div><h2>Jugadores</h2><p>Frecuentes, grupos guardados o captura manual.</p></div><strong className="playerCounter">{players.length} jugadores</strong></div>
       {frequentPlayers.length > 0 && <details className="frequentDisclosure groupBuilderDisclosure"><summary><span>Jugadores frecuentes ({frequentPlayers.length})<small>Toca aquí para agregar un jugador</small></span></summary><div className="chips">{frequentPlayers.map((player) => <button className="chipButton" key={player.id} onClick={() => add({ id: id(), name: player.name, handicap: player.handicap, ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}) })}>+ {player.name}{typeof player.handicap === "number" ? ` · HCP ${player.handicap}` : ""}</button>)}</div></details>}
       {frequentGroups.length > 0 && <details className="frequentDisclosure groupBuilderDisclosure"><summary><span>Grupos guardados ({frequentGroups.length})<small>Toca aquí para agregar un grupo</small></span></summary><div className="savedGroupManager">{frequentGroups.map((group) => <div className="savedGroupItem" key={group.id}>
         <button className="savedGroupLoad" onClick={() => addFrequentGroup(group)}><b>{group.name}</b><span>{group.players.length} jugadores · Toca para cargar</span></button>
@@ -190,7 +261,7 @@ export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, 
       <div className="groupResultActions"><button className="secondary" onClick={() => setEditing((value) => !value)}>{editing ? "Terminar edición" : "Editar manualmente"}</button><button className="secondary" onClick={openSaveAll}>Guardar grupos</button><button className="secondary" onClick={copySummary}>Copiar texto</button><button className="primary" onClick={share}>Compartir</button></div>
     </section>}
 
-    <BottomBackAction label="← Inicio" onBack={onBack} />
+    </details><BottomBackAction label="← Inicio" onBack={onBack} />
 
     {saveAllOpen && <div className="modalBackdrop"><section className="confirmDialog saveGroupsDialog" role="dialog" aria-modal="true" aria-labelledby="save-groups-title">
       <ModalCloseButton onClose={closeSaveAll} />

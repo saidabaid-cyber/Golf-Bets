@@ -12,12 +12,14 @@ import {
   type GroupTemplateCoreKey,
 } from "../../lib/bets/registry";
 import { createSupplementalBet } from "../../lib/supplemental-bets";
-import { activeGroupTemplateDefinitions, groupTemplateConfigurationIssues, patchGroupTemplateCore } from "../../lib/group-template-editor";
+import { activeGroupTemplateDefinitions, groupTemplateConfigurationIssues, groupTemplatePresentationDetails, patchGroupTemplateCore } from "../../lib/group-template-editor";
 import type { FoursomeMatchPress, GroupGameTemplate, PersonalBet, Player, SupplementalBet } from "../../lib/types";
 import { SupplementalBetsEditor } from "./supplemental-bets-editor";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { HandicapBaseControl } from "./handicap-base-control";
 import { HcpPercentageInput } from "./hcp-percentage-input";
+import { RoundHandicapBasisControl } from "./round-handicap-basis-control";
+import { BetMoneyInput } from "./bet-money-input";
 import styles from "./group-bet-template-editor.module.css";
 import { useVisualContent } from "./use-visual-content";
 
@@ -38,9 +40,7 @@ function Field({ label, value, onChange, min = 0, max, step = 1 }: { label: stri
   return <label className={styles.field}>{label}<NumericCaptureInput inputMode="decimal" min={min} max={max} step={step} value={Number.isFinite(value) ? value : null} emptyWhenZero onValueChange={(next) => onChange(next ?? 0)} /></label>;
 }
 
-function MoneyField(props: Parameters<typeof Field>[0]) {
-  return <div className={styles.moneyField}><span>$</span><Field {...props} /></div>;
-}
+const MoneyField = (props: Parameters<typeof Field>[0]) => <BetMoneyInput {...props} className={styles.field} />;
 
 function Switch({ checked, label, onChange, disabled }: { checked: boolean; label: string; onChange: () => void; disabled?: boolean }) {
   return <button type="button" className={`switch ${checked ? "on" : ""}`} role="switch" aria-checked={checked} aria-label={`${checked ? "Desactivar" : "Activar"} ${label}`} disabled={disabled} onClick={onChange}><span /></button>;
@@ -172,30 +172,33 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
   };
 
   const issues = groupTemplateConfigurationIssues(value, players);
-  const preferences = <section className={styles.basisCard} aria-label="Preferencias de la plantilla">
+  const handicapBasis = <RoundHandicapBasisControl value={value.roundDefaults.handicapBasis} disabled={locked} onChange={handicapBasis => onChange(current => ({ ...current, roundDefaults: { ...current.roundDefaults, handicapBasis } }))} />;
+  const preferences = <section className={styles.basisCard} aria-label="Preferencias de la plantilla"><details className={styles.advanced}><summary>Preferencias habituales · Opciones avanzadas</summary>
     <div><b>Preferencias de ronda</b><small>Se pueden ajustar al iniciar. Campo, tee y parejas pendientes se completan para cada salida.</small></div>
     <div className={styles.fieldsRow}>
       <label className={styles.field}>Hoyos habituales<select disabled={locked} value={value.roundDefaults.roundHoles} onChange={(event) => onChange((current) => ({ ...current, roundDefaults: { ...current.roundDefaults, roundHoles: Number(event.target.value) as 9 | 18 } }))}><option value={18}>18 hoyos</option><option value={9}>9 hoyos</option></select></label>
       <label className={styles.field}>Salida habitual<select disabled={locked} value={value.roundDefaults.startHole} onChange={(event) => onChange((current) => ({ ...current, roundDefaults: { ...current.roundDefaults, startHole: Number(event.target.value) } }))}>{Array.from({ length: 18 }, (_, index) => index + 1).map((hole) => <option value={hole} key={hole}>Hoyo {hole}</option>)}</select></label>
       <label className={styles.field}>Jugador principal de personales<select disabled={locked} value={value.ownerMemberId} onChange={(event) => onChange((current) => ({ ...current, ownerMemberId: event.target.value }))}>{players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label>
-      <label className={styles.field}>Base de ventajas<select disabled={locked} value={value.roundDefaults.handicapBasis} onChange={(event) => onChange((current) => ({ ...current, roundDefaults: { ...current.roundDefaults, handicapBasis: event.target.value as "relative" | "course" } }))}><option value="relative">Entre jugadores</option><option value="course">Sobre campo</option></select></label>
     </div>
     {value.roundDefaults.roundHoles === 18 && <small>Presiones de segunda vuelta: H{roundOrder[9]}–H{roundOrder.at(-1)}, según el orden de juego.</small>}
+    </details>
     {issues.pending.length > 0 && <div className={styles.pending} role="status"><b>Completar al crear la ronda</b><ul>{issues.pending.map((issue) => <li key={issue.code}>{issue.message}</li>)}</ul><small>La preferencia se conserva. No se inventarán participantes, HCP ni parejas.</small></div>}
     {issues.blocking.length > 0 && <div className={styles.pending} role="status"><b>Revisar configuración</b><ul>{issues.blocking.map((issue) => <li key={issue.code}>{issue.message}</li>)}</ul></div>}
   </section>;
 
   if (mode === "selection" || mode === "complete") {
     const sections = groupTemplateSelectionSections();
-    const renderSelection = (items: ReturnType<typeof groupTemplateSelectionDefinitions>, heading: string) => <section className={styles.selectionSection} aria-labelledby={`template-${heading === "Individuales / Personales" ? "personal" : "general"}`}>
-      <h3 id={`template-${heading === "Individuales / Personales" ? "personal" : "general"}`}>{heading}</h3>
+    const renderSelection = (items: ReturnType<typeof groupTemplateSelectionDefinitions>, heading: string) => <section className={styles.selectionSection} aria-labelledby={`template-${heading === "Apuestas personales" ? "personal" : "general"}`}>
+      <h3 id={`template-${heading === "Apuestas personales" ? "personal" : "general"}`}>{heading}</h3>
+      {heading === "Apuestas personales" && <p className={styles.intro}>Guarda tu configuración habitual; rival, parejas y participantes definitivos se resuelven en cada ronda.</p>}
       <div className={styles.modeGrid}>
         {[...items].sort((a,b)=>(presentation.get(a.id)?.order??a.templateEditor.sortOrder)-(presentation.get(b.id)?.order??b.templateEditor.sortOrder)).map((item) => {
           const active = selectionState(item);
           const copy=presentation.get(item.id);if(copy?.active===false&&!active)return null;
+          const title = item.id === "foursome" ? "Foursome" : copy?.title || (item.id === "personals" ? "Nassau / Personal" : item.label);
           const expanded = active && expandedBetId === item.id;
           return <section className={styles.modeSection} key={item.id}>
-            <div className={styles.modeCard}><span className={styles.modeIcon}>{copy?.icon||item.icon}</span><span><b>{copy?.title||(item.id === "personals" ? "Nassau / Personales" : item.label)}</b><small>{copy?.description||item.description}</small>{copy?.instructions&&<small>{copy.instructions}</small>}{active && mode === "complete" && <button type="button" className={styles.configureButton} disabled={locked} aria-expanded={expanded} aria-controls={`group-template-${item.id}`} onClick={() => setExpandedBetId(expanded ? null : item.id)}>{expanded ? "Cerrar configuración" : "Configurar / editar"}</button>}</span><Switch checked={active} label={copy?.title||item.label} disabled={locked} onChange={() => { if (!active) setExpandedBetId(item.id); toggleSelection(item); }} /></div>
+            <div className={styles.modeCard}><span className={styles.modeIcon}>{copy?.icon||item.icon}</span><span><b>{title}</b><small>{copy?.description||item.description}</small>{active && <small>{groupTemplatePresentationDetails({ id: "display", name: "", players: [], uses: 0, updatedAt: "", gameTemplate: value }).find(detail => detail.startsWith(item.id === "foursome" ? "Foursome" : item.label))}</small>}{active && mode === "complete" && <button type="button" className={styles.configureButton} disabled={locked} aria-expanded={expanded} aria-controls={`group-template-${item.id}`} onClick={() => setExpandedBetId(expanded ? null : item.id)}>{expanded ? "Cerrar configuración" : "Configurar / editar →"}</button>}</span><Switch checked={active} label={title} disabled={locked} onChange={() => { if (!active) setExpandedBetId(item.id); toggleSelection(item); }} /></div>
             {mode === "complete" && expanded && <div id={`group-template-${item.id}`} className={styles.inlineEditor}><GroupBetTemplateEditor value={value} players={players} ownerId={ownerId} mode="details" onlyBetId={item.id} onChange={onChange} locked={locked} requestActivation={requestActivation} /></div>}
           </section>;
         })}
@@ -203,14 +206,15 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
     </section>;
     return <div className={styles.selection}>
     <p className={styles.intro}>{mode === "selection" ? "Selecciona tus apuestas habituales. En la siguiente pantalla podrás editar valores y reglas." : "Activa una apuesta para configurar sus valores y reglas. Los jugadores y parejas se eligen al iniciar cada ronda."}</p>
+    {mode === "complete" && handicapBasis}
+    {renderSelection(sections.general, "Apuestas grupales")}
+    {renderSelection(sections.personal, "Apuestas personales")}
     {mode === "complete" && preferences}
-    {renderSelection(sections.general, "Apuestas de grupo / generales")}
-    {renderSelection(sections.personal, "Individuales / Personales")}
   </div>;
   }
 
   if (!onlyBetId) return <div className={styles.details}>
-    {preferences}
+    {handicapBasis}{preferences}
     {activeGroupTemplateDefinitions(value).map(item => <details key={item.id} className={styles.detailCard}>
       <summary><span>{item.icon} {item.label}</span><small>{item.id === "personals" ? "Editar personales" : "Editar"}</small></summary>
       <fieldset disabled={locked} className={styles.inlineEditor}><GroupBetTemplateEditor value={value} players={players} ownerId={value.ownerMemberId} mode="details" onlyBetId={item.id} onChange={onChange} locked={locked} requestActivation={requestActivation} /></fieldset>
@@ -222,18 +226,19 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
     {groupTemplateCoreDefinitions().filter((item) => (!onlyBetId || item.id === onlyBetId) && Boolean(coreConfig(value, item.templateEditor.key)?.enabled)).map((item) => {
       const key = item.templateEditor.key;
       const config = coreConfig(value, key)!;
+      const calculationOptions = <>
+        {"hcpPct" in config && <HcpPercentageInput value={config.hcpPct ?? 100} disabled={locked} onChange={(next) => updateCore(key, { hcpPct: next })} />}
+        {"decimals" in config && <label className={styles.field}>Redondeo del cálculo<select value={String(config.decimals)} onChange={(event) => updateCore(key, { decimals: event.target.value })}>{key === "rabbits" || key === "skins" ? <><option value="decimal">Mantener decimales</option><option value="half_up">.5 hacia arriba</option><option value="half_down">.5 hacia abajo</option><option value="six_up">.6 hacia arriba</option><option value="four_down">.4 hacia abajo</option></> : <option value="partial">Ventaja parcial</option>}<option value="round">Redondeo normal</option></select></label>}
+      </>;
       return <details className={styles.detailCard} key={item.id} open={onlyBetId ? true : undefined}><summary><span>{item.icon} {item.label}</span><small>{item.description} · Editar</small></summary><fieldset disabled={locked}>
         <button type="button" className={styles.removeBet} onClick={() => updateCore(key, { enabled: false })}>Quitar esta apuesta</button>
-        {"value" in config && (key === "units"
-          ? <Field label="Unidades positivas y negativas" value={config.value} step={1} onChange={(next) => updateCore(key, { value: next })} />
-          : <MoneyField label={key === "vipers" || key === "camels" || key === "fish" ? "Importe por evento" : key === "monkey" || key === "ballFriend" ? "Importe por punto" : key === "skins" ? "Importe por skin" : key === "rabbits" ? "Importe por conejo" : "Importe por participante"} value={config.value} step={0.01} onChange={(next) => updateCore(key, { value: next })} />)}
-        {"hcpPct" in config && <HcpPercentageInput value={config.hcpPct ?? 100} disabled={locked} onChange={(next) => updateCore(key, { hcpPct: next })} />}
-        {"decimals" in config && <label className={styles.field}>Redondeo HCP<select value={String(config.decimals)} onChange={(event) => updateCore(key, { decimals: event.target.value })}>{key === "rabbits" || key === "skins" ? <><option value="decimal">Mantener decimales</option><option value="half_up">.5 hacia arriba</option><option value="half_down">.5 hacia abajo</option><option value="six_up">.6 hacia arriba</option><option value="four_down">.4 hacia abajo</option></> : <option value="partial">Ventaja parcial</option>}<option value="round">Redondeo normal</option></select></label>}
-        {(key === "foursome" || key === "ballFriend") && value.roundDefaults.handicapBasis === "relative" && <HandicapBaseControl name={item.label} config={value.betConfig[key]} fallback={key === "foursome" ? "moving" : "fixed"} onChange={(baseMode) => updateCore(key, { baseMode, fixedBaseHandicap: undefined })} />}
+        {"value" in config && <MoneyField label={key === "units" ? "Unidades positivas y negativas" : key === "vipers" || key === "camels" || key === "fish" ? "Importe por evento" : key === "monkey" || key === "ballFriend" ? "Importe por punto" : key === "skins" ? "Importe por skin" : key === "rabbits" ? "Importe por conejo" : "Importe por participante"} value={config.value} step={key === "units" ? 1 : 0.01} onChange={(next) => updateCore(key, { value: next })} />}
+        {key === "ballFriend" && value.roundDefaults.handicapBasis === "relative" && <HandicapBaseControl name={item.label} config={value.betConfig.ballFriend} fallback="fixed" onChange={(baseMode) => updateCore(key, { baseMode, fixedBaseHandicap: undefined })} />}
         {key === "rabbits" && <><label className={styles.field}>Formato<select value={value.betConfig.rabbits.mode || "continuous"} onChange={(event) => updateCore(key, { mode: event.target.value, ...(event.target.value === "continuous" ? { accumulate: true } : {}) })}><option value="continuous">Conejos infinitos / continuos</option><option value="three_hole_blocks">6 conejos fijos · bloques de 3 hoyos</option></select></label><label className={styles.check}><input type="checkbox" checked={value.betConfig.rabbits.accumulate} onChange={(event) => updateCore(key, { accumulate: event.target.checked })} />Acumular cuando queda libre</label></>}
         {key === "skins" && <label className={styles.field}>Acumulación<select value={value.betConfig.skins.mode || "carry"} onChange={(event) => updateCore(key, { mode: event.target.value, accumulate: event.target.value === "carry" })}><option value="carry">Acumulados · Carry al siguiente hoyo</option><option value="no_carry">No acumulados</option></select></label>}
-        {key === "units" && <Field label="Magnitud de unidad negativa" value={value.betConfig.units.copaValue ?? value.betConfig.units.value} step={1} onChange={(copaValue) => updateCore(key, { copaValue })} />}
+        {key === "units" && <MoneyField label="Magnitud de unidad negativa" value={value.betConfig.units.copaValue ?? value.betConfig.units.value} step={1} onChange={(copaValue) => updateCore(key, { copaValue })} />}
         {key === "foursome" && <>
+          <h3 className={styles.editorTitle}>Configurar Foursome</h3>
           <div className={styles.fieldsRow}>
             <label className={styles.field}>Modalidad<select value={value.betConfig.foursome.mode} onChange={(event) => {
               const mode = event.target.value as GroupGameTemplate["betConfig"]["foursome"]["mode"];
@@ -243,8 +248,10 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
             {(value.betConfig.foursome.mode === "fixed" || value.betConfig.foursome.mode === "fixed_points" || value.betConfig.foursome.mode === "match") && <MoneyField label={value.betConfig.foursome.mode === "match" ? "Valor por Match" : "Valor fijo"} value={value.betConfig.foursome.fixedValue} step={0.01} onChange={(fixedValue) => updateCore(key, { fixedValue })} />}
             {(value.betConfig.foursome.mode === "points" || value.betConfig.foursome.mode === "fixed_points") && <MoneyField label="Valor por punto / patada" value={value.betConfig.foursome.pointValue} step={0.01} onChange={(pointValue) => updateCore(key, { pointValue })} />}
             <label className={styles.field}>Tramos<select disabled={value.betConfig.foursome.mode === "match"} value={value.betConfig.foursome.mode === "match" ? 18 : value.betConfig.foursome.segmentSize} onChange={(event) => setFoursomeSegmentSize(Number(event.target.value) as 3 | 6 | 9 | 18)}><option value="3">3 hoyos</option><option value="6">6 hoyos</option><option value="9">9 hoyos</option><option value="18">18 hoyos</option></select></label>
-            {value.roundDefaults.roundHoles === 18 && value.betConfig.foursome.mode !== "match" && <label className={styles.field}>Presión · segunda vuelta<select value={value.betConfig.foursome.pressureMultiplier ?? (value.betConfig.foursome.pressSecond9 ? 2 : 1)} onChange={(event) => updateCore(key, { pressureMultiplier: Number(event.target.value), pressSecond9: Number(event.target.value) > 1 })}><option value="1">Sin presión</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option></select></label>}
           </div>
+          {value.roundDefaults.handicapBasis === "relative" && <HandicapBaseControl name="Foursome" config={value.betConfig.foursome} fallback="moving" onChange={(baseMode) => updateCore(key, { baseMode, fixedBaseHandicap: undefined })} />}
+          <details className={styles.advanced}><summary>Opciones avanzadas</summary><div className={styles.advancedFields}>{calculationOptions}
+          {value.roundDefaults.roundHoles === 18 && value.betConfig.foursome.mode !== "match" && <label className={styles.field}>Presión · segunda vuelta<select value={value.betConfig.foursome.pressureMultiplier ?? (value.betConfig.foursome.pressSecond9 ? 2 : 1)} onChange={(event) => updateCore(key, { pressureMultiplier: Number(event.target.value), pressSecond9: Number(event.target.value) > 1 })}><option value="1">Sin presión</option><option value="2">2x</option><option value="3">3x</option><option value="4">4x</option><option value="5">5x</option></select></label>}
           <p className={styles.editorMessage}>{value.betConfig.foursome.mode === "match" ? "Primera, Segunda y Total se liquidan por separado." : "La rotación se conserva como regla habitual."} Los jugadores y parejas se eligen al iniciar la ronda.</p>
           {value.roundDefaults.roundHoles !== 18 && <p className={styles.matchPressureEmpty} role="status">Foursome Match y sus presionadas requieren 18 hoyos; esta salida es de 9. Las otras modalidades pueden guardarse.</p>}
           {value.betConfig.foursome.mode === "match" && value.roundDefaults.roundHoles === 18 && <section className={styles.matchPressureEditor} aria-label="Presionadas Match habituales">
@@ -261,7 +268,9 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
               </div>;
             })}
           </section>}
+          </div></details>
         </>}
+        {key !== "foursome" && ("hcpPct" in config || "decimals" in config) && <details className={styles.advanced}><summary>Opciones avanzadas</summary><div className={styles.advancedFields}>{calculationOptions}</div></details>}
         {key === "ballFriend" && <><Field label="Score máximo" value={value.betConfig.ballFriend.maxScore} min={1} max={20} onChange={(maxScore) => updateCore(key, { maxScore })} /><p className={styles.intro}>Las parejas y el descanso se eligen por hoyo durante la ronda; esta plantilla conserva participantes, precio y reglas.</p></>}
         {(key === "vipers" || key === "camels" || key === "fish") && <label className={styles.check}><input type="checkbox" checked={Boolean(value.betConfig[key].secondNinePressed)} onChange={(event) => updateCore(key, { secondNinePressed: event.target.checked })} />Presión en segunda vuelta</label>}
         {(key === "vipers" || key === "camels" || key === "fish") && <>

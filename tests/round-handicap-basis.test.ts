@@ -264,8 +264,8 @@ test("modo persiste en borrador e Histórico; ausencia legacy equivale a entre j
 test("selector usa controles existentes, no autofocus, y oculta base fija/movible en modo campo", () => {
   const control = readFileSync("app/components/round-handicap-basis-control.tsx", "utf8");
   const page = readFileSync("app/page.tsx", "utf8");
-  assert.match(control, /Ventajas sobre el campo/);
-  assert.match(control, /Ventajas entre jugadores/);
+  assert.match(control, /HANDICAP_BASIS_LABELS/);
+  assert.match(control, /\["relative", "course"\]/);
   assert.doesNotMatch(control, /autoFocus|\.focus\(/);
   assert.match(page, /roundHandicapBasis === "relative" && <HandicapBaseControl name="Foursome"/);
   assert.match(page, /roundHandicapBasis === "relative" && <HandicapBaseControl name="Bola Amiga"/);
