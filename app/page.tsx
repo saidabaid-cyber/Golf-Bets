@@ -3888,6 +3888,8 @@ function GolfBetsApp() {
       onPrivacy={() => openAccountSettings("privacy")}
       onOpenAchievements={() => { setCareerView("achievements"); }}
       onOpenSocialProfile={id => openCareerFriends("list",id)}
+      activeRound={globalRoundAvailable ? activeRoundSummary : null}
+      onContinueRound={globalRoundAvailable ? resumeActiveRound : undefined}
     />}
     {showPageBack && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 

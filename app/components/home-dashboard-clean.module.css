@@ -5,4 +5,8 @@
 .selector .addFriends{border:1px solid #b49850;color:#816520;background:#fffdf7}
 .selector .addFriends[aria-current=page]{background:#846422;color:#fff}
 .selector button:focus-visible{outline:2px solid #b49850;outline-offset:3px}
+.continueRound{display:flex;align-items:center;justify-content:space-between;gap:12px;min-width:0;min-height:64px;padding:12px 16px;border:1px solid #b49850;border-radius:16px;background:#fffdf7;color:#123e30;text-align:left;cursor:pointer;font:inherit}
+.continueRound>span:first-child{display:grid;gap:4px;min-width:0}
+.continueRound small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#52695e}
+.continueRound:focus-visible{outline:2px solid #064832;outline-offset:3px}
 @media(min-width:600px){.selector button{font-size:15px}}
