@@ -65,7 +65,8 @@ export async function PUT(request: NextRequest) {
   if (Number(request.headers.get("content-length") || 0) > 1_000_000) return NextResponse.json({ error: "Tarjeta demasiado grande." }, { status: 413 });
   const body = await request.json().catch(() => null) as { round?: RoundSnapshot; expectedVersion?: number } | null;
   const round = body?.round;
-  if (!round?.id || round.cloudReadOnly || round.id.startsWith("shared:") || round.lifecycleState !== "live"
+  if (!round?.id || round.cloudReadOnly || round.id.startsWith("shared:") || !["live", "completed"].includes(round.lifecycleState || "")
+    || (round.lifecycleState === "completed" && !round.completedAt)
     || round.scorekeeping?.mode !== "owner" || !Number.isInteger(body?.expectedVersion) || Number(body?.expectedVersion) < 1)
     return NextResponse.json({ error: "Ronda o revisión inválida." }, { status: 400 });
   try { linkedRoundPlayers(round); } catch { return NextResponse.json({ error: "Jugadores duplicados." }, { status: 400 }); }
@@ -81,6 +82,7 @@ export async function PUT(request: NextRequest) {
   let delivery;
   try { delivery = await syncSharedRoundParticipants(authenticated.supabase, authenticated.userId, [round.id]); }
   catch { return NextResponse.json({ version: Number(saved.data.version), error: "Scores guardados; la entrega a participantes sigue pendiente." }, { status: 503 }); }
+  if (hasCompletedRoundPublicationCandidate([round])) scheduleSocialPublication(authenticated.userId, "round");
   return NextResponse.json({ roundId: saved.data.id, version: Number(saved.data.version), delivery });
 }
 

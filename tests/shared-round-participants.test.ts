@@ -14,6 +14,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { createHash } from "node:crypto";
+import { finalizeOwnerRound } from "../lib/owner-round-finalize";
 
 const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222", C = "33333333-3333-4333-8333-333333333333";
 test("withheld notification privileges preserve card access without bypassing preferences", async () => {
@@ -219,4 +220,60 @@ test("owner live transport cannot reopen or overwrite a completed historical rou
   const edit = structuredClone(snapshot); edit.lifecycleState = "live";
   assert.equal((await ownerRoute(db).PUT(put(edit, 1))).status, 409);
   assert.equal((db.rows("rounds_cloud")[0].snapshot as RoundSnapshot).lifecycleState, "completed");
+});
+
+test("owner closes the same canonical live row once with its revision, without touching other historical rows", async () => {
+  const db = new CloudDb(), completed = round(), live = { ...completed, lifecycleState: "live" as const, completedAt: undefined };
+  db.rows("rounds_cloud").push({ id: "canonical", owner_id: A, local_id: live.id, version: 3, snapshot: live },
+    { id: "old-card", owner_id: A, local_id: "old-card", version: 1, snapshot: { ...completed, id: "old-card" } });
+  const old = structuredClone(db.rows("rounds_cloud")[1]);
+  assert.equal((await ownerRoute(db).PUT(put(completed, 2))).status, 409);
+  assert.equal((await ownerRoute(db).PUT(put(completed, 3))).status, 200);
+  assert.equal(db.rows("rounds_cloud").length, 2);
+  assert.equal((db.rows("rounds_cloud")[0].snapshot as RoundSnapshot).lifecycleState, "completed");
+  assert.deepEqual(db.rows("rounds_cloud")[1], old);
+  assert.equal((await ownerRoute(db).PUT(put(completed, 3))).status, 409, "a completed canonical card cannot be written again");
+});
+
+test("finalize client never adopts a freshly fetched revision to overwrite an unseen owner edit", async () => {
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+  const key = `backyard-owner-round-revision:${A}:${round().id}`; storage.setItem(key, "2");
+  const calls: RequestInit[] = [];
+  const request: typeof fetch = async (_input, init) => {
+    calls.push(init || {});
+    return Response.json({ data: { id: "canonical", version: 3, snapshot: { ...round(), lifecycleState: "live" } } });
+  };
+  await assert.rejects(finalizeOwnerRound(round(), A, "synthetic", storage, request), /revisión de nube cambió/);
+  assert.equal(calls.length, 1); assert.equal(calls[0].method, undefined);
+  storage.setItem(key, "3"); calls.length = 0;
+  const success: typeof fetch = async (input, init) => {
+    calls.push(init || {});
+    if (String(input).includes("?")) return request(input, init);
+    const body = JSON.parse(String(init?.body)); assert.equal(body.expectedVersion, 3);
+    assert.equal(body.round.lifecycleState, "completed");
+    return Response.json({ roundId: "canonical", version: 4, delivery: { notifications: "BLOCKED_EXTERNAL_NOTIFICATION_PERMISSIONS" } });
+  };
+  assert.equal((await finalizeOwnerRound(round(), A, "synthetic", storage, success)).roundId, "canonical");
+  assert.equal(storage.getItem(key), "4");
+  assert.equal(calls.filter(call => call.method === "PUT").length, 1);
+});
+
+test("completed card finalize retry verifies material and never rewrites the canonical historical row", async () => {
+  const storage = { getItem: () => "4", setItem: () => { throw new Error("unexpected cache write"); } };
+  let calls = 0;
+  const snapshot = round();
+  snapshot.roundHoles = 18;
+  snapshot.order = Array.from({ length: 18 }, (_, index) => index + 1);
+  snapshot.courseSnapshot = { id: "qa-course", name: snapshot.courseName, teeName: snapshot.teeName,
+    holes: snapshot.order.map(number => ({ number, par: 4, strokeIndex: number })) };
+  snapshot.scores = Object.fromEntries(snapshot.order.map(number => [number, { a: 4, b: 5, guest: 6 }]));
+  const request: typeof fetch = async (_input, init) => {
+    calls += 1; assert.equal(init?.method, undefined);
+    return Response.json({ data: { id: "canonical", version: 4, snapshot } });
+  };
+  assert.equal((await finalizeOwnerRound(snapshot, A, "synthetic", storage, request)).alreadyCompleted, true);
+  assert.equal(calls, 1);
+  const modified = structuredClone(snapshot); modified.scores![1].a = 8;
+  await assert.rejects(finalizeOwnerRound(modified, A, "synthetic", storage, request), /ya está cerrada/);
 });
