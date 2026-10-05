@@ -99,7 +99,12 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
   const pendingConsentAction = useRef(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const switchRefs = useRef<Partial<Record<SupplementalBet["type"], HTMLButtonElement | null>>>({});
-  const update = (id: string, next: Partial<SupplementalBet>) => onChange((current) => current.map((bet) => bet.id === id ? { ...bet, ...next } as SupplementalBet : bet));
+  const update = (id: string, next: Partial<SupplementalBet>) => onChange(current => current.map(bet => {
+    if (bet.id !== id) return bet;
+    const updated = { ...bet, ...next } as SupplementalBet;
+    if (updated.type === "individual_nassau" && updated.playerAId && updated.playerBId && updated.playerAId !== updated.playerBId) delete updated.pendingHabitualPair;
+    return updated;
+  }));
   const remove = (id: string) => onChange((current) => current.filter((bet) => bet.id !== id));
   const runAfterConsent = (action: () => void) => {
     if (!requestActivation) { action(); return; }
@@ -140,11 +145,19 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
     const section = editorRef.current?.querySelector<HTMLElement>(`[data-supplemental-editor="${CSS.escape(targetId)}"]`);
     if (!section) return;
     pendingScroll.current = null;
-    section.scrollIntoView({ behavior: "smooth", block: "center" });
+    const wizardBody = section.closest<HTMLElement>(".groupWizardBody");
+    if (wizardBody) {
+      const bounds = wizardBody.getBoundingClientRect(), field = section.getBoundingClientRect();
+      if (field.top < bounds.top || field.bottom > bounds.bottom) wizardBody.scrollTop += field.top - bounds.top;
+    } else section.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [bets, openTypes]);
 
   const groupLayout = types.length === ORDER.length && types.every((type, index) => type === ORDER[index]);
-  return <div ref={editorRef} className={`${styles.editor} ${groupLayout ? styles.groupEditor : ""}`.trim()}>{types.map((type) => {
+  return <div ref={editorRef} className={`${styles.editor} ${groupLayout ? styles.groupEditor : ""}`.trim()}>{types.includes("individual_nassau") && bets.filter(bet => bet.type === "individual_nassau" && bet.pendingHabitualPair).map(bet => {
+    if (bet.type !== "individual_nassau" || !bet.pendingHabitualPair) return null;
+    const pending = bet.pendingHabitualPair;
+    return <section className="notice" key={`pending-${bet.id}`} role="status"><b>{pending.missing === "rival" ? `${pending.rivalName} no juega esta ronda.` : pending.missing === "principal" ? `${pending.principalName}: jugador habitual no participa hoy.` : `${pending.principalName} y ${pending.rivalName} no juegan esta ronda.`}</b><p>Esta Personal no se activó automáticamente.</p><div className="dialogActions"><button type="button" className="secondary" disabled={locked} onClick={() => runAfterConsent(() => { setOpenTypes(current => ({ ...current, individual_nassau: true })); update(bet.id, { enabled: true }); })}>Elegir otro rival</button><button type="button" className="textButton" onClick={() => update(bet.id, { enabled: false, pendingHabitualPair: undefined })}>Desactivar esta apuesta hoy</button></div></section>;
+  })}{types.map((type) => {
     const typeBets = bets.filter((bet) => bet.type === type && (!detailsOnly || bet.enabled)).map((bet, index) => ({ bet, index })).sort((first, second) => Number(second.bet.enabled) - Number(first.bet.enabled));
     const modeEnabled = typeBets.some(({ bet }) => bet.enabled);
     const label = SUPPLEMENTAL_BET_LABELS[type];
@@ -156,9 +169,11 @@ export function SupplementalBetsEditor({ bets, players, onChange, requestActivat
       {typeBets.map(({ bet, index }) => <ItemShell key={bet.id} bet={bet} locked={locked} detailsOnly={detailsOnly} label={`${SUPPLEMENTAL_BET_LABELS[type]} ${index + 1}`} onToggle={() => bet.enabled ? update(bet.id, { enabled: false, enabledBeforeCategoryOff: undefined }) : runAfterConsent(() => update(bet.id, { enabled: true, enabledBeforeCategoryOff: undefined }))} onRemove={() => detailsOnly ? update(bet.id, { enabled: false }) : remove(bet.id)}>
         {assignmentMode === "template" && <p className="hint">Los jugadores, rivales y parejas se eligen al iniciar la ronda.</p>}
         {bet.type === "individual_nassau" && <>
-          {assignmentMode === "round" && <div className="grid2"><PlayerSelect label="Jugador A" value={bet.playerAId} players={players} exclude={bet.playerBId} onChange={(playerAId) => update(bet.id, { playerAId })} /><PlayerSelect label="Jugador B" value={bet.playerBId} players={players} exclude={bet.playerAId} onChange={(playerBId) => update(bet.id, { playerBId })} /></div>}
+          {assignmentMode === "round" && <div className="grid2"><PlayerSelect label="Principal" value={bet.playerAId} players={players} exclude={bet.playerBId} onChange={(playerAId) => update(bet.id, { playerAId })} /><PlayerSelect label="Rival" value={bet.playerBId} players={players} exclude={bet.playerAId} onChange={(playerBId) => update(bet.id, { playerBId })} /></div>}
           <div className="grid3"><MoneyField label="Valor por componente" value={bet.value} onChange={(value) => update(bet.id, { value })} />{assignmentMode === "round" && <><PlayerSelect label="Quién recibe ventaja" value={bet.advantageReceiverId || ""} players={players.filter((player) => player.id === bet.playerAId || player.id === bet.playerBId)} onChange={(advantageReceiverId) => update(bet.id, { advantageReceiverId: advantageReceiverId || undefined })} /><NumberField label="Golpes" value={bet.advantageStrokes} min={0} onChange={(advantageStrokes) => update(bet.id, { advantageStrokes })} /></>}</div>
-          <div className={styles.checks}><label className="checkRow"><input type="checkbox" checked={Boolean(bet.carryEnabled)} onChange={(event) => update(bet.id, { carryEnabled: event.target.checked })} />Carry</label>{(["match1", "medal1", ...(roundHoles === 18 ? ["match2", "medal2", "match18", "medal18"] : [])] as Array<keyof typeof bet.components>).map((component) => <label className="checkRow" key={component}><input type="checkbox" checked={Boolean(bet.components?.[component])} onChange={(event) => update(bet.id, { components: Object.assign({ match1: false, medal1: false, match2: false, medal2: false, match18: false, medal18: false }, bet.components || {}, { [component]: event.target.checked }) })} />{component.replace("match", "Match ").replace("medal", "Medal ")}</label>)}</div>
+          <details><summary>Opciones avanzadas</summary>
+          {roundHoles === 18 && <label>Presión · segunda vuelta jugada<select value={bet.personalRules?.pressureMultiplier ?? bet.personalRules?.back9Multiplier ?? 1} onChange={event => update(bet.id, { personalRules: { ...bet.personalRules, back9Multiplier: 1, pressureMultiplier: Number(event.target.value) as 1 | 2 | 3 | 4 | 5, nassauVersion: 2 } })}><option value={1}>Sin presión</option>{[2, 3, 4, 5].map(value => <option key={value} value={value}>{value}x</option>)}</select><small>Total conserva el valor base.</small></label>}
+          <div className={styles.checks}><label className="checkRow"><input type="checkbox" checked={Boolean(bet.carryEnabled)} onChange={(event) => update(bet.id, { carryEnabled: event.target.checked })} />Carry</label>{(["match1", "medal1", ...(roundHoles === 18 ? ["match2", "medal2", "match18", "medal18"] : [])] as Array<keyof typeof bet.components>).map((component) => <label className="checkRow" key={component}><input type="checkbox" checked={Boolean(bet.components?.[component])} onChange={(event) => update(bet.id, { components: Object.assign({ match1: false, medal1: false, match2: false, medal2: false, match18: false, medal18: false }, bet.components || {}, { [component]: event.target.checked }) })} />{component.replace("match", "Match ").replace("medal", "Medal ")}</label>)}</div><BetHelpButton kind="individual_nassau" title="Carry Nassau" /><p className="hint">El carry no mezcla Match con Medal; sólo pasa al siguiente componente compatible.</p></details>
         </>}
         {bet.type === "dollar_stroke" && <>
           {assignmentMode === "round" && <div className="grid2"><PlayerSelect label="Jugador A" value={bet.playerAId} players={players} exclude={bet.playerBId} onChange={(playerAId) => update(bet.id, { playerAId })} /><PlayerSelect label="Jugador B" value={bet.playerBId} players={players} exclude={bet.playerAId} onChange={(playerBId) => update(bet.id, { playerBId })} /></div>}

@@ -11,6 +11,7 @@ import * as engine from "../lib/engine";
 import * as foursome from "../lib/foursome-config";
 import * as registry from "../lib/bets/registry";
 import * as supplemental from "../lib/supplemental-bets";
+import * as help from "../lib/bet-help";
 import type { FrequentGroup } from "../lib/types";
 
 type Node = { type: unknown; props: Record<string, any> };
@@ -32,7 +33,7 @@ function componentHarness(path: string, boundaries: Record<string, unknown> = {}
   const jsx = { jsx: (type: unknown, props: any) => ({ type, props }), jsxs: (type: unknown, props: any) => ({ type, props }), Fragment: "fragment" };
   const exports: Record<string, any> = {};
   const code = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  const modules: Record<string, unknown> = { "group-generator": generator, "group-game-template": templates, "group-template-editor": editor, "bets/registry": registry, engine, "foursome-config": foursome, "supplemental-bets": supplemental, ...boundaries };
+  const modules: Record<string, unknown> = { "group-generator": generator, "group-game-template": templates, "group-template-editor": editor, "bets/registry": registry, engine, "foursome-config": foursome, "supplemental-bets": supplemental, "bet-help": help, ...boundaries };
   runInNewContext(code, { exports, crypto: { randomUUID: () => "unique-member" }, AbortController,
     setTimeout: (fn: () => void) => { timers.set(++nextTimer, fn); return nextTimer; }, clearTimeout: (id: number) => timers.delete(id),
     require: (id: string) => {
@@ -58,9 +59,10 @@ test("friends appear without global search; local filter, one-tap selection and 
   find(tree, n => n.type === "button" && n.props["aria-label"] === "Agregar QA Diego Green").props.onClick();
   assert.equal(group.players.length, 2); assert.equal(group.players[1].accountUserId, "friend"); assert.equal(group.players[1].handicap, null);
   tree = h.render("GroupMemberSelection", props()); assert.equal(find(tree, n => n.type === "button" && n.props["aria-label"] === "Quitar QA Diego Green").props["aria-pressed"], true);
-  find(tree, n => n.type === "input" && n.props.placeholder === "Buscar entre mis amigos").props.onChange({ target: { value: "missing" } });
+  find(tree, n => n.type === "input" && n.props.placeholder === "Nombre, @usuario o correo exacto").props.onChange({ target: { value: "missing" } });
   tree = h.render("GroupMemberSelection", props()); assert.doesNotMatch(text(tree), /QA Diego Green/); assert.equal(calls.length, 1);
-  find(tree, n => n.type === "input" && n.props.placeholder === "Nombre o @usuario").props.onChange({ target: { value: "@qa_diego_green" } });
+  assert.equal(nodes(tree).filter(n => n.type === "input" && n.props.type === "search").length, 1);
+  find(tree, n => n.type === "input" && n.props.placeholder === "Nombre, @usuario o correo exacto").props.onChange({ target: { value: "@qa_diego_green" } });
   h.render("GroupMemberSelection", props()); h.tick(); await new Promise(resolve => setImmediate(resolve));
   tree = h.render("GroupMemberSelection", props()); assert.ok(calls[1].endsWith("%40qa_diego_green"));
   assert.equal(find(tree, n => n.type === "button" && n.props["aria-label"] === "Quitar QA Diego Green").props["aria-pressed"], true);
@@ -81,7 +83,7 @@ test("Foursome first level has real basics; advanced HCP/rounding/pressure are c
   for (const name of ["Valor fijo", "Valor por punto / patada"]) assert.doesNotMatch(text(advanced), new RegExp(name));
 });
 
-test("Nassau keeps its amount and components visible, with pressure and advantage in collapsed advanced options", () => {
+test("Nassau keeps named principal, rival, value and advantage primary; components and carry stay advanced", () => {
   const group = fixture(); let value = templates.createEmptyGroupGameTemplate(group);
   const h = componentHarness("app/components/group-bet-template-editor.tsx");
   const props = { players: templates.groupTemplatePlayers(group), ownerId: "owner", onChange: (update: any) => { value = update(value); } };
@@ -89,8 +91,8 @@ test("Nassau keeps its amount and components visible, with pressure and advantag
   find(selection, node => node.props.label === "Nassau / Personal").props.onChange();
   const tree = h.render("GroupBetTemplateEditor", { ...props, value, mode: "details", onlyBetId: "personals" });
   const advanced = find(tree, node => node.type === "details" && node.props.className === "advanced");
-  assert.equal(advanced.props.open, undefined); assert.match(text(advanced), /Presión[\s\S]*Ventaja para/);
-  assert.doesNotMatch(text(advanced), /Valor por componente|Match Primera/);
+  assert.equal(advanced.props.open, undefined); assert.match(text(advanced), /Presión[\s\S]*Match Primera[\s\S]*Carry/);
+  assert.doesNotMatch(text(advanced), /Valor por componente|Ventaja para/);
   assert.ok(nodes(tree).some(node => node.props.label === "Valor por componente"));
   assert.match(text(tree), /Match Primera[\s\S]*Medal Total/);
   assert.equal(value.personalBets[0].baseValue, 100); assert.equal(value.personalBets[0].pressureMultiplier, 1);
@@ -108,7 +110,7 @@ test("shared HCP mapping is relative/course and money prefix keeps capture callb
 });
 
 test("wizard retains validation, private default, legacy invite_only and first-experience return contracts", () => {
-  const wizard = page.split('{frequentGroupDraft && <div className="modalBackdrop"')[1].split("<ModalShell")[0];
+  const wizard = page.split('{frequentGroupDraft && <div className="modalBackdrop groupWizardBackdrop"')[1].split("<ModalShell")[0];
   assert.match(wizard, /1 de 2 · Jugadores/); assert.match(wizard, /2 de 2 · Apuestas/); assert.match(wizard, /Siguiente →/); assert.match(wizard, /Guardar grupo/); assert.match(wizard, /setFrequentGroupEditorTab\("members"\)/);
   assert.doesNotMatch(wizard, /groupPrivacyChoices|GroupInviteManager|role="tab"|Jugador nuevo/);
   assert.match(page.split("function beginCreateFrequentGroup()")[1].split("function addPlayerToFrequentGroup")[0], /privacy: "private"/);
@@ -132,4 +134,41 @@ test("guest, Foursome and personal values survive serialization; editing group c
   for (const key of ["mode", "fixedValue", "pointValue", "segmentSize", "hcpPct", "decimals", "baseMode", "pressureMultiplier", "pressSecond9"] as const) assert.equal(round.bets.foursome[key], group.gameTemplate.betConfig.foursome[key]);
   group = frequent.updateFrequentGroupMember(group, 1, { handicap: 24 }); group.gameTemplate = editor.patchGroupTemplateCore(group.gameTemplate!, "foursome", { fixedValue: 999 });
   assert.equal(JSON.stringify(round), frozen); assert.match(editor.groupTemplatePresentationDetails(group).join(" "), /Foursome · Fijo · \$999 · 6 hoyos/);
+});
+
+
+test("every registered group selection exposes existing complete betting help", () => {
+  const group = fixture(), value = templates.createEmptyGroupGameTemplate(group);
+  const h = componentHarness("app/components/group-bet-template-editor.tsx");
+  const tree = h.render("GroupBetTemplateEditor", { value, players: templates.groupTemplatePlayers(group), ownerId: "owner", mode: "selection", onChange: () => {} });
+  const buttons = nodes(tree).filter(node => node.type === "BetHelpButton");
+  assert.equal(buttons.length, registry.groupTemplateSelectionDefinitions().length);
+  for (const button of buttons) { const copy = help.BET_HELP[button.props.kind as help.BetHelpKind]; assert.ok(copy); for (const field of ["what", "how", "rules", "example"] as const) assert.ok(copy[field].length); }
+  const actual = componentHarness("app/components/supplemental-bets-editor.tsx");
+  let dialog = actual.render("BetHelpButton", { kind: "personal" });
+  find(dialog, node => node.type === "button").props.onClick({ stopPropagation() {} });
+  dialog = actual.render("BetHelpButton", { kind: "personal" });
+  assert.match(text(dialog), /QUÉ ES[\s\S]*CÓMO FUNCIONA[\s\S]*REGLAS[\s\S]*EJEMPLO/);
+  assert.ok(nodes(dialog).some(node => (JSON.stringify(node.props.content) || "").includes("carry de un empate solo pasa al mismo tipo")));
+});
+
+test("bet configuration is a dedicated subview with save/back; values survive returning", () => {
+  const group = fixture(); let value = templates.createEmptyGroupGameTemplate(group); let focused = false;
+  const h = componentHarness("app/components/group-bet-template-editor.tsx");
+  const props = () => ({ value, players: templates.groupTemplatePlayers(group), ownerId: "owner", mode: "complete", onChange: (update: any) => { value = update(value); }, onSubeditorChange: (open: boolean) => { focused = open; } });
+  let tree = h.render("GroupBetTemplateEditor", props());
+  find(tree, node => node.props.label === "Foursome").props.onChange();
+  tree = h.render("GroupBetTemplateEditor", props()); assert.equal(focused, true);
+  assert.match(text(tree), /← Apuestas[\s\S]*Guardar apuesta/); assert.doesNotMatch(text(tree), /Siguiente|Apuestas grupales/);
+  value = editor.patchGroupTemplateCore(value, "foursome", { fixedValue: 300 });
+  find(tree, node => node.type === "button" && text(node) === "Guardar apuesta").props.onClick();
+  tree = h.render("GroupBetTemplateEditor", props()); assert.equal(focused, false); assert.equal(value.betConfig.foursome.fixedValue, 300); assert.match(text(tree), /Apuestas grupales/);
+});
+
+test("mobile sheet uses one body scroller, local viewport cleanup and dirty discard guard", () => {
+  const css = readFileSync("app/globals.css", "utf8"), viewport = readFileSync("app/components/use-group-wizard-viewport.ts", "utf8");
+  assert.match(css, /@media\(max-width:700px\)/); assert.match(css, /height:var\(--group-visible-height,100dvh\);max-height:none/);
+  assert.match(css, /groupWizardBody[^}]*overflow-y:auto/); assert.match(css, /groupWizardFlow[^}]*overflow:hidden/);
+  assert.match(viewport, /removeEventListener\("resize", update\)/); assert.match(viewport, /scroller.scrollTop/); assert.doesNotMatch(viewport, /window.scrollTo|document.*scrollIntoView/);
+  assert.match(page, /groupEditorInitialFingerprint.current/); assert.match(page, /¿Descartar los cambios\?/); assert.match(page, /!groupBetSubeditor && <div className="groupWizardActions"/);
 });

@@ -85,7 +85,8 @@ test("onboarding y editor de ronda conservan configuración avanzada de apuestas
   for (const contract of ["Mantener decimales", "Fijo + Patada", "Presión · segunda vuelta", "3 hoyos", "18 hoyos", "Golpes de ventaja"]) {
     assert.match(templateEditor, new RegExp(contract.replace(/[+]/g, "\\+")));
   }
-  assert.ok(templateEditor.includes("Jugador {String.fromCharCode(65 + index)} / Rival"));
+  assert.match(templateEditor, /Principal<select[\s\S]*Rival<select/);
+  assert.match(templateEditor, /memberAssignment/);
   assert.match(templateEditor, /Los jugadores y parejas se eligen al iniciar/);
   assert.match(templateEditor, /assignmentMode="template"/);
   assert.doesNotMatch(templateEditor, /rivalPlayerId:\s*nextRival/);

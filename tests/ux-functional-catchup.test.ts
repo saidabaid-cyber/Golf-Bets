@@ -85,7 +85,7 @@ test("social search and QR resolve stable identities before duplicate-safe frien
   assert.match(route, /before\.requests\.some/);
 });
 
-test("habitual bets edit inline with slots, money affordance and five-percent HCP steps", () => {
+test("habitual bets use named member identities, money affordance and five-percent HCP steps", () => {
   const onboarding = source("app/components/beta-onboarding-flow.tsx");
   const round = source("app/page.tsx");
   const editor = source("app/components/group-bet-template-editor.tsx");
@@ -93,7 +93,8 @@ test("habitual bets edit inline with slots, money affordance and five-percent HC
   assert.doesNotMatch(onboarding, /GroupBetTemplateEditor|Configura tu primer grupo/);
   assert.match(round, /<GroupBetTemplateEditor/);
   assert.match(round, /mode="complete"/);
-  assert.match(editor, /Jugador \{String\.fromCharCode\(65 \+ index\)\} \/ Rival/);
+  assert.match(editor, /Principal<select[\s\S]*Rival<select/);
+  assert.match(editor, /memberAssignment/);
   assert.match(editor, /Match Primera/);
   assert.match(editor, /Medal Total/);
   assert.match(editor, /Carry/);

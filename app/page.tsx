@@ -1,4 +1,6 @@
 "use client";
+
+import { useGroupWizardViewport } from "./components/use-group-wizard-viewport";
 import "./functional-ux.css";
 import "./profile-account.css";
 import "./navigation-redesign.css";
@@ -610,7 +612,12 @@ function GolfBetsApp() {
   const [frequentGroupDraftIsNew, setFrequentGroupDraftIsNew] = useState(false);
   const [frequentGroupEditorTab, setFrequentGroupEditorTab] = useState<"members" | "bets">("members");
   const groupEditorRef = useRef<HTMLElement | null>(null);
-  useViewScrollReset(frequentGroupEditorTab, groupEditorRef, Boolean(frequentGroupDraft));
+  const groupEditorBodyRef = useRef<HTMLDivElement | null>(null);
+  const groupEditorInitialFingerprint = useRef("");
+  const [discardGroupChanges, setDiscardGroupChanges] = useState(false);
+  const [groupBetSubeditor, setGroupBetSubeditor] = useState(false);
+  useGroupWizardViewport(Boolean(frequentGroupDraft), groupEditorRef, groupEditorBodyRef);
+  useViewScrollReset(`${frequentGroupEditorTab}:${groupBetSubeditor}`, groupEditorBodyRef, Boolean(frequentGroupDraft));
   const [groupRoundSelection, setGroupRoundSelection] = useState<FrequentGroup | null>(null);
   const [frequentGroupEditError, setFrequentGroupEditError] = useState("");
   const [frequentGroupSaving, setFrequentGroupSaving] = useState(false);
@@ -653,6 +660,11 @@ function GolfBetsApp() {
     firstSocialExperience.dismiss();
     setTab("groups");
     beginCreateFrequentGroup();
+  }
+  function requestCloseGroupEditor() {
+    if (frequentGroupSaveInFlight.current) return;
+    if (JSON.stringify(frequentGroupDraft) !== groupEditorInitialFingerprint.current) setDiscardGroupChanges(true);
+    else void closeFirstExperienceGroupEditor();
   }
   async function closeFirstExperienceGroupEditor() {
     const context = firstExperienceGroupReturn.current;
@@ -1779,7 +1791,12 @@ function GolfBetsApp() {
     else run();
   }
 
-  function editActiveRound() { setRoundClosed(false); setEditingRound(true); setTab("setup"); }
+  function editActiveRound() {
+    commitFocusedNumericCapture();
+    if (flushLocalState.current?.() === false) { setFeedback("No pudimos guardar la captura. Conservamos la ronda abierta."); return; }
+    applyDraft(roundDraftPayload(), { preserveLocalUi: true });
+    setRoundSetupInitialStep(1); setEditingRound(true); setTab("setup");
+  }
 
   function goToHoleIndex(index: number) {
     setCurrentIndex(Math.max(0, Math.min(order.length - 1, index)));
@@ -3079,6 +3096,7 @@ function GolfBetsApp() {
 
   function resetFrequentGroupEditor() {
     setFrequentGroupDraft(null);
+    setDiscardGroupChanges(false); setGroupBetSubeditor(false);
     setFrequentGroupDraftIsNew(false);
     setFrequentGroupEditorTab("members");
     setFrequentGroupEditError("");
@@ -3089,7 +3107,10 @@ function GolfBetsApp() {
 
   function beginEditFrequentGroup(group: FrequentGroup) {
     setFrequentGroupView(null);
-    setFrequentGroupDraft(withStableGroupMemberIds(structuredClone(group)));
+    const draft = withStableGroupMemberIds(structuredClone(group));
+    groupEditorInitialFingerprint.current = JSON.stringify(draft);
+    setDiscardGroupChanges(false); setGroupBetSubeditor(false);
+    setFrequentGroupDraft(draft);
     setFrequentGroupDraftIsNew(false);
     setFrequentGroupEditorTab("members");
     setFrequentGroupEditError("");
@@ -3115,6 +3136,8 @@ function GolfBetsApp() {
       uses: 0,
       updatedAt: new Date().toISOString(),
     });
+    groupEditorInitialFingerprint.current = JSON.stringify(draft);
+    setDiscardGroupChanges(false); setGroupBetSubeditor(false);
     setFrequentGroupDraft(draft);
     setFrequentGroupDraftIsNew(true);
     setFrequentGroupEditorTab("members");
@@ -3950,6 +3973,7 @@ function GolfBetsApp() {
     {feedback && <div className="notice" role="status">{roundSaveNotice(feedback, cloudStatus)}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
     {showFirstRoundExperience && <div className="modalBackdrop"><section className="confirmDialog firstRoundExperience" role="dialog" aria-modal="true" aria-labelledby="first-round-title" aria-describedby="first-round-description"><ModalCloseButton onClose={() => { try { markFirstRoundExperienceSeen(localStorage, identity.userId); } catch {} setShowFirstRoundExperience(false); }} /><span className="eyebrow">TU PRIMERA RONDA</span><h2 id="first-round-title">Prepara tu ronda</h2><p id="first-round-description">Puedes empezar por el campo o ir directo a lo que quieres configurar. Nada es obligatorio.</p><div className="firstRoundActions"><button className="secondary" onClick={() => completeFirstRoundExperience("players")}>Agregar jugadores</button><button className="secondary" onClick={() => completeFirstRoundExperience("groups")}>Usar un grupo</button><button className="secondary" onClick={() => completeFirstRoundExperience("bets")}>Configurar apuestas</button><button className="primary" onClick={() => completeFirstRoundExperience("continue")}>Continuar sin configurar</button></div></section></div>}
+    <ModalShell open={discardGroupChanges} onClose={() => setDiscardGroupChanges(false)} className="confirmDialog" labelledBy="discard-group-title"><h2 id="discard-group-title">¿Descartar los cambios?</h2><p>El grupo no se guardará con estos cambios.</p><div className="dialogActions"><button type="button" className="secondary" onClick={() => setDiscardGroupChanges(false)}>Seguir editando</button><button type="button" className="dangerButton" onClick={() => void closeFirstExperienceGroupEditor()}>Descartar cambios</button></div></ModalShell>
     <ModalShell className="confirmDialog roundLifecycleDialog" open={showNewRoundConfirm} onClose={() => { if (roundLifecycleBusy) return; setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }} closeDisabled={roundLifecycleBusy} labelledBy="new-round-title"><h2 id="new-round-title">Tienes una ronda activa</h2><p>La ronda anterior no se borrará. Quedará guardada con sus jugadores y scores para que puedas reanudarla.</p>{newRoundBackupError && <p role="alert">{newRoundBackupError}</p>}<div className="dialogActions"><button autoFocus className="primary" disabled={roundLifecycleBusy} onClick={() => { setShowNewRoundConfirm(false); setPendingNewRoundIntent(null); continueActiveRound(); }}>Continuar ronda actual</button><button className="secondary" disabled={roundLifecycleBusy} onPointerDown={commitFocusedNumericCapture} onClick={() => void confirmNewRound()}>{roundLifecycleBusy ? 'Guardando…' : 'Iniciar nueva ronda'}</button><button className="textButton" disabled={roundLifecycleBusy} onClick={() => { setShowNewRoundConfirm(false); setPendingNewRoundIntent(null); }}>Cancelar</button></div></ModalShell>
     {pendingRoundAction && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-change-title"><ModalCloseButton onClose={() => setPendingRoundAction(null)} /><h2 id="round-change-title">Confirmar cambios</h2><p>{pendingRoundAction.message}</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPendingRoundAction(null)}>Cancelar</button><button className="primary" onClick={() => { const action = pendingRoundAction; setPendingRoundAction(null); action.run(); }}>Confirmar</button></div></section></div>}
     {showRoundFinishedNotice && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-finished-title"><ModalCloseButton onClose={() => setShowRoundFinishedNotice(false)} /><h2 id="round-finished-title">Ronda terminada</h2><p>{ROUND_REVIEW_NOTICE}</p><div className="dialogActions"><button autoFocus className="primary" onClick={() => { setShowRoundFinishedNotice(false); setTab("results"); }}>Revisar resultados</button></div></section></div>}
@@ -4241,7 +4265,7 @@ function GolfBetsApp() {
             const enabled = personalBets.some((bet) => bet.enabled !== false);
             if (enabled) setPersonalModeEnabled(false); else runAfterBettingConsent(() => { setPersonalModeEnabled(true); setNassauSetupOpen(true); });
           }} /></span>}
-        >{personalBets.some((bet) => bet.enabled !== false) && <><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(() => { newPersonalBet(); setNassauSetupOpen(true); })}>+ Nassau Individual</button></div>{supplementalBets.some((bet) => bet.type === "individual_nassau") && <div className="notice">Se conserva sin reinterpretar una Nassau heredada entre jugadores distintos del principal. Sigue calculándose con su ID, pareja, ventaja y monto originales; no se convirtió automáticamente.</div>}{renderPersonalBetsEditor()}</>}</ResultAccordion>
+        >{personalBets.some((bet) => bet.enabled !== false) && <><div className="setupModeTools"><button type="button" className="textButton" onClick={() => runAfterBettingConsent(() => { newPersonalBet(); setNassauSetupOpen(true); })}>+ Nassau Individual</button></div>{supplementalBets.some((bet) => bet.type === "individual_nassau") && <div className="notice">Nassau entre jugadores: conserva la pareja, ventaja, Carry y reglas pactadas. Sus importes pertenecen a los dos participantes.</div>}{renderPersonalBetsEditor()}</>}</ResultAccordion>
         {supplementalBets.some((bet) => bet.type === "individual_nassau") && <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} types={["individual_nassau"]} roundHoles={roundHoles} allowAdd={false} />}
         <SupplementalBetsEditor bets={supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestBettingConsent} locked={!bettingConsentGranted} types={["dollar_stroke", "individual_pressures"]} roundHoles={roundHoles} />
       </WizardBetCatalog></section>
@@ -4553,10 +4577,10 @@ function GolfBetsApp() {
 
     {frequentGroupView?.created && !frequentGroupDraft && frequentGroups.filter(group => group.id === frequentGroupView.id).map(group => <GroupDetailDialog key={group.id} group={group} created={frequentGroupView.created} onClose={() => setFrequentGroupView(null)} onEdit={() => frequentGroupView.created ? setFrequentGroupView({ id: group.id, created: false }) : beginEditFrequentGroup(group)} onPlay={() => { setFrequentGroupView(null); loadFrequentGroup(group); }} onCreateAnother={beginCreateFrequentGroup} />)}
 
-    {frequentGroupDraft && <div className="modalBackdrop" role="presentation"><section ref={groupEditorRef} className="groupEditorDialog groupWizard" role="dialog" aria-modal="true" aria-labelledby="edit-group-title" aria-describedby="edit-group-description">
-      <ModalCloseButton disabled={frequentGroupSaving} onClose={() => { if (!frequentGroupSaveInFlight.current) void closeFirstExperienceGroupEditor(); }} />
+    {frequentGroupDraft && <div className="modalBackdrop groupWizardBackdrop" role="presentation"><section ref={groupEditorRef} className="groupEditorDialog groupWizard groupWizardFlow" role="dialog" aria-modal="true" aria-labelledby="edit-group-title" aria-describedby="edit-group-description">
+      <ModalCloseButton disabled={frequentGroupSaving} onClose={requestCloseGroupEditor} />
       <div className="groupEditorHeader"><h2 id="edit-group-title">{frequentGroupDraftIsNew ? "Crear grupo" : "Editar grupo"}</h2><p id="edit-group-description">{frequentGroupEditorTab === "members" ? "1 de 2 · Jugadores" : "2 de 2 · Apuestas"}</p><div className="groupWizardProgress" role="progressbar" aria-label="Progreso de Crear / Editar grupo" aria-valuemin={1} aria-valuemax={2} aria-valuenow={frequentGroupEditorTab === "members" ? 1 : 2}><span style={{ width: frequentGroupEditorTab === "members" ? "50%" : "100%" }} /></div></div>
-      <fieldset disabled={frequentGroupSaving} className="groupWizardFields">
+      <div ref={groupEditorBodyRef} className="groupWizardBody"><fieldset disabled={frequentGroupSaving} className="groupWizardFields">
       {frequentGroupEditorTab === "members" ? <>
         <label>Nombre del grupo<input value={frequentGroupDraft.name} placeholder="Miércoles La Vista" onChange={event => setFrequentGroupDraft(group => group ? { ...group, name: event.target.value } : group)} /></label>
         <GroupMemberSelection group={frequentGroupDraft} frequentPlayers={frequentPlayers} accessToken={identity.accessToken} onAdd={addPlayerToFrequentGroup} onRemove={removeMemberFromFrequentGroup} />
@@ -4570,15 +4594,15 @@ function GolfBetsApp() {
         </div>)}</div>{!frequentGroupDraft.players.length && <p>Agrega al menos un integrante para guardar el grupo.</p>}</section>
         <p className="hint">Los grupos guardados son privados por defecto. Invitar o compartir se administra aparte.</p>
       </> : frequentGroupDraft.gameTemplate ? <>
-        <GroupBetTemplateEditor value={frequentGroupDraft.gameTemplate} players={groupTemplatePlayers(frequentGroupDraft)} ownerId={frequentGroupDraft.gameTemplate.ownerMemberId} mode="complete" onChange={updateFrequentGroupGameTemplate} />
-        <GroupSummary group={frequentGroupDraft} />
+        <GroupBetTemplateEditor value={frequentGroupDraft.gameTemplate} players={groupTemplatePlayers(frequentGroupDraft)} ownerId={frequentGroupDraft.gameTemplate.ownerMemberId} mode="complete" onSubeditorChange={setGroupBetSubeditor} onChange={updateFrequentGroupGameTemplate} />
+        {!groupBetSubeditor && <GroupSummary group={frequentGroupDraft} />}
       </> : <div className="empty">Agrega integrantes antes de configurar apuestas.</div>}
       {frequentGroupEditError && <div className="notice bad" role="alert">{frequentGroupEditError}</div>}
       </fieldset>
-      <div className="groupWizardActions"><button type="button" className="secondary" disabled={frequentGroupSaving} onClick={() => frequentGroupEditorTab === "members" ? void closeFirstExperienceGroupEditor() : setFrequentGroupEditorTab("members")}>{frequentGroupEditorTab === "members" ? "Cancelar" : "← Atrás"}</button><button type="button" className="primary" disabled={frequentGroupSaving || !frequentGroupDraft.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some(member => !member.name.trim())} onClick={frequentGroupEditorTab === "members" ? openFrequentGroupBetEditor : saveFrequentGroupEdit}>{frequentGroupSaving ? "Guardando…" : frequentGroupEditorTab === "members" ? "Siguiente →" : "Guardar grupo"}</button></div>
+      </div>{!groupBetSubeditor && <div className="groupWizardActions"><button type="button" className="secondary" disabled={frequentGroupSaving} onClick={() => frequentGroupEditorTab === "members" ? requestCloseGroupEditor() : setFrequentGroupEditorTab("members")}>{frequentGroupEditorTab === "members" ? "Cancelar" : "← Atrás"}</button><button type="button" className="primary" disabled={frequentGroupSaving || !frequentGroupDraft.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some(member => !member.name.trim())} onClick={frequentGroupEditorTab === "members" ? openFrequentGroupBetEditor : saveFrequentGroupEdit}>{frequentGroupSaving ? "Guardando…" : frequentGroupEditorTab === "members" ? "Siguiente →" : "Guardar grupo"}</button></div>}
     </section></div>}
 
-    <ModalShell className="confirmDialog roundLifecycleDialog" open={showDeleteRoundConfirm} onClose={() => { if (!roundLifecycleBusy) { setShowDeleteRoundConfirm(false); setNewRoundBackupError(''); } }} closeDisabled={roundLifecycleBusy} labelledBy="delete-round-title"><h2 id="delete-round-title">¿Cancelar / cerrar esta ronda?</h2><p>No se marcará como terminada. Conservaremos sus datos en Histórico y podrás retomarla después.</p>{newRoundBackupError && <p role="alert">{newRoundBackupError}</p>}<div className="dialogActions"><button autoFocus className="secondary" disabled={roundLifecycleBusy} onClick={() => setShowDeleteRoundConfirm(false)}>Seguir jugando</button><button className="dangerButton" disabled={roundLifecycleBusy} onPointerDown={commitFocusedNumericCapture} onClick={() => void deleteActiveRound()}>{roundLifecycleBusy ? 'Guardando…' : 'Confirmar cierre'}</button></div></ModalShell>
+    <ModalShell className="confirmDialog roundLifecycleDialog" open={showDeleteRoundConfirm} onClose={() => { if (!roundLifecycleBusy) { setShowDeleteRoundConfirm(false); setNewRoundBackupError(''); } }} closeDisabled={roundLifecycleBusy} labelledBy="delete-round-title"><h2 id="delete-round-title">¿Cancelar esta ronda?</h2><p>La ronda dejará de estar activa. No se perderá accidentalmente otra información guardada. Conservaremos su tarjeta sin marcarla como terminada.</p>{newRoundBackupError && <p role="alert">{newRoundBackupError}</p>}<div className="dialogActions"><button autoFocus className="secondary" disabled={roundLifecycleBusy} onClick={() => setShowDeleteRoundConfirm(false)}>Seguir jugando</button><button className="dangerButton" disabled={roundLifecycleBusy} onPointerDown={commitFocusedNumericCapture} onClick={() => void deleteActiveRound()}>{roundLifecycleBusy ? 'Guardando…' : 'Cancelar ronda'}</button></div></ModalShell>
 
     {historicalRoundToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-history-round-title" aria-describedby="delete-history-round-description"><ModalCloseButton onClose={() => setHistoricalRoundToDelete(null)} /><h2 id="delete-history-round-title">¿Eliminar esta ronda del histórico?</h2><p id="delete-history-round-description">Esta acción eliminará definitivamente esta ronda guardada y sus resultados.</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setHistoricalRoundToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={confirmHistoricalRoundDeletion}>Eliminar</button></div></section></div>}
 

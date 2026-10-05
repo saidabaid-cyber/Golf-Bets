@@ -100,7 +100,6 @@ export function GroupMemberSelection({ group, frequentPlayers, accessToken, onAd
   friendsOnly?: boolean;
 }) {
   const [friends, setFriends] = useState<SocialPerson[]>([]);
-  const [friendQuery, setFriendQuery] = useState("");
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SocialPerson[]>([]);
   const [friendMessage, setFriendMessage] = useState("");
@@ -118,7 +117,7 @@ export function GroupMemberSelection({ group, frequentPlayers, accessToken, onAd
   useEffect(() => {
     const controller = new AbortController();
     setResults([]); setSearchMessage(""); setSearching(false);
-    if (!accessToken || query.trim().length < 2) return;
+    if (friendsOnly || !accessToken || query.trim().length < 2) return;
     const timer = setTimeout(() => {
       setSearching(true);
       void socialRequest<{ users: SocialPerson[] }>(`/api/groups/users?q=${encodeURIComponent(query.trim())}`, accessToken, { signal: controller.signal }).then(data => {
@@ -126,20 +125,29 @@ export function GroupMemberSelection({ group, frequentPlayers, accessToken, onAd
       }).catch(() => { if (!controller.signal.aborted) setSearchMessage("No pudimos buscar. Reintenta con nombre o @usuario."); }).finally(() => { if (!controller.signal.aborted) setSearching(false); });
     }, 300);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [accessToken, query]);
+  }, [accessToken, query, friendsOnly]);
   const knownHandicap = (person: SocialPerson) => group.players.find(member => member.accountUserId === person.user_id)?.handicap
     ?? frequentPlayers.find(member => member.accountUserId === person.user_id)?.handicap ?? null;
   const renderPerson = (person: SocialPerson, friend: boolean) => {
     const selectedIndex = group.players.findIndex(member => member.accountUserId === person.user_id);
     const selected = selectedIndex >= 0;
     const handicap = knownHandicap(person);
-    return <li key={person.user_id} className="groupPersonRow"><span className="groupPersonAvatar"><ProfileAvatarMedia value={person.avatar_url} fallback={person.display_name[0] || "J"} /></span><span><b>{person.display_name}</b><small>@{person.username} · {typeof handicap === "number" ? `HCP ${handicap}` : "HCP por completar"}</small></span><button type="button" className="groupPersonAdd" aria-label={`${selected ? "Quitar" : "Agregar"} ${person.display_name}`} aria-pressed={selected} onClick={() => selected ? onRemove(selectedIndex) : onAdd({ memberId: `member-${id()}`, kind: "account", accountUserId: person.user_id, name: person.display_name, username: person.username, handicap })}>{selected ? "✓" : friend ? "+" : "+ Agregar"}</button></li>;
+    return <li key={person.user_id} className="groupPersonRow"><span className="groupPersonAvatar"><ProfileAvatarMedia value={person.avatar_url} fallback={person.display_name[0] || "J"} /></span><span><b>{person.display_name}</b>{friend && <span className="groupFriendBadge">AMIGO</span>}<small>@{person.username} · {typeof handicap === "number" ? `HCP ${handicap}` : "HCP por completar"}</small></span><button type="button" className="groupPersonAdd" aria-label={`${selected ? "Quitar" : "Agregar"} ${person.display_name}`} aria-pressed={selected} onClick={() => selected ? onRemove(selectedIndex) : onAdd({ memberId: `member-${id()}`, kind: "account", accountUserId: person.user_id, name: person.display_name, username: person.username, handicap })}>{selected ? "✓" : friend ? "+" : "+ Agregar"}</button></li>;
   };
-  const filteredFriends = friends.filter(person => `${person.display_name} @${person.username}`.toLocaleLowerCase("es-MX").includes(friendQuery.trim().toLocaleLowerCase("es-MX")));
-  return <>
-    <section className="groupWizardBlock" aria-label="Mis amigos"><h3>Mis amigos</h3>{accessToken ? <><label>Buscar entre mis amigos<input type="search" value={friendQuery} onChange={event => setFriendQuery(event.target.value)} placeholder="Buscar entre mis amigos" /></label>{loadingFriends ? <p role="status">Cargando amigos…</p> : <><ul className="groupPeopleList">{filteredFriends.map(person => renderPerson(person, true))}</ul>{!friends.length && !friendMessage && <p className="hint">Todavía no tienes amigos guardados. Puedes buscar a un jugador en Backyard.</p>}{friends.length > 0 && !filteredFriends.length && <p className="hint">No hay amigos que coincidan.</p>}</>}{friendMessage && <p role="status">{friendMessage}</p>}</> : <p>Inicia sesión para ver tus amigos.</p>}</section>
-    {!friendsOnly && <section className="groupWizardBlock" aria-label="Buscar jugador en Backyard"><h3>Buscar jugador en Backyard</h3><label>Nombre o @usuario<input type="search" value={query} disabled={!accessToken} onChange={event => setQuery(event.target.value)} placeholder="Nombre o @usuario" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} /></label>{searching && <p role="status">Buscando…</p>}<ul className="groupPeopleList">{results.map(person => renderPerson(person, false))}</ul>{searchMessage && <p role="status">{searchMessage}</p>}<small>Agregar a tu plantilla no envía una invitación ni una solicitud de amistad.</small></section>}
-  </>;
+  const filteredFriends = friends.filter(person => `${person.display_name} @${person.username}`.toLocaleLowerCase("es-MX").includes(query.trim().toLocaleLowerCase("es-MX")));
+  const friendIds = new Set(friends.map(person => person.user_id));
+  const matches = [...filteredFriends, ...(!friendsOnly && query.trim().length >= 2 ? results : [])]
+    .filter((person, index, all) => all.findIndex(other => other.user_id === person.user_id) === index);
+  return <section className="groupWizardBlock" aria-label="Agregar jugadores"><h3>{friendsOnly ? "Mis amigos" : "Agregar jugadores"}</h3>
+    <label>Buscar jugador<input type="search" value={query} disabled={!accessToken} onChange={event => setQuery(event.target.value)} placeholder="Nombre, @usuario o correo exacto" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} /></label>
+    {!query.trim() && <b>Mis amigos</b>}
+    {(loadingFriends || searching) && <p role="status">{searching ? "Buscando…" : "Cargando amigos…"}</p>}
+    <ul className="groupPeopleList">{matches.map(person => renderPerson(person, friendIds.has(person.user_id)))}</ul>
+    {!accessToken && <p>Inicia sesión para ver tus amigos.</p>}
+    {accessToken && !matches.length && !loadingFriends && !searching && <p className="hint">{query.trim() ? searchMessage || "Sin coincidencias visibles." : "Todavía no tienes amigos guardados. Busca a un jugador en Backyard."}</p>}
+    {friendMessage && <p role="status">{friendMessage}</p>}
+    {!friendsOnly && <small>Agregar a tu plantilla no envía una invitación ni una solicitud de amistad.</small>}
+  </section>;
 }
 
 export function GroupBuilder({ frequentPlayers, frequentGroups, onBack, onPlay, onSaveFrequentGroup, onCreateFrequentGroup, onOpenFrequentGroup, onStartFrequentGroup, onEditFrequentGroup, onDeleteFrequentGroup, onAcceptedMembers, detailGroup, onCloseDetail }: {

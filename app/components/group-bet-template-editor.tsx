@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { playOrder, segmentDefinitions } from "../../lib/engine";
 import { defaultFoursomeMatchPress } from "../../lib/foursome-config";
 import {
@@ -14,7 +14,8 @@ import {
 import { createSupplementalBet } from "../../lib/supplemental-bets";
 import { activeGroupTemplateDefinitions, groupTemplateConfigurationIssues, groupTemplatePresentationDetails, patchGroupTemplateCore } from "../../lib/group-template-editor";
 import type { FoursomeMatchPress, GroupGameTemplate, PersonalBet, Player, SupplementalBet } from "../../lib/types";
-import { SupplementalBetsEditor } from "./supplemental-bets-editor";
+import { BetHelpButton, SupplementalBetsEditor } from "./supplemental-bets-editor";
+import type { BetHelpKind } from "../../lib/bet-help";
 import { NumericCaptureInput } from "./numeric-capture-input";
 import { HandicapBaseControl } from "./handicap-base-control";
 import { HcpPercentageInput } from "./hcp-percentage-input";
@@ -42,6 +43,8 @@ function Field({ label, value, onChange, min = 0, max, step = 1 }: { label: stri
 
 const MoneyField = (props: Parameters<typeof Field>[0]) => <BetMoneyInput {...props} className={styles.field} />;
 
+const helpKind = (id: string): BetHelpKind => ({ ballFriend: "ball_friend", miniPolla: "mini_polla", polla_first: "polla", polla_second: "polla", polla_total: "polla", personals: "personal", manuals: "manual" } as Record<string, BetHelpKind>)[id] ?? id as BetHelpKind;
+
 function Switch({ checked, label, onChange, disabled }: { checked: boolean; label: string; onChange: () => void; disabled?: boolean }) {
   return <button type="button" className={`switch ${checked ? "on" : ""}`} role="switch" aria-checked={checked} aria-label={`${checked ? "Desactivar" : "Activar"} ${label}`} disabled={disabled} onClick={onChange}><span /></button>;
 }
@@ -67,7 +70,7 @@ function personalDefault(template: GroupGameTemplate): PersonalBet {
   return base;
 }
 
-export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange, locked = false, requestActivation, onlyBetId }: {
+export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange, locked = false, requestActivation, onlyBetId, onSubeditorChange }: {
   value: GroupGameTemplate;
   players: Player[];
   ownerId: string;
@@ -77,8 +80,11 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
   requestActivation?: () => Promise<boolean>;
   /** Internal detail focus: use the same controls inline instead of a second editor. */
   onlyBetId?: string;
+  onSubeditorChange?: (open: boolean) => void;
 }) {
   const [expandedBetId, setExpandedBetId] = useState<string | null>(null);
+  const subeditorOpen = mode === "complete" && Boolean(expandedBetId && activeGroupTemplateDefinitions(value).some(item => item.id === expandedBetId));
+  useEffect(() => { onSubeditorChange?.(subeditorOpen); return () => onSubeditorChange?.(false); }, [subeditorOpen, onSubeditorChange]);
   const published=useVisualContent();const presentation=new Map(published.filter(p=>p.target_kind==="BET").map(p=>[p.target_key,p.values]));
   const runActivation = (action: () => void) => {
     if (!requestActivation) { action(); return; }
@@ -151,7 +157,7 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
     ...current,
     betConfig: { ...current.betConfig, foursome: { ...current.betConfig.foursome, matchPresses: (current.betConfig.foursome.matchPresses ?? []).filter((press) => press.id !== id) } },
   }));
-  const updatePersonal = (id: string, patcher: (bet: PersonalBet) => PersonalBet) => onChange((current) => ({
+  const updatePersonal = (id: string, patcher: (bet: GroupGameTemplate["personalBets"][number]) => GroupGameTemplate["personalBets"][number]) => onChange((current) => ({
     ...current,
     personalBets: current.personalBets.map((bet) => bet.id === id ? patcher(bet) : bet),
   }));
@@ -188,6 +194,14 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
 
   if (mode === "selection" || mode === "complete") {
     const sections = groupTemplateSelectionSections();
+    if (mode === "complete" && expandedBetId) {
+      const item = groupTemplateSelectionDefinitions().find(item => item.id === expandedBetId);
+      if (item && selectionState(item)) return <section className={styles.betSubview} aria-label={`Configurar ${item.label}`}>
+        <div className={styles.subeditorHeader}><button type="button" className="textButton" onClick={() => setExpandedBetId(null)}>← Apuestas</button><BetHelpButton kind={helpKind(item.id)} /></div>
+        <GroupBetTemplateEditor value={value} players={players} ownerId={ownerId} mode="details" onlyBetId={item.id} onChange={onChange} locked={locked} requestActivation={requestActivation} />
+        <button type="button" className={`primary ${styles.saveBet}`} disabled={locked} onClick={() => setExpandedBetId(null)}>Guardar apuesta</button>
+      </section>;
+    }
     const renderSelection = (items: ReturnType<typeof groupTemplateSelectionDefinitions>, heading: string) => <section className={styles.selectionSection} aria-labelledby={`template-${heading === "Apuestas personales" ? "personal" : "general"}`}>
       <h3 id={`template-${heading === "Apuestas personales" ? "personal" : "general"}`}>{heading}</h3>
       {heading === "Apuestas personales" && <p className={styles.intro}>Guarda tu configuración habitual; rival, parejas y participantes definitivos se resuelven en cada ronda.</p>}
@@ -199,7 +213,7 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
           const expanded = active && expandedBetId === item.id;
           return <section className={styles.modeSection} key={item.id}>
             <div className={styles.modeCard}><span className={styles.modeIcon}>{copy?.icon||item.icon}</span><span><b>{title}</b><small>{copy?.description||item.description}</small>{active && <small>{groupTemplatePresentationDetails({ id: "display", name: "", players: [], uses: 0, updatedAt: "", gameTemplate: value }).find(detail => detail.startsWith(item.id === "foursome" ? "Foursome" : item.label))}</small>}{active && mode === "complete" && <button type="button" className={styles.configureButton} disabled={locked} aria-expanded={expanded} aria-controls={`group-template-${item.id}`} onClick={() => setExpandedBetId(expanded ? null : item.id)}>{expanded ? "Cerrar configuración" : "Configurar / editar →"}</button>}</span><Switch checked={active} label={title} disabled={locked} onChange={() => { if (!active) setExpandedBetId(item.id); toggleSelection(item); }} /></div>
-            {mode === "complete" && expanded && <div id={`group-template-${item.id}`} className={styles.inlineEditor}><GroupBetTemplateEditor value={value} players={players} ownerId={ownerId} mode="details" onlyBetId={item.id} onChange={onChange} locked={locked} requestActivation={requestActivation} /></div>}
+            <BetHelpButton kind={helpKind(item.id)} title={title} />
           </section>;
         })}
       </div>
@@ -283,16 +297,23 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
       </fieldset></details>;
     })}
 
-    {(!onlyBetId || onlyBetId === "personals") && value.personalBets.some((bet) => bet.enabled !== false) && <section className={styles.collection}><h3>Nassau / Personales</h3><p>Guarda valores y reglas. Principal, rival y ventaja se resuelven con los jugadores de cada ronda.</p>{value.personalBets.filter(bet => bet.enabled !== false).map((bet, index) => <article className={styles.instance} key={bet.id}>
-        <div className={styles.instanceHead}><div><b>Personal {index + 1}</b><small>Jugador {String.fromCharCode(65 + index)} / Rival {String.fromCharCode(65 + index)} · se asignan al crear la ronda</small></div><button type="button" className="textButton" onClick={() => onChange((current) => ({ ...current, personalBets: current.personalBets.filter((item) => item.id !== bet.id) }))}>Quitar</button></div>
+    {(!onlyBetId || onlyBetId === "personals") && value.personalBets.some((bet) => bet.enabled !== false) && <section className={styles.collection}><h3>Nassau / Personales</h3><p>Elige los jugadores habituales. Si alguno no juega hoy, podrás sustituirlo o desactivar esta apuesta para esa ronda.</p>{value.personalBets.filter(bet => bet.enabled !== false).map((bet, index) => {
+      const assignment = bet.memberAssignment ?? { principalMemberId: value.ownerMemberId || ownerId || players[0]?.id || "", rivalMemberId: "" };
+      const principal = players.find(player => player.id === assignment.principalMemberId);
+      const rival = players.find(player => player.id === assignment.rivalMemberId);
+      const selectMember = (field: "principalMemberId" | "rivalMemberId", id: string) => updatePersonal(bet.id, current => ({ ...current, memberAssignment: { ...assignment, [field]: id } }));
+      return <article className={styles.instance} key={bet.id}>
+        <div className={styles.instanceHead}><div><b>Personal {index + 1}</b><small>{principal?.name || "Principal por elegir"} vs {rival?.name || "Rival por elegir"}</small></div><BetHelpButton kind="personal" /><button type="button" className="textButton" onClick={() => onChange((current) => ({ ...current, personalBets: current.personalBets.filter((item) => item.id !== bet.id) }))}>Quitar</button></div>
+        <div className={styles.fieldsRow}><label className={styles.field}>Principal<select value={assignment.principalMemberId} onChange={event => selectMember("principalMemberId", event.target.value)}><option value="">Elegir principal</option>{players.filter(player => player.id !== assignment.rivalMemberId).map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label><label className={styles.field}>Rival<select value={assignment.rivalMemberId} onChange={event => selectMember("rivalMemberId", event.target.value)}><option value="">Elegir rival habitual</option>{players.filter(player => player.id !== assignment.principalMemberId).map(player => <option key={player.id} value={player.id}>{player.name}</option>)}</select></label></div>
         <MoneyField label="Valor por componente" value={bet.baseValue} step={0.01} onChange={(baseValue) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, baseValue }))} />
+        <div className={styles.fieldsRow}><label className={styles.field}>Ventaja para<select value={bet.advantageReceiver} onChange={(event) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, memberAssignment: assignment, advantageReceiver: event.target.value as PersonalBet["advantageReceiver"] }))}><option value="none">Ninguno</option><option value="owner">{principal?.name || "Principal"}</option><option value="rival">{rival?.name || "Rival"}</option></select></label><Field label="Golpes de ventaja" value={bet.advantageStrokes} min={0} max={36} onChange={(advantageStrokes) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, memberAssignment: assignment, advantageStrokes }))} /></div>
         <details className={styles.advanced}><summary>Opciones avanzadas</summary><div className={styles.advancedFields}>
           {value.roundDefaults.roundHoles === 18 && <label className={styles.field}>Presión · segunda vuelta jugada<select value={bet.pressureMultiplier ?? bet.back9Multiplier ?? 1} onChange={(event) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, pressureMultiplier: Number(event.target.value) as 1 | 2 | 3 | 4 | 5, back9Multiplier: 1, nassauVersion: 2 }))}><option value={1}>Sin presión</option>{[2, 3, 4, 5].map((multiplier) => <option value={multiplier} key={multiplier}>{multiplier}x</option>)}</select><small>H{roundOrder[9]}–H{roundOrder.at(-1)}; Total conserva el valor base.</small></label>}
-        <div className={styles.fieldsRow}><label className={styles.field}>Ventaja para<select value={bet.advantageReceiver} onChange={(event) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, advantageReceiver: event.target.value as PersonalBet["advantageReceiver"] }))}><option value="owner">Jugador {String.fromCharCode(65 + index)}</option><option value="rival">Rival {String.fromCharCode(65 + index)}</option></select></label><Field label="Golpes de ventaja" value={bet.advantageStrokes} min={0} max={36} onChange={(advantageStrokes) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, advantageStrokes }))} /></div>
+          <div className={styles.componentGrid} aria-label="Componentes Nassau Match y Medal">{(value.roundDefaults.roundHoles === 9 ? [["match1", "Match 9"], ["medal1", "Medal 9"]] : [["match1", "Match Primera"], ["medal1", "Medal Primera"], ["match2", "Match Segunda"], ["medal2", "Medal Segunda"], ["match18", "Match Total"], ["medal18", "Medal Total"]]).map(([component, label]) => <label key={component}><input type="checkbox" checked={Boolean(bet.components[component as keyof PersonalBet["components"]])} onChange={(event) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, components: { ...currentBet.components, [component]: event.target.checked } }))} />{label}</label>)}</div>
+          <div className={styles.carryHelp}><label className={styles.check}><input type="checkbox" checked={Boolean(bet.carryEnabled)} onChange={(event) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, carryEnabled: event.target.checked }))} />Carry</label><BetHelpButton kind="personal" title="Carry Nassau" /></div><small>Si un componente termina empatado, su valor se arrastra al siguiente compatible. Match y Medal se mantienen separados.</small>
         </div></details>
-        <div className={styles.componentGrid} aria-label="Componentes Nassau Match y Medal">{(value.roundDefaults.roundHoles === 9 ? [["match1", "Match 9"], ["medal1", "Medal 9"]] : [["match1", "Match Primera"], ["medal1", "Medal Primera"], ["match2", "Match Segunda"], ["medal2", "Medal Segunda"], ["match18", "Match Total"], ["medal18", "Medal Total"]]).map(([component, label]) => <label key={component}><input type="checkbox" checked={Boolean(bet.components[component as keyof PersonalBet["components"]])} onChange={(event) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, components: { ...currentBet.components, [component]: event.target.checked } }))} />{label}</label>)}</div>
-        <label className={styles.check}><input type="checkbox" checked={Boolean(bet.carryEnabled)} onChange={(event) => updatePersonal(bet.id, (currentBet) => ({ ...currentBet, carryEnabled: event.target.checked }))} />Carry</label>
-      </article>)}<button type="button" className="secondary" onClick={() => runActivation(() => onChange((current) => ({ ...current, personalBets: [...current.personalBets, personalDefault(current)] })))}>+ Otra Personal</button></section>}
+      </article>;
+    })}<button type="button" className="secondary" onClick={() => runActivation(() => onChange((current) => ({ ...current, personalBets: [...current.personalBets, personalDefault(current)] })))}>+ Otra Personal</button></section>}
 
     <SupplementalBetsEditor bets={value.supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestActivation} locked={locked} types={groupTemplateSelectableSupplementalTypes().filter((type) => (!onlyBetId || type === onlyBetId) && value.supplementalBets.some(bet => bet.type === type && bet.enabled))} roundHoles={value.roundDefaults.roundHoles} detailsOnly initiallyExpandActive={Boolean(onlyBetId)} assignmentMode="template" />
     {(!onlyBetId || onlyBetId === "personals") && value.supplementalBets.some((bet) => groupTemplateEmbeddedSupplementalTypes().includes(bet.type) && bet.enabled) && <SupplementalBetsEditor bets={value.supplementalBets} players={players} onChange={setSupplementalBets} requestActivation={requestActivation} locked={locked} types={groupTemplateEmbeddedSupplementalTypes()} roundHoles={value.roundDefaults.roundHoles} detailsOnly allowAdd={false} initiallyExpandActive={Boolean(onlyBetId)} assignmentMode="template" />}
