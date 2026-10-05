@@ -1,6 +1,7 @@
 import type { SocialRoundCard } from "./social-activity-contract";
 import type { RoundSnapshot } from "./types";
 import { validTotalOnly } from "./total-score-round";
+import { capturedSocialStats } from "./social-feed-presentation";
 
 export type SocialRoundSource = { id: string; local_round_id: string; snapshot: RoundSnapshot };
 
@@ -37,6 +38,7 @@ export function safeSocialRoundCard(
     teeName: includeCourseIdentity ? round.playerTeeAssignments?.find(t=>t.playerId===playerId)?.teeName || round.teeName || null : null,
     holesPlayed: holes.length, ownerScore: holes.reduce((sum, hole) => sum + hole.score, 0),
     coursePar: holes.reduce((sum, hole) => sum + hole.par, 0),
+    toPar:holes.reduce((sum,hole)=>sum+hole.score-hole.par,0),...capturedSocialStats(round,accountUserId),
     ...(includeScorecard ? { scorecard: holes } : {}),
   };
 }

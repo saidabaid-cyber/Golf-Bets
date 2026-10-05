@@ -35,6 +35,12 @@ export type SocialRoundCard = {
   ownerScore: number | null;
   coursePar: number | null;
   totalOnly?: true;
+  toPar?: number;
+  putts?: number;
+  girPct?: number;
+  firPct?: number;
+  /** Only account-linked participants with independently authorized social cards. */
+  leaderboard?: Array<{userId:string;name:string;avatarUrl:string|null;score:number;toPar?:number;holes:number}>;
   /** Only captured, non-financial hole facts are exposed to the eligible audience. */
   scorecard?: Array<{ hole: number; par: number; score: number | null }>;
 };
@@ -49,6 +55,7 @@ export type SocialActivityCard = {
   currentHash: string;
   roundId: string | null;
   round: SocialRoundCard | null;
+  equipment?: {items:Array<{id:string;category:string;brand:string;model:string;imageUrl?:string}>;total:number};
   achievements: string[];
   courseEvent?: import("./new-course-activity").NewCoursePlayedEvent;
   likesCount: number;

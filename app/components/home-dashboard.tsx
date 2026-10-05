@@ -1,6 +1,8 @@
 "use client";
 
-import { ProfileAvatarMedia } from "./profile-avatar-media";
+import { useEffect, useState } from "react";
+import { FriendsHub, type FriendsView } from "./social-connections-panel";
+import { homeSocialHref, homeSocialViewFromSearch, type HomeSocialView } from "../../lib/home-social-navigation";
 import { CloudSocialActivity } from "./cloud-social-activity";
 import styles from "./home-dashboard-clean.module.css";
 
@@ -15,22 +17,18 @@ export type HomeDashboardProps = {
   displayName: string; avatarUrl?: string | null; identityUserId: string; accessToken?: string;
   onOpenRounds: () => void; onOpenFriends: () => void; onPrivacy: () => void;
   onOpenAchievements: () => void;
+  onOpenSocialProfile?: (userId:string) => void;
+  friendsInitialView?: FriendsView; friendsEntry?: number; targetId?: string | null; onCloseTarget?: () => void; username?: string;
 };
 
 /** Home composes the existing server-filtered activity feed, never local private snapshots. */
-export function HomeDashboard({ displayName, avatarUrl, identityUserId, accessToken, onOpenRounds, onOpenFriends, onPrivacy, onOpenAchievements }: HomeDashboardProps) {
-  return <section className={styles.home} data-home-version="community-feed-v3" aria-label="Feed de Inicio">
-    <section className={styles.composer} aria-label="Compartir actividad">
-      <div className={styles.prompt}><ProfileAvatarMedia className={styles.avatar} value={avatarUrl} fallback={displayName.trim()[0] || "G"} alt={`Avatar de ${displayName}`} /><span>¿Qué estás compartiendo hoy?</span></div>
-      <div className={styles.composerActions}>
-        <button type="button" disabled title="Próximamente">▧ Foto</button>
-        <button type="button" onClick={onOpenRounds}>⚑ Ronda</button>
-        <button type="button" disabled title="Los logros se comparten desde las rondas verificadas">♜ Logro</button>
-        <button type="button" disabled title="Próximamente">▥ Encuesta</button>
-      </div>
-      <small>Las rondas y sus logros se comparten al guardarlas, según tu privacidad.</small>
-    </section>
-    <div className={styles.community}><button type="button" onClick={onOpenFriends}>Amigos y solicitudes</button><button type="button" onClick={onPrivacy}>Qué comparto</button></div>
-    <CloudSocialActivity key={identityUserId} viewerId={identityUserId} accessToken={accessToken} friendsOnly onOpenAchievements={onOpenAchievements} />
+export function HomeDashboard({ displayName, avatarUrl, identityUserId, accessToken, onOpenAchievements, onOpenSocialProfile, friendsInitialView="list", friendsEntry=0, targetId, onCloseTarget, username="" }: HomeDashboardProps) {
+  const [view, setView] = useState<HomeSocialView>("feed");
+  useEffect(() => { const read=()=>setView(homeSocialViewFromSearch(location.search)); read(); window.addEventListener("popstate",read); return ()=>window.removeEventListener("popstate",read); }, []);
+  useEffect(() => { if(friendsEntry || targetId) setView(friendsInitialView === "add" || friendsInitialView === "search" ? "add-friends" : "friends"); }, [friendsEntry,friendsInitialView,targetId]);
+  function select(next:HomeSocialView) { setView(next); onCloseTarget?.(); window.history.pushState({...window.history.state,backyardTab:"welcome"},"",homeSocialHref(next,location.search)); window.scrollTo({top:0}); }
+  return <section className={styles.home} data-home-version="social-home" aria-label="Inicio social">
+    <nav className={styles.selector} aria-label="Secciones de Inicio">{([['feed','Feed'],['friends','Amigos'],['add-friends','Agregar amigos']] as const).map(([id,label])=><button type="button" key={id} aria-current={view===id?"page":undefined} className={id==="add-friends"?styles.addFriends:undefined} onClick={()=>select(id)}>{label}</button>)}</nav>
+    {view === "feed" ? <CloudSocialActivity key={identityUserId} viewerId={identityUserId} accessToken={accessToken} viewerName={displayName} viewerAvatarUrl={avatarUrl} friendsOnly onOpenProfile={onOpenSocialProfile} onOpenAchievements={onOpenAchievements} /> : <FriendsHub key={`${identityUserId}:${view}:${friendsEntry}`} ownerId={identityUserId} accessToken={accessToken} name={displayName} username={username} avatar={avatarUrl || ""} embedded initialView={view === "add-friends" ? "add" : friendsInitialView === "requests" ? "requests" : "list"} targetId={targetId} onCloseTarget={onCloseTarget} onViewChange={next=>{if(next==="add"&&view!=="add-friends")select("add-friends");}} />}
   </section>;
 }

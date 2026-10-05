@@ -8,6 +8,10 @@ import { captureCompletedRoundIndex } from "./backyard-index-auto-capture";
 import { BACKYARD_INDEX_METADATA_KEY, parseIndexPreference } from "./backyard-index-preferences";
 import { newCoursePlayedEvent } from "./new-course-activity";
 import { INTERNAL_GOLF_COURSE_CATALOG } from "./golf-course-directory";
+import { safeEquipmentSummary } from "./social-feed-presentation";
+import { golfClubCatalog, golfBallCatalog } from "./golf-equipment-catalog";
+import type { EquipmentProfile } from "./golf-equipment";
+import type { SocialRoundCard } from "./social-activity-contract";
 import type {
   SocialActivityAuthor, SocialActivityCard, SocialActivityDetail, SocialActivityPage,
   SocialAttestRequest, SocialComment, SocialCommentRequest, SocialMutationErrorCode,
@@ -29,12 +33,16 @@ type RequestCache = {
   prefs: Map<string, Promise<SocialActivityPreferences>>;
   authors: Map<string, Promise<SocialActivityAuthor>>;
   homeClubs: Map<string, Promise<string | null>>;
+  sources: Map<string,RoundRow>;
+  links: Array<{round_id:string;user_id:string;player_key:string;verified_by:string}> | null;
+  equipment:Map<string,{version:number;snapshot:EquipmentProfile}>;
+  engagement:Map<string,{likesCount:number;likedByMe:boolean;commentsCount:number;attestCount:number;isAttestedByMe:boolean}>;
 };
 const requestCaches = new WeakMap<SocialContext, RequestCache>();
 function requestCache(ctx: SocialContext): RequestCache {
   const existing = requestCaches.get(ctx);
   if (existing) return existing;
-  const created = { rounds: new Map(), reset: new Map(), prefs: new Map(), authors: new Map(), homeClubs: new Map() } as RequestCache;
+  const created = { rounds: new Map(), reset: new Map(), prefs: new Map(), authors: new Map(), homeClubs: new Map(),sources:new Map(),links:null,equipment:new Map(),engagement:new Map() } as RequestCache;
   requestCaches.set(ctx, created);
   return created;
 }
@@ -319,7 +327,8 @@ export async function updatePreferences(ctx: SocialContext, preferences: unknown
 
 async function sourceRound(ctx: SocialContext, row: ActivityRow): Promise<RoundRow | null> {
   if (!row.source_round_id) return null;
-  const { data, error } = await ctx.admin.from("rounds_cloud")
+  const cached=requestCache(ctx).sources.get(row.source_round_id);
+  const { data, error } = cached ? {data:cached,error:null} : await ctx.admin.from("rounds_cloud")
     .select("id,owner_id,local_round_id,version,snapshot")
     .eq("id", row.source_round_id).maybeSingle();
   if (error) dbError(error);
@@ -329,7 +338,8 @@ async function sourceRound(ctx: SocialContext, row: ActivityRow): Promise<RoundR
   const principal = round?.players?.filter(player => player.accountUserId === row.author_id) || [];
   if (principal.length !== 1 || !principal[0]?.id) return null;
   if (source.owner_id === row.author_id && round?.ownerId === principal[0].id) return source;
-  const { data: link, error: linkError } = await ctx.admin.from("social_round_account_links_v3")
+  const known=requestCache(ctx).links;
+  const { data: link, error: linkError } = known ? {data:known.find(l=>l.round_id===source.id&&l.user_id===row.author_id&&l.player_key===principal[0].id&&l.verified_by==="SELF_CONFIRMED"),error:null} : await ctx.admin.from("social_round_account_links_v3")
     .select("player_key,verified_by").eq("round_id", source.id).eq("user_id", row.author_id)
     .eq("player_key", principal[0].id).eq("verified_by", "SELF_CONFIRMED").maybeSingle();
   if (linkError) dbError(linkError);
@@ -345,6 +355,7 @@ async function authorProfile(admin: SupabaseClient, userId: string): Promise<Soc
   return socialActivityAuthor(userId, profile, social);
 }
 async function counts(ctx: SocialContext, row: ActivityRow) {
+  const cached=requestCache(ctx).engagement.get(row.id);if(cached)return cached;
   const base = row.id;
   const hash = row.material_hash;
   const [likes, mine, comments, attestations, attested] = await Promise.all([
@@ -376,7 +387,8 @@ async function participantStatus(ctx: SocialContext, row: ActivityRow, source: R
   // trigger. It cannot self-confirm (nor should it need to) to attest a peer.
   const verifiedBy = source.owner_id === ctx.userId && round?.ownerId === playerKey
     ? "ROUND_OWNER" : "SELF_CONFIRMED";
-  const confirmed = await ctx.admin.from("social_round_account_links_v3").select("player_key,verified_by")
+  const known=requestCache(ctx).links;
+  const confirmed = known ? {data:known.find(l=>l.round_id===source.id&&l.user_id===ctx.userId&&l.player_key===playerKey&&l.verified_by===verifiedBy),error:null} : await ctx.admin.from("social_round_account_links_v3").select("player_key,verified_by")
     .eq("round_id", source.id).eq("user_id", ctx.userId).eq("player_key", playerKey)
     .eq("verified_by", verifiedBy).maybeSingle();
   if (confirmed.error) dbError(confirmed.error);
@@ -406,6 +418,10 @@ async function cardFromAuthorizedRow(ctx: SocialContext, row: ActivityRow, inclu
     const currentHash = await roundMaterialFingerprint(round, row.author_id);
     if (!currentHash || currentHash !== row.material_hash) return null;
   } else if (!SHA256.test(row.material_hash)) return null;
+  if(row.event_kind==="EQUIPMENT_UPDATED"){
+    const equipment=requestCache(ctx).equipment.get(row.author_id);
+    if(equipment&&(equipment.version!==row.source_version||await sha256({schema:"equipment-social-v1",version:equipment.version,snapshot:equipment.snapshot})!==row.material_hash))return null;
+  }
   const preference = await cachedPrefs(ctx, row.author_id);
   const canShowAchievements = row.event_kind === "ACHIEVEMENT" || row.author_id === ctx.userId
     || preference.shareAchievements;
@@ -436,6 +452,7 @@ async function cardFromAuthorizedRow(ctx: SocialContext, row: ActivityRow, inclu
     round: source && row.event_kind === "ROUND_COMPLETED"
       ? safeSocialRoundCard(source, row.author_id, includeScorecard, canShowCourse) : null,
     achievements, ...(courseEvent ? { courseEvent } : {}), ...engagement, ...status,
+    ...(row.event_kind==="EQUIPMENT_UPDATED" && requestCache(ctx).equipment.get(row.author_id)?.version===row.source_version ? {equipment:safeEquipmentSummary(requestCache(ctx).equipment.get(row.author_id)!.snapshot,golfClubCatalog,golfBallCatalog)}:{}),
     targetUserId: row.event_kind === "ROUND_COMPLETED" ? row.author_id : null,
   };
 }
@@ -557,18 +574,22 @@ export async function listActivity(
   const page = [...grouped.values()]
     .sort((left, right) => right.created_at.localeCompare(left.created_at))
     .slice(0, limit);
+  const visible=page.length?await ctx.client.from("social_activities_v3").select("*").in("id",page.map(row=>row.id)).eq("active",true):{data:[],error:null};
+  if(visible.error)dbError(visible.error);
+  await prepareSocialPresentation(ctx,visible.data as ActivityRow[]||[]);
   // The SQL candidate pass bounded recovery; no N-friends full-history scan.
   // Viewer RLS and canonical source/hash are rechecked for each returned card.
   const result: SocialActivityCard[] = [];
   for (const row of page) {
     try {
-      const refreshed = await authorizedRow(ctx, row.id);
+      const refreshed=(visible.data as ActivityRow[]||[]).find(item=>item.id===row.id);if(!refreshed)continue;
       const card = await cardFromAuthorizedRow(ctx, refreshed);
       if (card) result.push(card);
     } catch (error) {
       if (!(error instanceof SocialServiceError) || error.code !== "NOT_FOUND") throw error;
     }
   }
+  await attachVisibleLeaderboards(ctx,result);
   const last = page.at(-1);
   return { data: result, nextCursor: last && (grouped.size > limit || rows.length > limit * 3)
     ? `${last.created_at}|${last.id}` : null };
@@ -577,9 +598,60 @@ export async function listActivity(
 export async function getActivity(ctx: SocialContext, id: string): Promise<SocialActivityDetail> {
   await recoverVisibleSources(ctx);
   const row = await refreshAuthorizedRow(ctx, await authorizedRow(ctx, id));
+  await prepareSocialPresentation(ctx,[row]);
   const card = await cardFromAuthorizedRow(ctx, row, true);
   if (!card) throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; actualiza para verla.");
+  await attachVisibleLeaderboards(ctx,[card]);
   return { data: card };
+}
+
+/** Bounded, account-authorized presentation batch. Large engagement sets fail honestly rather than reporting truncated counts. */
+async function prepareSocialPresentation(ctx:SocialContext,rows:ActivityRow[]) {
+  const ids=[...new Set(rows.flatMap(r=>r.source_round_id?[r.source_round_id]:[]))], authors=[...new Set(rows.map(r=>r.author_id))],activityIds=rows.map(r=>r.id);
+  if(!authors.length)return;
+  const [rounds,links,profiles,social,prefs,equipment,likes,comments,attestations]=await Promise.all([
+    ids.length?ctx.admin.from("rounds_cloud").select("id,owner_id,local_round_id,version,snapshot").in("id",ids):Promise.resolve({data:[],error:null}),
+    ids.length?ctx.admin.from("social_round_account_links_v3").select("round_id,user_id,player_key,verified_by").in("round_id",ids):Promise.resolve({data:[],error:null}),
+    ctx.admin.from("profiles").select("id,name,display_name,username,avatar_url").in("id",authors),
+    ctx.admin.from("social_profiles").select("user_id,username,display_name,avatar_url").in("user_id",authors),
+    ctx.admin.from("social_activity_preferences_v3").select("*").in("user_id",authors),
+    rows.some(r=>r.event_kind==="EQUIPMENT_UPDATED")?ctx.admin.from("player_equipment_profiles").select("user_id,version,snapshot").in("user_id",rows.filter(r=>r.event_kind==="EQUIPMENT_UPDATED").map(r=>r.author_id)):Promise.resolve({data:[],error:null}),
+    ctx.client.from("social_likes_v3").select("activity_id,user_id,expected_hash").in("activity_id",activityIds).limit(1000),
+    ctx.client.from("social_comments_v3").select("activity_id,expected_hash").in("activity_id",activityIds).limit(1000),
+    ctx.client.from("social_round_attestations_v3").select("activity_id,expected_hash,attester_id").in("activity_id",activityIds).limit(1000),
+  ]);
+  for(const result of [rounds,links,profiles,social,prefs,equipment,likes,comments,attestations])if(result.error)dbError(result.error);
+  const cache=requestCache(ctx);
+  for(const row of rounds.data||[])cache.sources.set(row.id,row as RoundRow);
+  cache.links=[...(cache.links||[]),...(links.data||[])];
+  for(const id of authors){cache.authors.set(id,Promise.resolve(socialActivityAuthor(id,profiles.data?.find(p=>p.id===id)||null,social.data?.find(p=>p.user_id===id)||null)));cache.prefs.set(id,Promise.resolve(prefsFromRow(prefs.data?.find(p=>p.user_id===id)||null)));}
+  for(const row of equipment.data||[])cache.equipment.set(row.user_id,row as {version:number;snapshot:EquipmentProfile});
+  // Above the bounded batch, retain exact per-card count queries rather than truncate.
+  if([likes,comments,attestations].some(r=>(r.data?.length??0)>=1000))return;
+  for(const row of rows){const matching=<T extends {activity_id:string;expected_hash:string}>(items:T[])=>items.filter(i=>i.activity_id===row.id&&i.expected_hash===row.material_hash);
+    const l=matching(likes.data||[]),c=matching(comments.data||[]),a=matching(attestations.data||[]);
+    cache.engagement.set(row.id,{likesCount:l.length,likedByMe:l.some(i=>i.user_id===ctx.userId),commentsCount:c.length,attestCount:a.length,isAttestedByMe:a.some(i=>i.attester_id===ctx.userId)});
+  }
+}
+
+/** Every ranked account passes independent activity RLS and current hash checks. Guests and bets are excluded. */
+async function attachVisibleLeaderboards(ctx:SocialContext,cards:SocialActivityCard[]) {
+  const ids=[...new Set(cards.flatMap(c=>c.roundId?[c.roundId]:[]))];if(!ids.length)return;
+  const peers=await ctx.client.from("social_activities_v3").select("*").in("source_round_id",ids).eq("event_kind","ROUND_COMPLETED").eq("active",true).limit(200);
+  if(peers.error)dbError(peers.error);
+  const rows=peers.data as ActivityRow[]||[];if(rows.length>=200)return;
+  await prepareSocialPresentation(ctx,rows);
+  for(const card of cards){if(!card.round||!card.roundId)continue;
+    const source=requestCache(ctx).sources.get(card.roundId);if(!source)continue;
+    const ranking:NonNullable<SocialRoundCard["leaderboard"]>=[];
+    for(const row of rows.filter(r=>r.source_round_id===card.roundId)){
+      if(row.source_version!==source.version||!await sourceRound(ctx,row))continue;
+      const hash=await roundMaterialFingerprint(source.snapshot,row.author_id);if(hash!==row.material_hash)continue;
+      const facts=safeSocialRoundCard(source,row.author_id,false,false);if(!facts||facts.ownerScore===null||facts.holesPlayed!==card.round.holesPlayed)continue;
+      const author=await cachedAuthor(ctx,row.author_id);ranking.push({userId:row.author_id,name:author.displayName,avatarUrl:author.avatarUrl,score:facts.ownerScore,holes:facts.holesPlayed,...(facts.toPar!==undefined?{toPar:facts.toPar}:{})});
+    }
+    if(ranking.length>=2)card.round.leaderboard=ranking.sort((a,b)=>a.score-b.score||a.name.localeCompare(b.name));
+  }
 }
 
 async function currentMutationActivity(ctx: SocialContext, activityId: string, expectedHash: unknown) {

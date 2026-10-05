@@ -47,6 +47,8 @@ export function screenHref(tab: AppTab, search = "", roundId?: string | null, ca
   params.delete("screen");
   params.delete("round");
   params.delete("career");
+  if(tab!=="career")params.delete("careerDetail");
+  if(tab!=="welcome"&&tab!=="friends")params.delete("home");
   if (tab !== "notifications") { params.delete("notice"); params.delete("resource"); }
   if (tab === "career") params.set("career", careerView ?? careerViewFromSearch(search));
   if (tab !== "welcome") params.set("screen", tab);

@@ -135,7 +135,7 @@ import { RoundFinalResult } from "./components/backyard-ai/round-final-result";
 import { SocialFeed, type SocialView } from "./components/social-feed";
 import { NotificationCenter } from "./components/notification-center";
 import { NotificationPreferences } from "./components/notification-preferences";
-import { FriendsHub, type FriendsView } from "./components/social-connections-panel";
+import { type FriendsView } from "./components/social-connections-panel";
 import { PENDING_SOCIAL_KEY } from "./components/social-qr";
 import { socialIdFromQr } from "../lib/social-connections";
 import type { SocialProfile } from "../features/social/domain";
@@ -3871,26 +3871,27 @@ function GolfBetsApp() {
       scoreOnly={roundPresentation.playMode === "score_only"} canBet={bettingConsentGranted} onFriends={() => void openFirstExperienceFriends()}
       onCreateGroup={() => void openFirstExperienceGroup()} onSkip={() => void skipFirstSocialExperience()} />
     <FeedbackDialog key={`feedback:${identity.userId}`} token={identity.accessToken} email={identity.email} screen={tab} />
-    {isPrimaryTab(tab) && <PrimaryHeader tab={tab} notificationCount={groupNotificationsUnread} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => setTab("welcome")} onNotifications={() => setTab("notifications")} />}
-    {!isPrimaryTab(tab) && tab !== "round" && <header className="topbar">
+    {(isPrimaryTab(tab) || tab === "friends") && <PrimaryHeader tab={tab === "friends" ? "welcome" : tab} notificationCount={groupNotificationsUnread} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => setTab("welcome")} onNotifications={() => setTab("notifications")} />}
+    {!isPrimaryTab(tab) && tab !== "friends" && tab !== "round" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BackyardWordmark /></button>
       <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><ProfileNavigationButton avatarUrl={identity.avatarUrl} displayName={identity.displayName} onClick={openProfileRoot} /></div>
     </header>}
 
-    {tab === "welcome" && <HomeDashboard
+    {(tab === "welcome" || tab === "friends") && <HomeDashboard
       displayName={identity.displayName}
       avatarUrl={identity.avatarUrl}
+      username={identity.username || ""} friendsInitialView={friendsInitialView} friendsEntry={tab === "friends" ? friendsEntry : 0} targetId={socialTarget} onCloseTarget={closeFriendTarget}
       identityUserId={identity.userId}
       accessToken={identity.accessToken || undefined}
       onOpenRounds={() => setTab("history")}
       onOpenFriends={() => openCareerFriends()}
       onPrivacy={() => openAccountSettings("privacy")}
       onOpenAchievements={() => { setCareerView("achievements"); }}
+      onOpenSocialProfile={id => openCareerFriends("list",id)}
     />}
     {showPageBack && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
     {tab === "career" && <CareerHub displayName={identity.displayName} avatarUrl={identity.avatarUrl} userId={identity.userId} index={accountIndex} insights={betaGolfInsights} rounds={statisticsHistory} ready={statisticsReady} history={history} error={statisticsAuthority.state === "unavailable"} view={careerView} onView={setCareerView} onOpenStats={() => setTab("stats")} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} onCreateRound={requestNewRound} onFindRival={() => openCareerFriends("search")} onRetry={() => setStatisticsRetry(value => value + 1)} username={identity.username} club={identity.homeClub} city={identity.city} ghin={ghinControl} accessToken={identity.accessToken} onOpenProfile={openProfileRoot} onExploreTournaments={POLLA_LIVE_RELEASED && pollaCloudConfigured ? () => setTab("pollaLive") : undefined} />}
-    {tab === "friends" && <FriendsHub key={`${identity.userId}:${friendsInitialView}:${friendsEntry}`} ownerId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} name={identity.displayName} username={identity.username || ""} avatar={identity.avatarUrl || ""} initialView={friendsInitialView} targetId={socialTarget} onCloseTarget={closeFriendTarget} />}
     {tab === "coach" && <MyCoach insights={betaGolfInsights} ready={statisticsReady} onBallFit={() => openCoachFitting(false)} onLaunchMonitor={() => openCoachFitting(true)} onProgress={() => setTab("stats")} onEquipment={() => { setLaunchMonitorEntry(false); setProfileCompletionTarget("equipment"); setProfileFocus("equipment"); setTab("profile"); }} />}
 
     {tab === "play" && <PlayHub
