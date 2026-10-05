@@ -205,6 +205,7 @@ import { buildPersonalOpponentResults } from "../lib/personal-opponents";
 import { persistPendingRoundReview, persistRoundDraftCheckpoint, ROUND_REVIEW_NOTICE } from "../lib/round-review";
 import { normalizeHistoricalRoundLifecycle, normalizeRoundStartedAt, withDerivedRoundLifecycle } from "../lib/round-lifecycle";
 import { preserveUnfinishedRound, unfinishedRoundDraft } from '../lib/unfinished-round';
+import { cancelOwnerRound } from '../lib/owner-round-cancel';
 import { hasRoundToPreserve } from '../lib/new-round-safety';
 import { hasSeenFirstRoundExperience, markFirstRoundExperienceSeen } from "../lib/round-first-experience";
 import { FirstSocialExperience, useFirstSocialExperience } from "./components/first-social-experience";
@@ -2785,8 +2786,13 @@ function GolfBetsApp() {
     snapshot.resumeCourseSelected = latest.courseSelected === true;
     if (!snapshot.resumeCourseSelected) { snapshot.courseName = 'Campo por elegir'; snapshot.teeName = ''; }
     snapshot.scores = applyPendingScoreEdits((latest.scores || scores) as Record<number, HoleScore>, (latest.scoreEdits || {}) as ScoreRows);
+    const parked = preserveUnfinishedRound(snapshot, currentIndex, state, history.find(r => r.id === roundId));
+    if (state === 'cancelled' && snapshot.startedAt && identity.mode === 'authenticated' && cloudLinked && navigator.onLine) {
+      if (!identity.accessToken) throw new Error('Vuelve a iniciar sesión antes de cancelar esta ronda en nube.');
+      await cancelOwnerRound(parked, identity.userId, identity.accessToken, localStorage);
+    }
     const saved = await saveRoundHistoryLocalFirst({ storage: localStorage, ownerId: identity.userId,
-      snapshot: preserveUnfinishedRound(snapshot, currentIndex, state, history.find(r => r.id === roundId)),
+      snapshot: parked,
       deviceId: offlineDeviceId.current, defaultHandicap: identity.defaultHandicap,
       hasLocalPreferenceState: hadLocalPreferences.current, queueForCloud: identity.mode === 'authenticated' && cloudLinked,
     });

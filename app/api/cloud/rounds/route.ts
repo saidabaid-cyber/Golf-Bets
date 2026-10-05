@@ -65,7 +65,7 @@ export async function PUT(request: NextRequest) {
   if (Number(request.headers.get("content-length") || 0) > 1_000_000) return NextResponse.json({ error: "Tarjeta demasiado grande." }, { status: 413 });
   const body = await request.json().catch(() => null) as { round?: RoundSnapshot; expectedVersion?: number } | null;
   const round = body?.round;
-  if (!round?.id || round.cloudReadOnly || round.id.startsWith("shared:") || !["live", "completed"].includes(round.lifecycleState || "")
+  if (!round?.id || round.cloudReadOnly || round.id.startsWith("shared:") || !["live", "completed", "cancelled"].includes(round.lifecycleState || "")
     || (round.lifecycleState === "completed" && !round.completedAt)
     || round.scorekeeping?.mode !== "owner" || !Number.isInteger(body?.expectedVersion) || Number(body?.expectedVersion) < 1)
     return NextResponse.json({ error: "Ronda o revisión inválida." }, { status: 400 });

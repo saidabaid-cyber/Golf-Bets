@@ -66,3 +66,25 @@ test("cancellation parks the snapshot as cancelled before resetting, and never h
   await reject(); assert.deepEqual(failed, ["error"]);
   assert.match(page, /¿Cancelar esta ronda\?/); assert.doesNotMatch(declaration("deleteActiveRound").getText(ast), /deleteRound|deleteHistory|removeItem|DELETE/);
 });
+
+test("online cancel closes canonical cloud before clearing the active draft; failure keeps it active", async () => {
+  const events: string[] = [];
+  const dependencies = {
+    localStorage: {}, identity: { userId: "qa-owner", mode: "authenticated", accessToken: "qa-token" },
+    ownsLocalWorkspace: () => true, flushLocalState: { current: () => true },
+    currentSnapshot: () => ({ id: "qa-active", startedAt: "2026-10-04T12:00:00Z" }),
+    readStoredJson: () => ({ roundId: "qa-active", courseSelected: true, scores: { 1: { qa: 4 } } }),
+    STORAGE_KEYS: { draft: "draft" }, roundId: "qa-active", scores: {}, history: [], currentIndex: 1,
+    applyPendingScoreEdits: (value: unknown) => value, preserveUnfinishedRound: (value: unknown) => value,
+    cloudLinked: true, navigator: { onLine: true }, cancelOwnerRound: async () => { events.push("cloud-cancel"); },
+    saveRoundHistoryLocalFirst: async () => { events.push("local-save"); return { history: [] }; },
+    offlineDeviceId: { current: "qa-device" }, hadLocalPreferences: { current: false },
+    setHistory() {}, normalizeHistorySnapshot: (value: unknown) => value, clearActiveRoundStorage: () => { events.push("clear-active"); },
+    trackLocalCloudEdits() {}, highContrast: false, notificationsEnabled: false, requestCloudSync: { current() {} },
+  };
+  await execute("parkActiveRound", dependencies)("cancelled");
+  assert.deepEqual(events, ["cloud-cancel", "local-save", "clear-active"]);
+  events.length = 0;
+  await assert.rejects(execute("parkActiveRound", { ...dependencies, flushLocalState: { current: () => true }, cancelOwnerRound: async () => { throw new Error("stale cloud revision"); } })("cancelled"), /stale cloud/);
+  assert.deepEqual(events, []);
+});
