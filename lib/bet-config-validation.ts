@@ -525,6 +525,10 @@ function validateSupplementalBets(input: RoundBetConfiguration, issues: BetConfi
     const sectionId = `setup-${bet.type}`;
     switch (bet.type) {
       case "individual_nassau":
+        if (input.roundHoles === 18 && bet.personalRules && (bet.components?.match2 || bet.components?.medal2)) {
+          const pressure = bet.personalRules.pressureMultiplier ?? bet.personalRules.back9Multiplier ?? 1;
+          if (!Number.isInteger(pressure) || pressure < 1 || pressure > 5) issues.push({ code: `supplemental-${bet.id}-pressure`, sectionId, message: `Nassau individual ${suffix}: la presión debe estar entre 1x y 5x.` });
+        }
         validateHeadToHead(input.players, bet.playerAId, bet.playerBId, `Nassau individual ${suffix}`, `supplemental-${bet.id}-players`, sectionId, issues);
         stakeIssue(issues, true, bet.value, `supplemental-${bet.id}-stake`, sectionId, `Nassau individual ${suffix}`);
         if (!Number.isInteger(bet.advantageStrokes) || bet.advantageStrokes < 0) {

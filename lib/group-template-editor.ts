@@ -77,5 +77,10 @@ export function groupTemplateConfigurationIssues(template: GroupGameTemplate, pl
     startHole: template.roundDefaults.startHole,
     handicapBasis: template.roundDefaults.handicapBasis,
   });
+  for (const bet of template.personalBets) {
+    if (bet.enabled === false || !bet.memberAssignment) continue;
+    const { principalMemberId, rivalMemberId } = bet.memberAssignment;
+    if (principalMemberId && principalMemberId === rivalMemberId) issues.push({ code: `habitual-${bet.id}-same-player`, sectionId: "setup-personals", message: "Principal y rival deben ser jugadores distintos." });
+  }
   return { blocking: issues.filter((issue) => !isFutureRoundTemplateIssue(issue)), pending: issues.filter(isFutureRoundTemplateIssue) };
 }

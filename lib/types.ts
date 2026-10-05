@@ -562,6 +562,11 @@ export type IndividualNassauBet = SupplementalBetBase & {
   advantageStrokes: number;
   carryEnabled: boolean;
   components: PersonalBetComponents;
+  /** Optional configuration from a recurring Personal. Same Nassau calculator. */
+  personalRules?: Pick<PersonalBet, "back9Multiplier" | "pressureMultiplier" | "pressureNine" | "nassauVersion" | "advantageMode" | "slidingAdvantage">;
+  pendingHabitualPair?: { principalName: string; rivalName: string; missing: "principal" | "rival" | "both" };
+  /** Template provenance, never a runtime player identity. */
+  groupPersonalBetId?: string;
 };
 
 export type DollarStrokeBet = SupplementalBetBase & {
@@ -867,7 +872,7 @@ export type GroupGameTemplate = {
   };
   betConfig: BetConfig;
   foursomeSegments: FoursomeSegment[];
-  personalBets: PersonalBet[];
+  personalBets: (PersonalBet & { memberAssignment?: { principalMemberId: string; rivalMemberId: string } })[];
   supplementalBets: SupplementalBet[];
   /** Explicit template defaults, distinct from captured round settlement results. */
   manualBets: (ManualBet & { initialAmounts?: Record<string, number> })[];

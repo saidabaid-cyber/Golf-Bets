@@ -21,6 +21,9 @@ export function migrateSupplementalNassau<T extends NassauMigrationSource>(sourc
   const represented = new Set<string>();
 
   for (const bet of legacyNassau) {
+    // New recurring pairs carry explicit configuration/provenance. They are
+    // already canonical and must not lose their pressure or member mapping.
+    if (bet.groupPersonalBetId || bet.personalRules) { unrepresentable.add(bet.id); continue; }
     const rivalPlayerId = bet.playerAId === ownerId ? bet.playerBId : bet.playerBId === ownerId ? bet.playerAId : "";
     if (!ownerId || !rivalPlayerId) {
       // A legacy head-to-head that did not include the round owner cannot be

@@ -322,8 +322,8 @@ export function templateWithoutPlayerAssignments(template: GroupGameTemplate): G
     rivalPlayerId: undefined,
     rivalName: "Jugador pendiente",
     externalScores: {},
-    advantageReceiver: "none",
-    advantageStrokes: 0,
+    advantageReceiver: bet.memberAssignment ? bet.advantageReceiver : "none",
+    advantageStrokes: bet.memberAssignment ? bet.advantageStrokes : 0,
     ownerIndexSnapshot: undefined,
     rivalIndexSnapshot: undefined,
   }));
@@ -383,11 +383,27 @@ export function createGroupGameTemplate(
   const memberIds = source.players
     .map((player) => mapping.get(player.id))
     .filter((id): id is string => Boolean(id));
-  return cleanTemplate(source, mapping, memberIds, {
+  const habitual = source.supplementalBets.filter((bet) => bet.type === "individual_nassau" && bet.groupPersonalBetId);
+  const restoredPersonals: GroupGameTemplate["personalBets"] = habitual.flatMap(bet => {
+    if (bet.type !== "individual_nassau") return [];
+    return [{
+      id: bet.groupPersonalBetId!, enabled: bet.enabled, rivalMode: "group" as const,
+      rivalName: source.players.find(player => player.id === bet.playerBId)?.name || "Rival habitual",
+      externalScores: {}, baseValue: bet.value,
+      advantageReceiver: bet.advantageReceiverId === bet.playerAId ? "owner" as const : bet.advantageReceiverId === bet.playerBId ? "rival" as const : "none" as const,
+      advantageStrokes: bet.advantageStrokes, back9Multiplier: bet.personalRules?.back9Multiplier ?? 1,
+      pressureMultiplier: bet.personalRules?.pressureMultiplier ?? 1, pressureNine: bet.personalRules?.pressureNine,
+      nassauVersion: bet.personalRules?.nassauVersion ?? 2, carryEnabled: bet.carryEnabled, components: clone(bet.components),
+      memberAssignment: { principalMemberId: mapping.get(bet.playerAId) || "", rivalMemberId: mapping.get(bet.playerBId) || "" },
+    }];
+  });
+  const result = cleanTemplate({ ...source, supplementalBets: source.supplementalBets.filter(bet => !habitual.includes(bet)) }, mapping, memberIds, {
     startHole: source.startHole,
     roundHoles: source.roundHoles,
     handicapBasis: source.roundHandicapBasis,
   });
+  result.personalBets.push(...restoredPersonals);
+  return result;
 }
 
 export function normalizeGroupGameTemplate(value: unknown, members: FrequentGroupMember[]) {
@@ -410,6 +426,14 @@ export function normalizeGroupGameTemplate(value: unknown, members: FrequentGrou
     supplementalBets: raw.supplementalBets,
     manualBets: raw.manualBets,
   }, mapping, memberIds, roundDefaults);
+  normalized.personalBets = normalized.personalBets.map(bet => {
+    const assignment = raw.personalBets?.find(candidate => candidate.id === bet.id)?.memberAssignment;
+    if (!assignment) return bet;
+    return { ...bet, memberAssignment: {
+      principalMemberId: memberIds.includes(assignment.principalMemberId) ? assignment.principalMemberId : "",
+      rivalMemberId: memberIds.includes(assignment.rivalMemberId) ? assignment.rivalMemberId : "",
+    } };
+  });
   // Empty is the canonical marker for a new player-agnostic habitual template.
   // Undefined/invalid legacy owners still fall back to the first roster member.
   if (raw.ownerMemberId === "") normalized.ownerMemberId = "";
@@ -502,6 +526,30 @@ export function instantiateGroupGameTemplate(group: FrequentGroup, idFactory: ()
     supplementalBets: template.supplementalBets,
     manualBets: template.manualBets,
   }, mapping, players.map((player) => player.id), template.roundDefaults, idFactory), players.map((player) => player.id));
+  // A recurring Personal can belong to any real pair, independently of the
+  // organizer. Reuse the existing individual Nassau adapter and calculator.
+  const habitualIds = new Set(template.personalBets.filter(bet => bet.memberAssignment).map(bet => bet.id));
+  const habitualRuntimeIds = new Set(cleaned.personalBets.filter((_bet, index) => habitualIds.has(template.personalBets[index]?.id)).map(bet => bet.id));
+  const habitualBets: SupplementalBet[] = template.personalBets.flatMap((bet, index) => {
+    const assignment = bet.memberAssignment;
+    if (!assignment) return [];
+    const principal = roundPlayerIdByMemberId[assignment.principalMemberId];
+    const rival = roundPlayerIdByMemberId[assignment.rivalMemberId];
+    const missing = !principal && !rival ? "both" as const : !principal ? "principal" as const : !rival ? "rival" as const : null;
+    return [{
+      id: cleaned.personalBets[index]?.id ?? idFactory(), type: "individual_nassau" as const,
+      groupPersonalBetId: bet.id,
+      enabled: bet.enabled !== false && !missing,
+      playerAId: principal || "", playerBId: rival || "", value: bet.baseValue,
+      advantageReceiverId: bet.advantageReceiver === "owner" ? principal : bet.advantageReceiver === "rival" ? rival : undefined,
+      advantageStrokes: bet.advantageStrokes, carryEnabled: Boolean(bet.carryEnabled), components: clone(bet.components),
+      personalRules: { back9Multiplier: bet.back9Multiplier, pressureMultiplier: bet.pressureMultiplier, pressureNine: bet.pressureNine, nassauVersion: bet.nassauVersion, advantageMode: bet.advantageMode, slidingAdvantage: bet.slidingAdvantage },
+      ...(missing && bet.enabled !== false ? { pendingHabitualPair: {
+        principalName: stableGroup.players.find(member => member.memberId === assignment.principalMemberId)?.name || "Jugador habitual",
+        rivalName: stableGroup.players.find(member => member.memberId === assignment.rivalMemberId)?.name || "Rival habitual", missing,
+      } } : {}),
+    }];
+  });
   return {
     origin,
     ownerId: cleaned.ownerMemberId,
@@ -511,8 +559,8 @@ export function instantiateGroupGameTemplate(group: FrequentGroup, idFactory: ()
     roundHandicapBasis: cleaned.roundDefaults.handicapBasis,
     bets: cleaned.betConfig,
     segments: cleaned.foursomeSegments,
-    personalBets: cleaned.personalBets,
-    supplementalBets: cleaned.supplementalBets,
+    personalBets: cleaned.personalBets.filter(bet => !habitualRuntimeIds.has(bet.id)),
+    supplementalBets: [...cleaned.supplementalBets, ...habitualBets],
     manualBets: cleaned.manualBets.map(({ initialAmounts, ...bet }) => ({
       ...bet, amounts: { ...bet.amounts, ...initialAmounts },
     })),
