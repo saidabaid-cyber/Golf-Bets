@@ -59,6 +59,12 @@ export async function POST(request:Request) { return socialHttp(request,async ct
   const id=socialId(body.id);
   const {error} = await ctx.client.from("friend_requests").update({state:body.action}).eq("id",id).eq(body.action==="CANCELLED"?"requester_id":"addressee_id",ctx.userId).eq("state","PENDING");
   if(error) throw error;
+  if (body.action === "ACCEPTED") {
+   // A delivery failure never reverses or fakes the canonical friendship result.
+   const { notifyFriendAccepted } = await import("../../../../features/notifications/friend-accepted.server");
+   const delivery = await notifyFriendAccepted(ctx,id);
+   if (delivery === "DELIVERY_UNAVAILABLE") console.warn("notification_delivery_unavailable",{type:"friend_accepted"});
+  }
  } else if(body.action === "block") {
   const target=socialId(body.target); if(target===ctx.userId) throw Object.assign(new Error(),{code:"INVALID_REQUEST",status:400});
   const {error}=await ctx.client.from("blocked_connections").insert({owner_id:ctx.userId,blocked_user_id:target}); if(error && error.code !== "23505") throw error;

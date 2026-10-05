@@ -8,6 +8,7 @@ Scope: notifications UI, preferences and deep-link adapters only. Canonical bran
 - One compact presentation normalizes `notification_events_v2` and valid incoming `group_email_invitations` through the existing group RPC. Deduplication uses invitation identity or event type/resource identity; distinct reactions/comments remain distinct. Read markers never accept/reject invitations. Outgoing, expired and resolved invitations do not count.
 - Bell fetches unread pages (50 per request, bounded at 1,000); list pages are 50. Filters are Todas, Amigos, Grupos, Rondas. Optional filter counts are omitted rather than presenting counts from an incomplete page.
 - Friendship actions reuse `/api/social/connections` ACCEPTED/REJECTED and require a confirmed state in the returned graph. Profiles open the existing Friends destination. Group acceptance reuses `useGroupInvitationInbox` and `retryCloudSync`.
+- After ACCEPTED, a notification-only adapter rechecks the canonical accepted request under the accepting account's RLS and sends `friend_accepted` only to its verified requester. It respects that recipient's event preference, uses a deterministic ID, preserves read markers on retry and stores references only. Failure to deliver does not reverse or fake the friendship. Server permissions remain pending; no client role receives insertion capability.
 - Rounds open their canonical cloud UUID through the unchanged `RoundParticipationCard`; review uses the existing participant-links endpoint and refreshes notifications/history. Social events open the authorized activity card. The compact list contains no financial payload or guessed score.
 - `GET/PATCH /api/social/notification-preferences` reads/writes only authenticated `user_id`, validates the seven event types and boolean-only values, denies client-supplied owner IDs, and sends private/no-store responses. Missing legacy event rows retain existing IN_APP behavior. A conflict-safe initialization plus channel-specific update preserves another device's unrelated channel.
 - One preferences screen composes event preferences and `/api/social/preferences`. All 15 boolean controls use accessible switches; push/email controls remain disabled with truthful availability copy. No OS permission request. Sharing/privacy flags are preserved; their unrelated UX is retained.
@@ -17,7 +18,8 @@ Scope: notifications UI, preferences and deep-link adapters only. Canonical bran
 ## Supported capabilities / pending verification
 
 - `friend_request`, operational group invitations and Social events are already persisted in DEV.
-- `friend_accepted`, `round_invite`, `round_finished`: presentation supports their contracts; no real emitter found in the current code/DEV data. Do not fabricate events to claim runtime success.
+- `round_invite`, `round_finished`: presentation supports their contracts; no real emitter found in the current code/DEV data. Do not fabricate events to claim runtime success.
+- `friend_accepted`: the previously absent emitter is now implemented through the existing acceptance API's notification adapter. Runtime emission remains blocked by the same pending server privileges.
 - `GROUP_INVITE_REJECT_BLOCKED`: private invitation state includes DECLINED, but `group_invitation_action_v1` exposes no decline action. No fake reject control, alternate group backend or private-table exposure was added.
 - `round_started` / `scorecard_ready`: existing canonical emitter is present; DEV lacks its server column privileges. Reviewable SQL below is pending approval/application. Card read/review capability itself is preserved.
 
@@ -41,7 +43,7 @@ DEV binding: `bymeopxkxapfizeeqeyb`, non-default `phase2-full-platform-qa`, bran
 
 ## Automated validation
 
-- Fresh isolated test compilation: 4,355 tests, 4,350 PASS, the same five preexisting FAIL, zero new failures. 35 new notification tests PASS, including a PostgreSQL test of the precise grants, recipient RLS and idempotent retry.
+- Fresh isolated test compilation: 4,362 tests, 4,357 PASS, the same five preexisting FAIL, zero new failures. 42 new notification tests PASS, including a PostgreSQL test of the precise grants, recipient RLS, accepted-event attribution and idempotent retry.
 - Additional package-script tests: 117 PASS, zero FAIL.
 - Baseline failures: equipment-owner-review premium UI; equipment-ui-contract Mi Bolsa; final-brand-ghin-closeout Mi Bolsa; iphone-capture Reglas resources; nightly-catalog-quality stale equipment audit. No unrelated fixes or weakened assertions.
 - Old `.test-dist` contained five compiled course suites absent from the current branch. Validation uses `tmp/notification-test-dist` built from current source, retaining those caches and the isolated course branch untouched.
@@ -74,7 +76,7 @@ PASS below denotes an automated component/contract test or the real API checks d
 | FRIENDS | Result |
 | --- | --- |
 | REQUEST / ACCEPT / REJECT | PASS — real DEV requests |
-| FRIEND ACCEPTED | FAIL — no accepted-event emitter; friendship acceptance itself PASS |
+| FRIEND ACCEPTED | FAIL — emitter implemented/tested; runtime blocked by pending server permission; friendship acceptance itself PASS |
 | PROFILE DEEP LINK | PASS — exact actor destination contract and private profile API |
 
 | GROUPS | Result |
@@ -110,9 +112,9 @@ PASS below denotes an automated component/contract test or the real API checks d
 | --- | --- |
 | FRIENDS UNCHANGED / GROUPS UNCHANGED | PASS — existing UX/API contracts; notification adapters only |
 | ROUND ENGINE UNCHANGED / BET ENGINE UNCHANGED / CAREER UNCHANGED / RULES UNCHANGED | PASS — no source changes |
-| TESTS | FAIL — only the five documented baseline failures; 4,350 PASS plus 117 script PASS, zero new FAIL |
+| TESTS | FAIL — only the five documented baseline failures; 4,357 PASS plus 117 script PASS, zero new FAIL |
 | TYPECHECK / LINT / BUILD | PASS |
 | DEV PUSH | PASS — canonical branch only |
 | DEPLOYMENT | READY — Preview, DEV alias |
 
-Course branch preserved at `6f4f06180d4b0572b298dc705fbcf9c568be70d7`, zero commits merged. Engines, Career, Rules, GHIN, Equipment, Auth, onboarding and Groups/Friends UX sources unchanged (only notification adapters in shared shells/inbox).
+Course branch preserved at `6f4f06180d4b0572b298dc705fbcf9c568be70d7`, zero commits merged. Engines, Career, Rules, GHIN, Equipment, Auth, onboarding and Groups/Friends UX sources unchanged (notification adapter after friendship acceptance and adapters in shared shells/inbox only).
