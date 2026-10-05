@@ -6,7 +6,8 @@ import { careerDate,careerNumber } from "../../lib/career-statistics";
 import { socialRequest } from "../../lib/social-activity-client";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import styles from "./career-index-panel.module.css";
-export type CareerIndexDetail="index"|"attest"|null;
+export type { CareerDetail as CareerIndexDetail } from "../../lib/career-navigation";
+import type { CareerDetail as CareerIndexDetail } from "../../lib/career-navigation";
 export function CareerIndexPanel({props,detail,onDetail}:{props:CareerHubProps;detail:CareerIndexDetail;onDetail:(view:CareerIndexDetail)=>void}) {
   const [attest,setAttest]=useState<CareerAttestSummary|null>(null),[error,setError]=useState(false),[retry,setRetry]=useState(0),[info,setInfo]=useState(false);
   useEffect(()=>{const controller=new AbortController();setAttest(null);setError(false);if(props.accessToken)void socialRequest<CareerAttestSummary>("/api/career/attest",props.accessToken,{signal:controller.signal}).then(data=>{if(!controller.signal.aborted)setAttest(data);}).catch(()=>{if(!controller.signal.aborted)setError(true);});return()=>controller.abort();},[props.userId,props.accessToken,retry]);

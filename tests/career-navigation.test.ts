@@ -17,7 +17,7 @@ test("Carrera reuses authoritative statistics and existing achievement/round han
   const career = readFileSync("app/components/career-hub.tsx", "utf8");
   assert.match(page, /<CareerHub[^>]*insights=\{betaGolfInsights\} rounds=\{statisticsHistory\} ready=\{statisticsReady\}/);
   assert.match(page, /<CareerHub[\s\S]*?onOpenRound=\{openHistoricalRound\}/);
-  assert.match(career, /CareerHeader/);
+  assert.doesNotMatch(career, /CareerHeader/);
   assert.match(career, /CareerTabs/);
   assert.match(career, /CareerSkeleton/);
   assert.match(career, /CareerErrorState/);

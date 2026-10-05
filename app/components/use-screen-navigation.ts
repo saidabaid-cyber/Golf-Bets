@@ -43,7 +43,9 @@ export function useScreenNavigation() {
   const setTab = useCallback((next: AppTab, options?: { roundId?: string | null; careerView?: CareerView }) => {
     const target = guard.current(next);
     const view = options?.careerView ?? selectedCareer.current;
-    const href = screenHref(target, window.location.search, options?.roundId, view);
+    const search = new URLSearchParams(window.location.search);
+    if (target === "career" && options?.careerView !== undefined) search.delete("careerDetail");
+    const href = screenHref(target, search.toString(), options?.roundId, view);
     if (target === current.current && href === `${window.location.pathname}${window.location.search}`) return;
     trail.current.push({ tab: current.current, scroll: window.scrollY });
     window.history.pushState({ ...window.history.state, backyardTab: target }, "", href);

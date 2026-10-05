@@ -3866,7 +3866,7 @@ function GolfBetsApp() {
     { id: "expenses", label: "Gastos", visible: true },
   ].filter((item) => item.visible);
 
-  return <main className={`app backyardApp ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
+  return <main className={`app backyardApp ${tab === "career" ? "careerModule" : ""} ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
     <FirstSocialExperience prompt={(tab === "welcome" && firstSocialExperience.prompt !== "roundGroup") || (tab === "setup" && !editingRound && firstSocialExperience.prompt === "roundGroup") ? firstSocialExperience.prompt : null} busy={firstSocialExperience.busy} error={firstSocialExperience.error}
       scoreOnly={roundPresentation.playMode === "score_only"} canBet={bettingConsentGranted} onFriends={() => void openFirstExperienceFriends()}
       onCreateGroup={() => void openFirstExperienceGroup()} onSkip={() => void skipFirstSocialExperience()} />

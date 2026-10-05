@@ -19,6 +19,7 @@ function browserAt(search: string) {
     replaceState(state: Record<string, unknown>, _title: string, url: string) { entries[position] = { state, url }; update(); },
     pushState(state: Record<string, unknown>, _title: string, url: string) { entries.splice(position + 1); entries.push({ state, url }); position++; update(); },
     back() { if (position > 0) { position--; update(); listeners.get("popstate")?.(); } },
+    forward() { if (position + 1 < entries.length) { position++; update(); listeners.get("popstate")?.(); } },
   };
   function update() { const parsed = new URL(entries[position].url, "https://qa.example.invalid"); location.pathname = parsed.pathname; location.search = parsed.search; history.state = entries[position].state; }
   const window = { location, history, scrollY: 0, addEventListener: (event: string, handler: () => void) => listeners.set(event, handler), removeEventListener: (event: string) => listeners.delete(event) };
@@ -58,6 +59,19 @@ test("all five Carrera tabs survive direct reload and browser Back within the sa
   const browser=browserAt("?screen=career&career=summary");let render=mount(browser);
   for(const tab of careerNavigation.CAREER_TABS){render().setCareerView(tab.id);assert.equal(render().careerView,tab.id);render=mount(browser);assert.equal(render().careerView,tab.id);}
   browser.history.back();assert.equal(render().careerView,"rounds");assert.equal(render().tab,"career");
+});
+test("switching from an index detail clears only the detail and Back/Forward restore section URLs",()=>{
+  const browser=browserAt("?screen=career&career=summary&careerDetail=attest&unrelated=keep"),render=mount(browser);
+  render().setCareerView("achievements");
+  assert.equal(new URLSearchParams(browser.location.search).has("careerDetail"),false);
+  assert.equal(new URLSearchParams(browser.location.search).get("unrelated"),"keep");
+  browser.history.back();assert.equal(render().careerView,"summary");assert.equal(new URLSearchParams(browser.location.search).get("careerDetail"),"attest");
+  browser.history.forward();assert.equal(render().careerView,"achievements");assert.equal(render().tab,"career");
+});
+test("Career subviews do not change global routes or prevent returning to Inicio/Play/Coach/Reglas",()=>{
+  const browser=browserAt("?screen=career&career=rounds"),render=mount(browser);
+  for(const tab of ["welcome","play","coach","rules","career"] as const){render().setTab(tab);assert.equal(render().tab,tab);}
+  assert.equal(render().careerView,"rounds");
 });
 
 test("opening another historical round and browser Back restore the respective selections", () => {

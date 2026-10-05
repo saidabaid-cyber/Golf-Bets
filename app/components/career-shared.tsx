@@ -1,10 +1,7 @@
 "use client";
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, type KeyboardEvent, useEffect, useRef } from "react";
 import { CAREER_TABS, type CareerView } from "../../lib/career-navigation";
 import styles from "./career-hub.module.css";
-export function CareerHeader() {
-  return <header className={styles.heading}><span className={styles.eyebrow}>THE BACKYARD · TU TRAYECTORIA</span><h1>Carrera</h1><p>Tu historia en el golf. Rondas, logros y grandes momentos.</p></header>;
-}
 export function CareerTabs({ view, onView }: { view: CareerView; onView: (view: CareerView) => void }) {
   const navigation = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -13,7 +10,11 @@ export function CareerTabs({ view, onView }: { view: CareerView; onView: (view: 
     const parent = container.getBoundingClientRect(), child = selected.getBoundingClientRect();
     if (child.left < parent.left || child.right > parent.right) container.scrollTo({left: container.scrollLeft + child.left - parent.left - (container.clientWidth - child.width) / 2});
   }, [view]);
-  return <nav ref={navigation} className={styles.tabs} aria-label="Secciones de Carrera">{CAREER_TABS.map(tab => <button type="button" key={tab.id} aria-current={view === tab.id ? "page" : undefined} onClick={() => onView(tab.id)}>{tab.label}</button>)}</nav>;
+  function onKey(event:KeyboardEvent<HTMLButtonElement>,index:number){
+    const next=event.key==="ArrowRight"?(index+1)%CAREER_TABS.length:event.key==="ArrowLeft"?(index+CAREER_TABS.length-1)%CAREER_TABS.length:event.key==="Home"?0:event.key==="End"?CAREER_TABS.length-1:null;
+    if(next===null)return;event.preventDefault();onView(CAREER_TABS[next].id);navigation.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus({preventScroll:true});
+  }
+  return <nav ref={navigation} className={styles.tabs} role="tablist" aria-label="Secciones de Carrera">{CAREER_TABS.map((tab,index) => <button type="button" key={tab.id} role="tab" id={`career-tab-${tab.id}`} aria-controls={`career-panel-${tab.id}`} aria-selected={view===tab.id} tabIndex={view===tab.id?0:-1} aria-current={view === tab.id ? "page" : undefined} onKeyDown={event=>onKey(event,index)} onClick={() => onView(tab.id)}>{tab.label}</button>)}</nav>;
 }
 export function CareerEmptyState({ title, description, action, onAction }: { title: string; description?: string; action?: string; onAction?: () => void }) {
   return <div className={styles.empty}><span className={styles.emptyMark} aria-hidden="true">⚑</span><h3>{title}</h3>{description && <p>{description}</p>}{action && onAction && <button type="button" className={styles.goldButton} onClick={onAction}>{action} <span aria-hidden="true">›</span></button>}</div>;
