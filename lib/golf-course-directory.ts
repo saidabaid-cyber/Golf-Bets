@@ -362,6 +362,7 @@ export function golfCourseSelectionToLegacyCourse(
   teeId: string,
   scorecardProfileId?: string,
   ratingGender?: string,
+  scorecardSourceUrl?: string,
 ): Course | null {
   const tee = catalog.tees.find((candidate) => candidate.id === teeId && candidate.active);
   if (!tee) return null;
@@ -402,7 +403,9 @@ export function golfCourseSelectionToLegacyCourse(
     : null;
   const visibleRating = profileRating ?? playerVisibleTeeRating(golfCourse, tee);
   const selectionId = profile ? `${tee.legacySelectionId}::${profile.id}::${profileTee?.ratingGender || "UNSPECIFIED"}` : tee.legacySelectionId;
-  const indexRatingEvidence = scorecardProfileIndexEvidence(golfCourse, tee, profile, profileTee, ratingGender);
+  const indexRatingEvidence = scorecardProfileIndexEvidence(
+    { ...golfCourse, sourceUrl: scorecardSourceUrl || golfCourse.sourceUrl }, tee, profile, profileTee, ratingGender,
+  );
   return withDefaultLaVistaRules({
     id: selectionId,
     name: golfCourse.name,
@@ -425,6 +428,7 @@ export function golfCourseSelectionToLegacyCourse(
       ...(profile.effectiveFrom ? { scorecardProfileEffectiveFrom: profile.effectiveFrom } : {}),
       ...(profile.effectiveTo ? { scorecardProfileEffectiveTo: profile.effectiveTo } : {}),
       ...(profile.verifiedAt ? { scorecardProfileVerifiedAt: profile.verifiedAt } : {}),
+      ...(indexRatingEvidence ? { scorecardProfileSourceUrl: indexRatingEvidence.sourceUrl } : {}),
     } : {}),
     clubName: club.name,
     ...(club.city ? { city: club.city } : {}),

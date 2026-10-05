@@ -189,7 +189,7 @@ test("manual or rebound/modified selections cannot reuse a verified card's Index
   assert.equal(teeAssignmentSnapshot("p1", course, indexAt, "manual").indexRatingEvidence, undefined);
   for (const change of [{ rating: 99 }, { slope: 155 }, { catalogTeeId: "another-tee" }, { catalogCourseId: "another-course" },
     { scorecardProfileId: "another-profile" }, { scorecardProfileVerifiedAt: "2000-01-01" },
-    { roundTeeSelectionId: "another-selection" }, { sourceUrl: "https://example.invalid/other" }]) {
+    { roundTeeSelectionId: "another-selection" }, { scorecardProfileSourceUrl: "https://example.invalid/other" }]) {
     assert.equal(teeAssignmentSnapshot("p1", { ...course, ...change }, indexAt).indexRatingEvidence, undefined, JSON.stringify(change));
   }
 });
@@ -224,4 +224,20 @@ test("missing or invalid profile rating values do not fall back to another tee's
     assert.equal(course.indexRatingEvidence, undefined, JSON.stringify(change));
     assert.equal(captureCompletedRoundIndex(completedProfileRound(course, "bad-rating"), indexOwner, indexPreference).backyardIndexSnapshots![0].eligible, false);
   }
+});
+
+test("verified profile without a public document binds to the real catalog projection and preserves physical source privacy", () => {
+  const source = catalog(); delete source.courses[0].sourceUrl;
+  assert.equal(golfCourseSelectionToLegacyCourse(source, "tee-white", "profile-club", "MEN")?.indexRatingEvidence, undefined);
+  const endpoint = "https://dev.thebackyard.com.mx/api/courses/catalog?courseId=course-campestre";
+  const course = golfCourseSelectionToLegacyCourse(source, "tee-white", "profile-club", "MEN", endpoint)!;
+  assert.equal(course.sourceUrl, undefined);
+  assert.equal(course.scorecardProfileSourceUrl, endpoint);
+  assert.equal(course.indexRatingEvidence?.sourceUrl, endpoint);
+  assert.equal(teeAssignmentSnapshot("p1", course, indexAt).indexRatingEvidence?.sourceUrl, endpoint);
+  const captured = captureCompletedRoundIndex(completedProfileRound(course, "private-source-profile"), indexOwner, indexPreference);
+  assert.equal(captured.backyardIndexSnapshots![0].eligible, true);
+  assert.equal(JSON.stringify(course).includes("private-document"), false);
+  source.scorecardProfiles![1].provenance = "PROVIDER_REVIEWED";
+  assert.equal(golfCourseSelectionToLegacyCourse(source, "tee-white", "profile-club", "MEN", endpoint)?.indexRatingEvidence, undefined);
 });

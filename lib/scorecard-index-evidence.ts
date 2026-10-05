@@ -55,6 +55,6 @@ export function indexEvidenceForProfileSelection(course: Course): BackyardIndexR
     || evidence.courseRating !== course.rating || evidence.slopeRating !== course.slope
     || !validRating(course.rating, course.slope) || !evidence.authority.trim()
     || evidence.verifiedAt !== course.scorecardProfileVerifiedAt || !Number.isFinite(Date.parse(evidence.verifiedAt))
-    || evidence.sourceUrl !== course.sourceUrl || !https(evidence.sourceUrl)) return null;
+    || evidence.sourceUrl !== (course.scorecardProfileSourceUrl || course.sourceUrl) || !https(evidence.sourceUrl)) return null;
   return structuredClone(evidence);
 }

@@ -21,8 +21,13 @@ export async function GET(request:NextRequest) {
       if(!course) return NextResponse.json({error:'No encontramos ese recorrido.'},{status:404,headers});
       const profiles=(catalog.scorecardProfiles??[]).filter(profile=>profile.courseId===id&&profile.active&&!profile.historical)
         .sort((left,right)=>Number(right.defaultForPlay)-Number(left.defaultForPlay)||left.name.localeCompare(right.name,'es-MX'));
+      // A club's verified playing profile may have no public source document.
+      // Bind Index provenance to this real authenticated projection instead of
+      // borrowing a location URL or disclosing private supporting documents.
+      const profileSourceUrl=new URL(request.nextUrl.pathname,request.nextUrl.origin);
+      profileSourceUrl.searchParams.set('courseId',id);
       const cards=profiles.length
-        ? profiles.flatMap(profile=>profile.tees.map(profileTee=>golfCourseSelectionToLegacyCourse(catalog,profileTee.teeId,profile.id,profileTee.ratingGender)).filter(Boolean))
+        ? profiles.flatMap(profile=>profile.tees.map(profileTee=>golfCourseSelectionToLegacyCourse(catalog,profileTee.teeId,profile.id,profileTee.ratingGender,profileSourceUrl.href)).filter(Boolean))
         : catalog.tees.filter(tee=>tee.active&&tee.courseId===id).map(tee=>golfCourseSelectionToLegacyCourse(catalog,tee.id)).filter(Boolean);
       return NextResponse.json({course,cards},{headers});
     }

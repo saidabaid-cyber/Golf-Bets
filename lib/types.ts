@@ -136,6 +136,8 @@ export type Course = {
   scorecardProfileEffectiveFrom?: string;
   scorecardProfileEffectiveTo?: string;
   scorecardProfileVerifiedAt?: string;
+  /** Read-only canonical catalog source for the selected verified profile. */
+  scorecardProfileSourceUrl?: string;
   /** Frozen with the course snapshot; never re-resolved for historical rounds. */
   scorecardProfileSnapshot?: ReturnType<typeof import('./course-scorecard-profiles').freezeScorecardProfileSelection>;
   clubName?: string;
