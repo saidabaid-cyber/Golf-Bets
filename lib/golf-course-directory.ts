@@ -1,6 +1,7 @@
 import courseSeedJson from "../data/golf-course-catalog.seed.json";
 import { withDefaultLaVistaRules } from "./local-rules";
 import { curatedPueblaCourseProvider } from "./curated-puebla-course-data";
+import { scorecardProfileIndexEvidence } from "./scorecard-index-evidence";
 import type { Course } from "./types";
 import type { ScorecardProfileProvenance } from "./course-scorecard-profiles";
 
@@ -401,6 +402,7 @@ export function golfCourseSelectionToLegacyCourse(
     : null;
   const visibleRating = profileRating ?? playerVisibleTeeRating(golfCourse, tee);
   const selectionId = profile ? `${tee.legacySelectionId}::${profile.id}::${profileTee?.ratingGender || "UNSPECIFIED"}` : tee.legacySelectionId;
+  const indexRatingEvidence = scorecardProfileIndexEvidence(golfCourse, tee, profile, profileTee, ratingGender);
   return withDefaultLaVistaRules({
     id: selectionId,
     name: golfCourse.name,
@@ -413,6 +415,7 @@ export function golfCourseSelectionToLegacyCourse(
     catalogCourseId: golfCourse.id,
     catalogTeeId: tee.id,
     roundTeeSelectionId: selectionId,
+    ...(indexRatingEvidence ? { indexRatingEvidence } : {}),
     ...(profile ? {
       scorecardProfileId: profile.id,
       scorecardProfileName: profile.name,

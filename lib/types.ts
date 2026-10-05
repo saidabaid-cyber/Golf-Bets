@@ -393,6 +393,9 @@ export type BackyardIndexRatedTeeEvidence = {
   teeId: string;
   courseRating: number;
   slopeRating: number;
+  /** Present for an explicitly selected, verified scorecard/category. */
+  scorecardProfileId?: string;
+  ratingGender?: "MEN" | "WOMEN";
 };
 
 /** An unknown PCC is not silently converted to zero. The second variant is an explicit local-only assumption. */

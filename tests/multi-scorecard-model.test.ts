@@ -4,8 +4,11 @@ import test from "node:test";
 
 import { golfCourseSelectionToLegacyCourse, type GolfCourseCatalog, type GolfScorecardProfile } from "../lib/golf-course-directory";
 import { freezeScorecardProfileSelection, scorecardProfileLabel, scorecardProfilesForCards } from "../lib/course-scorecard-profiles";
-import { scorecardOptionsForLayout, teeOptionsForCourse } from "../lib/player-tee-assignments";
+import { reconcilePlayerTeeAssignments, scorecardOptionsForLayout, teeAssignmentSnapshot, teeOptionsForCourse } from "../lib/player-tee-assignments";
 import { courseWithResolvedOperations } from "../lib/player-course-operations";
+import { captureCompletedRoundIndex } from "../lib/backyard-index-auto-capture";
+import { calculateBackyardIndex } from "../lib/backyard-index";
+import type { Course, RoundSnapshot } from "../lib/types";
 
 const migration = readFileSync("supabase/migrations/20260928085339_multi_scorecard_profiles.sql", "utf8");
 const provenanceCorrection = readFileSync("supabase/migrations/20260928085759_add_provider_reviewed_provenance.sql", "utf8");
@@ -117,4 +120,108 @@ test("generic scorecard engine contains no La Vista or Campestre branch", () => 
   const picker = readFileSync("app/components/round-tee-picker.tsx", "utf8");
   assert.doesNotMatch(domain, /la vista|campestre/i);
   assert.doesNotMatch(picker, /la vista|campestre/i);
+});
+
+const indexOwner = "synthetic-index-owner";
+const indexAt = "2026-10-05T10:00:00.000Z";
+const indexPreference = { version: 1 as const, userId: indexOwner, enabled: true, updatedAt: indexAt, localPccZeroDeclaredAt: indexAt };
+function completedProfileRound(course: Course, id: string): RoundSnapshot {
+  const player = { id: "p1", name: "Synthetic regression player", accountUserId: indexOwner, handicap: 0 };
+  return { id, date: "2026-10-05", lifecycleState: "completed", startedAt: indexAt, completedAt: indexAt, updatedAt: indexAt,
+    ownerId: player.id, ownerName: player.name, courseName: course.name, teeName: course.teeName, courseSnapshot: course,
+    roundHoles: 18, players: [player], order: course.holes.map(hole => hole.number),
+    playerTeeAssignments: [teeAssignmentSnapshot(player.id, course, indexAt)],
+    scores: Object.fromEntries(course.holes.map(hole => [hole.number, { [player.id]: hole.par + 1 }])),
+  } as RoundSnapshot;
+}
+
+test("selected verified club card → frozen tee → real close → provisional Backyard Index without a GHIN account", () => {
+  const source = catalog();
+  const course = golfCourseSelectionToLegacyCourse(source, "tee-white", "profile-club", "MEN")!;
+  const rounds = [1, 2, 3].map(id => captureCompletedRoundIndex(completedProfileRound(course, `index-${id}`), indexOwner, indexPreference));
+  assert.equal(course.indexRatingEvidence?.kind, "CURATED_RATED_TEE");
+  assert.equal(course.indexRatingEvidence?.scorecardProfileId, "profile-club");
+  for (const round of rounds) {
+    assert.equal(round.backyardIndexSnapshots![0].eligible, true);
+    assert.equal(round.backyardIndexSnapshots![0].grossScore, 90);
+    assert.equal(round.backyardIndexSnapshots![0].ratedTeeEvidence?.courseRating, 70.8);
+    assert.equal(round.backyardIndexSnapshots![0].ratedTeeEvidence?.slopeRating, 126);
+  }
+  assert.equal(calculateBackyardIndex(rounds.slice(0, 2), indexOwner).value, null);
+  const index = calculateBackyardIndex(rounds, indexOwner);
+  assert.equal(index.eligibleRoundCount, 3);
+  assert.equal(index.provisional, true);
+  assert.equal(index.value, rounds[0].backyardIndexSnapshots![0].scoreDifferential! - 2);
+  assert.equal(captureCompletedRoundIndex(completedProfileRound(course, "off"), indexOwner, null).backyardIndexSnapshots![0].eligible, false);
+});
+
+test("profile ratings require explicit known category and preserve distinct MEN/WOMEN evidence", () => {
+  const source = catalog();
+  const p = source.scorecardProfiles![1];
+  p.tees.push({ ...p.tees[0], ratingGender: "WOMEN", courseRating: 77.4, slopeRating: 153 });
+  assert.equal(golfCourseSelectionToLegacyCourse(source, "tee-white", p.id)?.indexRatingEvidence, undefined);
+  assert.equal(golfCourseSelectionToLegacyCourse(source, "tee-white", p.id, "UNSPECIFIED")?.indexRatingEvidence, undefined);
+  const men = golfCourseSelectionToLegacyCourse(source, "tee-white", p.id, "MEN")!;
+  const women = golfCourseSelectionToLegacyCourse(source, "tee-white", p.id, "WOMEN")!;
+  assert.equal(teeAssignmentSnapshot("p1", men, indexAt).indexRatingEvidence?.courseRating, 70.8);
+  assert.equal(teeAssignmentSnapshot("p2", women, indexAt).indexRatingEvidence?.courseRating, 77.4);
+  assert.notEqual(men.id, women.id);
+});
+
+test("operational/reviewed/temporary/draft/historical/unsourced profiles never become Index evidence", () => {
+  const excluded: Array<Partial<GolfScorecardProfile>> = [
+    { provenance: "PROVIDER_REVIEWED" }, { provenance: "CLUB_OPERATIONAL" }, { provenance: "CLUB_TEMPORARY" },
+    { status: "DRAFT" }, { active: false }, { historical: true }, { verifiedAt: null },
+    { sourceProvider: "" }, { effectiveFrom: "2999-01-01" }, { effectiveTo: "2000-01-01" },
+  ];
+  for (const change of excluded) {
+    const source = catalog(); Object.assign(source.scorecardProfiles![1], change);
+    const course = golfCourseSelectionToLegacyCourse(source, "tee-white", "profile-club", "MEN")!;
+    assert.equal(course.indexRatingEvidence, undefined, JSON.stringify(change));
+  }
+  const source = catalog(); source.courses[0].sourceUrl = "http://example.invalid/unverified";
+  assert.equal(golfCourseSelectionToLegacyCourse(source, "tee-white", "profile-club", "MEN")?.indexRatingEvidence, undefined);
+});
+
+test("manual or rebound/modified selections cannot reuse a verified card's Index evidence", () => {
+  const course = golfCourseSelectionToLegacyCourse(catalog(), "tee-white", "profile-club", "MEN")!;
+  assert.ok(teeAssignmentSnapshot("p1", course, indexAt).indexRatingEvidence);
+  assert.equal(teeAssignmentSnapshot("p1", course, indexAt, "manual").indexRatingEvidence, undefined);
+  for (const change of [{ rating: 99 }, { slope: 155 }, { catalogTeeId: "another-tee" }, { catalogCourseId: "another-course" },
+    { scorecardProfileId: "another-profile" }, { scorecardProfileVerifiedAt: "2000-01-01" },
+    { roundTeeSelectionId: "another-selection" }, { sourceUrl: "https://example.invalid/other" }]) {
+    assert.equal(teeAssignmentSnapshot("p1", { ...course, ...change }, indexAt).indexRatingEvidence, undefined, JSON.stringify(change));
+  }
+});
+
+test("verified new assignments freeze evidence but legacy reconciliation does not retrofit Index eligibility", () => {
+  const course = golfCourseSelectionToLegacyCourse(catalog(), "tee-white", "profile-club", "MEN")!;
+  const players = [{ id: "p1", name: "Regression", handicap: 0 }];
+  const legacy = reconcilePlayerTeeAssignments([], players, course, indexAt);
+  assert.equal(legacy[0].source, "legacy");
+  assert.equal(legacy[0].indexRatingEvidence, undefined);
+  const fresh = reconcilePlayerTeeAssignments([], players, course, indexAt, { allowCuratedNewAssignment: true });
+  assert.equal(fresh[0].source, "catalog");
+  assert.equal(fresh[0].indexRatingEvidence?.ratingGender, "MEN");
+  course.indexRatingEvidence!.courseRating = 99;
+  assert.equal(fresh[0].indexRatingEvidence?.courseRating, 70.8);
+  assert.equal(reconcilePlayerTeeAssignments(legacy, players, course, indexAt, { allowCuratedNewAssignment: true })[0].indexRatingEvidence, undefined);
+});
+
+test("selected verified official profile uses its rating, without changing GHIN posting eligibility", () => {
+  const course = golfCourseSelectionToLegacyCourse(catalog(), "tee-white", "profile-official", "MEN")!;
+  assert.equal(course.indexRatingEvidence?.kind, "OFFICIAL_RATED_TEE");
+  assert.equal(course.indexRatingEvidence?.courseRating, 71.1);
+  assert.equal(course.ghinPostEligible, undefined);
+  const captured = captureCompletedRoundIndex(completedProfileRound(course, "official-fixture"), indexOwner, indexPreference);
+  assert.equal(captured.backyardIndexSnapshots![0].eligible, true);
+});
+
+test("missing or invalid profile rating values do not fall back to another tee's visible rating for Index", () => {
+  for (const change of [{ courseRating: null }, { slopeRating: null }, { courseRating: 101 }, { slopeRating: 156 }, { slopeRating: 125.5 }]) {
+    const source = catalog(); Object.assign(source.scorecardProfiles![1].tees[0], change);
+    const course = golfCourseSelectionToLegacyCourse(source, "tee-white", "profile-club", "MEN")!;
+    assert.equal(course.indexRatingEvidence, undefined, JSON.stringify(change));
+    assert.equal(captureCompletedRoundIndex(completedProfileRound(course, "bad-rating"), indexOwner, indexPreference).backyardIndexSnapshots![0].eligible, false);
+  }
 });

@@ -1,5 +1,6 @@
 import type { Course, Player, PlayerTeeAssignmentSnapshot } from "./types";
 import { getCuratedIndexRatedTeeEvidenceForCourse } from "./curated-puebla-course-data";
+import { indexEvidenceForProfileSelection } from "./scorecard-index-evidence";
 
 function sameLayout(first: Course, second: Course) {
   if (first.catalogCourseId && second.catalogCourseId) return first.catalogCourseId === second.catalogCourseId;
@@ -44,7 +45,8 @@ export function teeAssignmentSnapshot(
     && course.holes.every((hole) => Number.isInteger(hole.par) && hole.par >= 3 && hole.par <= 6)
     ? course.holes.reduce((total, hole) => total + hole.par, 0)
     : null;
-  const indexRatingEvidence = source === "catalog" ? getCuratedIndexRatedTeeEvidenceForCourse(course) : null;
+  const indexRatingEvidence = source === "catalog"
+    ? getCuratedIndexRatedTeeEvidenceForCourse(course) || indexEvidenceForProfileSelection(course) : null;
   return {
     playerId,
     ...(course.catalogReview ? {holes:structuredClone(course.holes),catalogReview:structuredClone(course.catalogReview)} : {}),
@@ -90,7 +92,8 @@ export function reconcilePlayerTeeAssignments(
       ...(assignment.indexRatingEvidence ? { indexRatingEvidence: { ...assignment.indexRatingEvidence } } : {}),
     });
   }
-  const missingSource = course.catalogReview || (options.allowCuratedNewAssignment && getCuratedIndexRatedTeeEvidenceForCourse(course)) ? "catalog" : "legacy";
+  const missingSource = course.catalogReview || (options.allowCuratedNewAssignment
+    && (getCuratedIndexRatedTeeEvidenceForCourse(course) || indexEvidenceForProfileSelection(course))) ? "catalog" : "legacy";
   return players.map((player) => byPlayerId.get(player.id) || teeAssignmentSnapshot(player.id, course, capturedAt, missingSource));
 }
 
