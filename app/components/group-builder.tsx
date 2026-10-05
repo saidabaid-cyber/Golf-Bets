@@ -38,8 +38,8 @@ export function GroupSummary({ group }: { group: FrequentGroup }) {
   return <section className="groupWizardSummary" aria-label="Resumen del grupo"><h3>Resumen del grupo</h3><p>{group.players.length} jugadores</p><p><b>HCP:</b> {HANDICAP_BASIS_LABELS[group.gameTemplate?.roundDefaults.handicapBasis ?? "relative"]}</p><GroupPresetBetSummary group={group} /></section>;
 }
 
-export function GroupDetailDialog({ group, created, onClose, onEdit, onPlay }: {
-  group: FrequentGroup; created: boolean; onClose: () => void; onEdit: () => void; onPlay: () => void;
+export function GroupDetailDialog({ group, created, onClose, onEdit, onPlay, onCreateAnother }: {
+  group: FrequentGroup; created: boolean; onClose: () => void; onEdit: () => void; onPlay: () => void; onCreateAnother?: () => void;
 }) {
   return <ModalShell open onClose={onClose} className="groupEditorDialog groupWizard" labelledBy="group-detail-title">
     {created && <div className="groupCreatedHeading"><span aria-hidden="true">✓</span><h2 id="group-detail-title">¡Grupo creado!</h2></div>}
@@ -47,6 +47,7 @@ export function GroupDetailDialog({ group, created, onClose, onEdit, onPlay }: {
     <div className="groupSelectedList">{group.players.map((member, index) => <div className="groupPersonRow" key={member.memberId || index}><span className="groupPersonAvatar" aria-hidden="true">{member.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("")}</span><span><b>{member.name}</b><small>{member.username ? `@${member.username} · ` : ""}{typeof member.handicap === "number" ? `HCP ${member.handicap}` : "HCP por completar"}{!member.accountUserId && <span className="groupGuestBadge">Sin app</span>}</small></span></div>)}</div>
     <GroupSummary group={group} />
     <div className="groupWizardActions">{created ? <button type="button" className="primary" onClick={onEdit}>Ver grupo</button> : <button type="button" className="secondary" onClick={onEdit}>Editar grupo</button>}<button type="button" className={created ? "secondary" : "primary"} onClick={onPlay}>Crear ronda con este grupo</button></div>
+    {created && onCreateAnother && <button type="button" className="secondary" onClick={onCreateAnother}>CREAR OTRO GRUPO</button>}
   </ModalShell>;
 }
 

@@ -43,6 +43,35 @@ const click = (tree: any, label: string) => find(tree, n => n.type === "button" 
 function fixture(count = 5): FrequentGroup { const group: FrequentGroup = { id: "qa-domingo", name: "Domingo", uses: 0, updatedAt: "2026-10-04", privacy: "private", players: Array.from({ length: count }, (_, i) => ({ memberId: `member-${i}`, name: `QA Player ${i}`, handicap: i + 4, accountUserId: `qa-account-${i}` })) }; group.gameTemplate = templates.createEmptyGroupGameTemplate(group); group.gameTemplate.betConfig.foursome.enabled = true; group.gameTemplate.betConfig.foursome.fixedValue = 200; return group; }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
+test("created group confirmation can create another while edit confirmation keeps its existing actions", () => {
+  const h = harness("app/components/group-builder.tsx"); const events: string[] = [];
+  const props = { group: fixture(12), created: true, onClose() {}, onEdit: () => events.push("view"), onPlay: () => events.push("round"), onCreateAnother: () => events.push("another") };
+  const created = h.render("GroupDetailDialog", props);
+  for (const label of ["Ver grupo", "Crear ronda con este grupo", "CREAR OTRO GRUPO"]) click(created, label);
+  assert.deepEqual(events, ["view", "round", "another"]); assert.equal(props.group.players.length, 12);
+  const edited = h.render("GroupDetailDialog", { ...props, created: false });
+  assert.doesNotMatch(text(edited), /CREAR OTRO GRUPO|¡Grupo creado!/);
+});
+
+test("participant review requires explicit confirmation; cancel writes nothing and success refreshes canonical history", async () => {
+  const calls: Array<{path: string; options: any}> = []; let refreshed = 0;
+  let card = { roundId: "canonical-qa", version: 7, materialHash: "server-hash", courseName: "QA Course", groupName: "QA Group", completed: true,
+    players: [{ playerKey: "carlos", accountUserId: "qa-carlos", name: "QA Carlos", status: "PENDING_CONFIRMATION", score: 72, scorecard: [{ hole: 1, score: 4 }] }], myPlayerKey: "carlos", myBalance: -300, canConfirm: true };
+  const h = harness("app/components/round-participation-card.tsx", { "social-activity-client": { socialErrorMessage: () => "error", socialRequest: async (path: string, _token: string, options: any) => {
+    calls.push({ path, options });
+    if (options?.method === "POST") { card = { ...card, canConfirm: false }; return { ok: true }; }
+    return { data: card };
+  } } });
+  const props = { accessToken: "qa-session", roundId: "canonical-qa", onConfirmed: async () => { refreshed++; } };
+  h.render("RoundParticipationCard", props); await flush(); let tree = h.render("RoundParticipationCard", props);
+  click(tree, "CONFIRMAR MI PARTICIPACIÓN"); tree = h.render("RoundParticipationCard", props);
+  click(tree, "VOLVER A REVISAR"); tree = h.render("RoundParticipationCard", props); assert.equal(calls.filter(c => c.options?.method === "POST").length, 0);
+  click(tree, "CONFIRMAR MI PARTICIPACIÓN"); tree = h.render("RoundParticipationCard", props); click(tree, "SÍ, CONFIRMAR TARJETA"); await flush(); tree = h.render("RoundParticipationCard", props);
+  const writes = calls.filter(c => c.options?.method === "POST"); assert.equal(writes.length, 1);
+  assert.equal(writes[0].path, "/api/social/rounds/canonical-qa/links"); assert.deepEqual(JSON.parse(JSON.stringify(writes[0].options.body)), { playerKey: "carlos", expectedVersion: 7, expectedHash: "server-hash" });
+  assert.equal(refreshed, 1); assert.match(text(tree), /Participación confirmada/); assert.doesNotMatch(text(tree), /SÍ, CONFIRMAR TARJETA/);
+});
+
 test("20 compact library cards have one open target, limited avatars/bets and no inline tools or nested buttons", () => {
   const h = harness("app/components/group-builder.tsx"); const groups = Array.from({ length: 20 }, (_, i) => ({ ...fixture(20), id: `group-${i}`, name: `Grupo ${i}` })); let opened = "", played = "";
   const tree = h.render("GroupLibraryView", { groups, onCreate() {}, onDraw() {}, onOpen: (g: FrequentGroup) => { opened = g.id; }, onPlay: (g: FrequentGroup) => { played = g.id; } });

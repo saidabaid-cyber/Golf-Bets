@@ -4551,7 +4551,7 @@ function GolfBetsApp() {
 
     {groupRoundSelection && <GroupRoundSelector group={groupRoundSelection} onCancel={() => setGroupRoundSelection(null)} onConfirm={(selectedMemberIds) => confirmFrequentGroupRoundSelection(groupRoundSelection, selectedMemberIds)} />}
 
-    {frequentGroupView?.created && !frequentGroupDraft && frequentGroups.filter(group => group.id === frequentGroupView.id).map(group => <GroupDetailDialog key={group.id} group={group} created={frequentGroupView.created} onClose={() => setFrequentGroupView(null)} onEdit={() => frequentGroupView.created ? setFrequentGroupView({ id: group.id, created: false }) : beginEditFrequentGroup(group)} onPlay={() => { setFrequentGroupView(null); loadFrequentGroup(group); }} />)}
+    {frequentGroupView?.created && !frequentGroupDraft && frequentGroups.filter(group => group.id === frequentGroupView.id).map(group => <GroupDetailDialog key={group.id} group={group} created={frequentGroupView.created} onClose={() => setFrequentGroupView(null)} onEdit={() => frequentGroupView.created ? setFrequentGroupView({ id: group.id, created: false }) : beginEditFrequentGroup(group)} onPlay={() => { setFrequentGroupView(null); loadFrequentGroup(group); }} onCreateAnother={beginCreateFrequentGroup} />)}
 
     {frequentGroupDraft && <div className="modalBackdrop" role="presentation"><section ref={groupEditorRef} className="groupEditorDialog groupWizard" role="dialog" aria-modal="true" aria-labelledby="edit-group-title" aria-describedby="edit-group-description">
       <ModalCloseButton disabled={frequentGroupSaving} onClose={() => { if (!frequentGroupSaveInFlight.current) void closeFirstExperienceGroupEditor(); }} />
