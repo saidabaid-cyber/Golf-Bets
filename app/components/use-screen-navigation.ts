@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { historicalRoundIdFromSearch, screenFromSearch, screenHref, type AppTab } from "../../lib/app-navigation";
 import { useViewScrollReset } from "./use-view-scroll-reset";
-import { careerViewFromSearch, type CareerView } from "../../lib/career-navigation";
+import { careerDetailFromSearch, careerViewFromSearch, type CareerDetail, type CareerView } from "../../lib/career-navigation";
 
 type NavigationGuard = (next: AppTab) => AppTab;
 
@@ -11,6 +11,7 @@ export function useScreenNavigation() {
   const [tab, showTab] = useState<AppTab>("welcome");
   const [historyDetailId, selectHistoricalRound] = useState<string | null>(null);
   const [careerView, showCareerView] = useState<CareerView>("summary");
+  const [careerDetail, showCareerDetail] = useState<CareerDetail>(null);
   const selectedCareer = useRef<CareerView>("summary");
   useViewScrollReset(tab === "career" ? `career:${careerView}` : tab);
   const current = useRef<AppTab>("welcome");
@@ -23,6 +24,7 @@ export function useScreenNavigation() {
       const target = guard.current(requested);
       selectedCareer.current = careerViewFromSearch(window.location.search);
       showCareerView(selectedCareer.current);
+      showCareerDetail(target === "career" ? careerDetailFromSearch(window.location.search) : null);
       selectHistoricalRound(target === "historyDetail" ? historicalRoundIdFromSearch(window.location.search) : null);
       window.history.replaceState({ ...window.history.state, backyardTab: target }, "", screenHref(target, window.location.search));
       if (target === current.current) return;
@@ -33,6 +35,7 @@ export function useScreenNavigation() {
     const initial = guard.current(screenFromSearch(window.location.search));
     selectedCareer.current = careerViewFromSearch(window.location.search);
     showCareerView(selectedCareer.current);
+    showCareerDetail(initial === "career" ? careerDetailFromSearch(window.location.search) : null);
     selectHistoricalRound(initial === "historyDetail" ? historicalRoundIdFromSearch(window.location.search) : null);
     current.current = initial;
     showTab(initial);
@@ -53,9 +56,19 @@ export function useScreenNavigation() {
     current.current = target;
     selectedCareer.current = view;
     showCareerView(view);
+    showCareerDetail(target === "career" ? careerDetailFromSearch(href.slice(1)) : null);
     showTab(target);
   }, []);
   const setCareerView = useCallback((view: CareerView) => setTab("career", { careerView: view }), [setTab]);
+  const setCareerDetail = useCallback((detail: CareerDetail) => {
+    if (current.current !== "career" || selectedCareer.current !== "summary") return;
+    const search = new URLSearchParams(window.location.search);
+    if (detail) search.set("careerDetail", detail); else search.delete("careerDetail");
+    const href = screenHref("career", search.toString(), undefined, "summary");
+    showCareerDetail(detail);
+    if (href !== `${window.location.pathname}${window.location.search}`)
+      window.history.pushState({ ...window.history.state, backyardTab: "career" }, "", href);
+  }, []);
   const setNavigationGuard = useCallback((nextGuard?: NavigationGuard) => {
     guard.current = nextGuard ?? ((next) => next);
   }, []);
@@ -63,5 +76,5 @@ export function useScreenNavigation() {
     if (trail.current.length) window.history.back();
     else setTab("welcome");
   }, [setTab]);
-  return { tab, setTab, goBack, setNavigationGuard, historyDetailId, careerView, setCareerView };
+  return { tab, setTab, goBack, setNavigationGuard, historyDetailId, careerView, setCareerView, careerDetail, setCareerDetail };
 }

@@ -6,7 +6,7 @@ import { recordCareerEvent } from "../../features/analytics/career";
 import type { GolfInsights } from "../../lib/golf-insights";
 import type { RoundSnapshot } from "../../lib/types";
 import type { SelectedHandicapIndex } from "../../lib/handicap-source";
-import { CAREER_TABS, careerDetailFromSearch, type CareerView } from "../../lib/career-navigation";
+import { CAREER_TABS, type CareerView } from "../../lib/career-navigation";
 import type { GhinReadOnlyProfileController } from "./use-ghin-read-only-profile";
 import type { CareerCompetitionEvidence } from "../../lib/round-achievements";
 import { CareerTabs, CareerSkeleton, CareerErrorState } from "./career-shared";
@@ -23,6 +23,7 @@ export type CareerHubProps = {
   ghin?: Pick<GhinReadOnlyProfileController,"profile"|"enabled"> & Partial<Pick<GhinReadOnlyProfileController,"ready"|"error"|"scores"|"scoresLoading"|"reauthorizationRequired"|"loadScores">>;
   insights: GolfInsights; rounds: RoundSnapshot[]; history?: RoundSnapshot[]; ready: boolean; error?: boolean;
   view: CareerView; onView: (view: CareerView) => void;
+  detail: CareerIndexDetail; onDetail: (detail: CareerIndexDetail) => void;
   onOpenStats: () => void; onOpenHistory: () => void; onOpenRound: (id: string) => void;
   onCreateRound: () => void; onFindRival: () => void; onRetry?: () => void;
   onOpenProfile?: () => void; onExploreTournaments?: () => void;
@@ -30,10 +31,8 @@ export type CareerHubProps = {
 };
 export function CareerHub(props: CareerHubProps) {
   const root=useRef<HTMLElement>(null);
-  const [detail,setDetail]=useState<CareerIndexDetail>(()=>typeof window==="undefined"?null:careerDetailFromSearch(window.location.search));
-  const selectedDetail=props.view==="summary"?detail:null;
+  const selectedDetail=props.view==="summary"?props.detail:null;
   useViewScrollReset(`${props.view}:${selectedDetail??"section"}`);
-  useEffect(()=>{const read=()=>setDetail(careerDetailFromSearch(window.location.search));read();window.addEventListener("popstate",read);return()=>window.removeEventListener("popstate",read);},[]);
   // Preserve filters and loaded data only after a section has actually been visited.
   const [visited,setVisited]=useState<{owner:string;views:CareerView[]}>({owner:props.userId,views:[props.view]});
   const views=visited.owner===props.userId?visited.views:[props.view];
@@ -45,8 +44,7 @@ export function CareerHub(props: CareerHubProps) {
     measure();
     const observer=new ResizeObserver(measure);observer.observe(header);return()=>observer.disconnect();
   },[]);
-  function openDetail(value:CareerIndexDetail){setDetail(value);const url=new URL(window.location.href);if(value)url.searchParams.set("careerDetail",value);else url.searchParams.delete("careerDetail");window.history.pushState({...window.history.state,backyardTab:"career"},"",url);}
-  function selectView(view:CareerView){setDetail(null);props.onView(view);}
+  function selectView(view:CareerView){props.onView(view);}
   const opened=useRef(""),viewed=useRef("");
   useEffect(()=>{
     if(!props.accessToken)return;
@@ -57,7 +55,7 @@ export function CareerHub(props: CareerHubProps) {
   const data={...props,onOpenRound:(id:string)=>{recordCareerEvent("round_opened",props.view,props.accessToken);props.onOpenRound(id);}};
   return <section ref={root} className={styles.screen} aria-label="Carrera"><CareerTabs view={props.view} onView={selectView}/>
     {CAREER_TABS.filter(tab=>views.includes(tab.id)||tab.id===props.view).map(tab=><div key={`${props.userId}:${tab.id}`} className={styles.content} role="tabpanel" id={`career-panel-${tab.id}`} aria-labelledby={`career-tab-${tab.id}`} hidden={props.view!==tab.id} tabIndex={0}>
-      {tab.id==="summary"?<><CareerIndexPanel props={data} detail={selectedDetail} onDetail={openDetail}/><div className={styles.content} hidden={!!selectedDetail}>{!props.ready&&!props.error?<CareerSkeleton/>:<CareerOverview {...data}/>}</div></>:tab.id==="tournaments"?<CareerTournaments {...data}/>:!props.ready&&!props.error?<CareerSkeleton/>:props.error?<CareerErrorState onRetry={props.onRetry}/>:tab.id==="achievements"?<CareerAchievements {...data}/>:tab.id==="rivalries"?<CareerRivalries {...data}/>:<CareerRounds {...data}/>}
+      {tab.id==="summary"?<><CareerIndexPanel props={data} detail={selectedDetail} onDetail={props.onDetail}/><div className={styles.content} hidden={!!selectedDetail}>{!props.ready&&!props.error?<CareerSkeleton/>:<CareerOverview {...data}/>}</div></>:tab.id==="tournaments"?<CareerTournaments {...data}/>:!props.ready&&!props.error?<CareerSkeleton/>:props.error?<CareerErrorState onRetry={props.onRetry}/>:tab.id==="achievements"?<CareerAchievements {...data}/>:tab.id==="rivalries"?<CareerRivalries {...data}/>:<CareerRounds {...data}/>}
     </div>)}
   </section>;
 }

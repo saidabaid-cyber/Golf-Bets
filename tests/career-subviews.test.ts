@@ -33,10 +33,10 @@ function shell(search="?screen=career&career=summary") {
     if(id.endsWith("/career"))return{recordCareerEvent(){}};
     return new Proxy({},{get:(_t,k)=>String(k)});
   }});
-  const props:any={userId:"qa-owner",displayName:"QA Owner",view:careerNavigation.careerViewFromSearch(search),ready:true,index:{source:"UNKNOWN",value:null},rounds:[],insights:{},onView:(view:string)=>{props.view=view;const url=new URL(location.href);url.searchParams.set("career",view);url.searchParams.delete("careerDetail");location.search=url.search;location.href=url.href;}};
+  const props:any={userId:"qa-owner",displayName:"QA Owner",view:careerNavigation.careerViewFromSearch(search),detail:careerNavigation.careerDetailFromSearch(search),ready:true,index:{source:"UNKNOWN",value:null},rounds:[],insights:{},onDetail:(detail:string|null)=>{props.detail=detail;const url=new URL(location.href);if(detail)url.searchParams.set("careerDetail",detail);else url.searchParams.delete("careerDetail");location.search=url.search;location.href=url.href;},onView:(view:string)=>{props.view=view;props.detail=null;const url=new URL(location.href);url.searchParams.set("career",view);url.searchParams.delete("careerDetail");location.search=url.search;location.href=url.href;}};
   const render=()=>{cursor=0;const tree=exports.CareerHub(props),batch=pending;pending=[];batch.forEach(fn=>fn());return tree;};
   const selected=(tree:any)=>uiNodes(tree).filter(n=>n.props.role==="tabpanel"&&!n.props.hidden);
-  return{props,render,selected,scrollKeys,location,pop(next:string){location.search=next;location.href=`https://dev.thebackyard.com.mx/${next}`;props.view=careerNavigation.careerViewFromSearch(next);listeners.get("popstate")?.();},select(tree:any,view:string){uiFind(tree,n=>n.type==="CareerTabs").props.onView(view);}};
+  return{props,render,selected,scrollKeys,location,pop(next:string){location.search=next;location.href=`https://dev.thebackyard.com.mx/${next}`;props.view=careerNavigation.careerViewFromSearch(next);props.detail=careerNavigation.careerDetailFromSearch(next);listeners.get("popstate")?.();},select(tree:any,view:string){uiFind(tree,n=>n.type==="CareerTabs").props.onView(view);}};
 }
 
 test("Career entry starts at Resumen with tabs first, no hero, and Index/Atest inside that panel",()=>{
@@ -96,6 +96,16 @@ test("panels are account-scoped and inactive content stays outside the accessibl
   const h=shell();let tree=h.render();h.select(tree,"rounds");tree=h.render();
   h.props.userId="qa-other";tree=h.render();assert.equal(uiNodes(tree).filter(n=>n.props.role==="tabpanel").length,1);
   const panel=h.selected(tree)[0];assert.equal(panel.props["aria-labelledby"],"career-tab-rounds");assert.equal(panel.props.tabIndex,0);
+});
+test("clearing Summary detail restores the overview without remounting visited panels",()=>{
+  const h=shell("?screen=career&career=summary&careerDetail=attest");let tree=h.render();
+  const before=uiFind(tree,n=>n.props.id==="career-panel-summary");
+  h.props.onDetail(null);tree=h.render();
+  assert.equal(uiFind(tree,n=>n.type==="CareerIndexPanel").props.detail,null);
+  const overview=uiFind(tree,n=>n.type==="CareerOverview");
+  assert.equal(uiNodes(tree).find(n=>n.props.children===overview)?.props.hidden,false);
+  assert.equal(uiFind(tree,n=>n.props.id==="career-panel-summary").type,before.type);
+  assert.equal(h.scrollKeys.at(-1),"summary:section");
 });
 test("tab navigation has linked ARIA states, five fixed columns, and no document anchors",()=>{
   const shared=readFileSync("app/components/career-shared.tsx","utf8"),hub=readFileSync("app/components/career-hub.tsx","utf8"),css=readFileSync("app/components/career-hub.module.css","utf8");

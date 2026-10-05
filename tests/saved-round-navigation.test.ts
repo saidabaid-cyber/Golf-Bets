@@ -5,7 +5,7 @@ import ts from "typescript";
 import * as navigation from "../lib/app-navigation";
 import * as careerNavigation from "../lib/career-navigation";
 
-type Hook = { tab: navigation.AppTab; careerView:careerNavigation.CareerView;setCareerView:(view:careerNavigation.CareerView)=>void; historyDetailId: string | null; setTab: (tab: navigation.AppTab, options?: { roundId?: string | null; careerView?: careerNavigation.CareerView }) => void; setNavigationGuard: (guard: (tab: navigation.AppTab) => navigation.AppTab) => void };
+type Hook = { tab: navigation.AppTab; careerView:careerNavigation.CareerView;setCareerView:(view:careerNavigation.CareerView)=>void; careerDetail:careerNavigation.CareerDetail;setCareerDetail:(detail:careerNavigation.CareerDetail)=>void; historyDetailId: string | null; setTab: (tab: navigation.AppTab, options?: { roundId?: string | null; careerView?: careerNavigation.CareerView }) => void; setNavigationGuard: (guard: (tab: navigation.AppTab) => navigation.AppTab) => void };
 
 /** Execute the real navigation hook with browser history and React state
  * boundaries, without loading unrelated providers or a remote database. */
@@ -67,6 +67,22 @@ test("switching from an index detail clears only the detail and Back/Forward res
   assert.equal(new URLSearchParams(browser.location.search).get("unrelated"),"keep");
   browser.history.back();assert.equal(render().careerView,"summary");assert.equal(new URLSearchParams(browser.location.search).get("careerDetail"),"attest");
   browser.history.forward();assert.equal(render().careerView,"achievements");assert.equal(render().tab,"career");
+});
+test("bottom-nav Career clears a live Summary detail in state and URL, while Back restores it",()=>{
+  const browser=browserAt("?screen=career&career=summary&unrelated=keep"),render=mount(browser);
+  for(const detail of ["attest","index"] as const){
+    render().setCareerDetail(detail);
+    assert.equal(render().careerDetail,detail);
+    render().setTab("career",{careerView:"summary"});
+    assert.equal(render().careerDetail,null);
+    assert.equal(render().careerView,"summary");
+    assert.equal(new URLSearchParams(browser.location.search).has("careerDetail"),false);
+    assert.equal(new URLSearchParams(browser.location.search).get("unrelated"),"keep");
+    browser.history.back();assert.equal(render().careerDetail,detail);
+    browser.history.forward();assert.equal(render().careerDetail,null);
+  }
+  const page=readFileSync("app/page.tsx","utf8");
+  assert.match(page,/detail=\{careerDetail\} onDetail=\{setCareerDetail\}/);
 });
 test("Career subviews do not change global routes or prevent returning to Inicio/Play/Coach/Reglas",()=>{
   const browser=browserAt("?screen=career&career=rounds"),render=mount(browser);
