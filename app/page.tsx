@@ -1,4 +1,6 @@
 "use client";
+import { pollaCloudConfigured } from "../lib/supabase/client";
+import { POLLA_LIVE_RELEASED } from "../lib/feature-flags";
 
 import { useGroupWizardViewport } from "./components/use-group-wizard-viewport";
 import "./functional-ux.css";
@@ -3884,7 +3886,7 @@ function GolfBetsApp() {
     />}
     {showPageBack && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
-    {tab === "career" && <CareerHub displayName={identity.displayName} avatarUrl={identity.avatarUrl} userId={identity.userId} index={accountIndex} insights={betaGolfInsights} rounds={statisticsHistory} ready={statisticsReady} history={history} error={statisticsAuthority.state === "unavailable"} view={careerView} onView={setCareerView} onOpenStats={() => setTab("stats")} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} onCreateRound={requestNewRound} onFindRival={() => openCareerFriends("search")} onRetry={() => setStatisticsRetry(value => value + 1)} username={identity.username} club={identity.homeClub} city={identity.city} ghin={ghinControl} accessToken={identity.accessToken} onOpenProfile={openProfileRoot} onExploreTournaments={() => setTab("pollaLive")} />}
+    {tab === "career" && <CareerHub displayName={identity.displayName} avatarUrl={identity.avatarUrl} userId={identity.userId} index={accountIndex} insights={betaGolfInsights} rounds={statisticsHistory} ready={statisticsReady} history={history} error={statisticsAuthority.state === "unavailable"} view={careerView} onView={setCareerView} onOpenStats={() => setTab("stats")} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} onCreateRound={requestNewRound} onFindRival={() => openCareerFriends("search")} onRetry={() => setStatisticsRetry(value => value + 1)} username={identity.username} club={identity.homeClub} city={identity.city} ghin={ghinControl} accessToken={identity.accessToken} onOpenProfile={openProfileRoot} onExploreTournaments={POLLA_LIVE_RELEASED && pollaCloudConfigured ? () => setTab("pollaLive") : undefined} />}
     {tab === "friends" && <FriendsHub key={`${identity.userId}:${friendsInitialView}:${friendsEntry}`} ownerId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} name={identity.displayName} username={identity.username || ""} avatar={identity.avatarUrl || ""} initialView={friendsInitialView} targetId={socialTarget} onCloseTarget={closeFriendTarget} />}
     {tab === "coach" && <MyCoach insights={betaGolfInsights} ready={statisticsReady} onBallFit={() => openCoachFitting(false)} onLaunchMonitor={() => openCoachFitting(true)} onProgress={() => setTab("stats")} onEquipment={() => { setLaunchMonitorEntry(false); setProfileCompletionTarget("equipment"); setProfileFocus("equipment"); setTab("profile"); }} />}
 

@@ -46,6 +46,7 @@ test("private tournament reader scopes account before any sports reads and denie
   assert.equal(result.events.length,0);assert.deepEqual(calls[0].filters,[["profile_id","owner"]]);assert.equal(calls.some(c=>c.table==="tournament_scores"),false);
 });
 test("API denies expired auth before service access, is private and cannot use a requested user id",async()=>{
+  assert.match(readFileSync("app/api/career/tournaments/route.ts","utf8"),/getSupabaseAdmin\("cloud",10000\)/);
   const source=ts.transpileModule(readFileSync("app/api/career/tournaments/route.ts","utf8"),{fileName:"route.ts",compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   let serviceCalls=0;const exports:any={};runInNewContext(source,{exports,require:()=>({NextResponse:{json:(body:any,options:any)=>({body,...options})},authenticatedRequest:async()=>({ok:false,status:401,error:"Expired",code:"AUTH_REQUIRED"}),getSupabaseAdmin(){serviceCalls++;}})});
   const result=await exports.GET({nextUrl:new URL("https://dev.thebackyard.com.mx/api/career/tournaments?userId=other")});
