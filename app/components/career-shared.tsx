@@ -1,12 +1,19 @@
 "use client";
-import { type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { CAREER_TABS, type CareerView } from "../../lib/career-navigation";
 import styles from "./career-hub.module.css";
 export function CareerHeader() {
   return <header className={styles.heading}><span className={styles.eyebrow}>THE BACKYARD · TU TRAYECTORIA</span><h1>Carrera</h1><p>Tu historia en el golf. Rondas, logros y grandes momentos.</p></header>;
 }
 export function CareerTabs({ view, onView }: { view: CareerView; onView: (view: CareerView) => void }) {
-  return <nav className={styles.tabs} aria-label="Secciones de Carrera">{CAREER_TABS.map(tab => <button type="button" key={tab.id} aria-current={view === tab.id ? "page" : undefined} onClick={() => onView(tab.id)}>{tab.label}</button>)}</nav>;
+  const navigation = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const container = navigation.current, selected = container?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!container || !selected) return;
+    const parent = container.getBoundingClientRect(), child = selected.getBoundingClientRect();
+    if (child.left < parent.left || child.right > parent.right) container.scrollTo({left: container.scrollLeft + child.left - parent.left - (container.clientWidth - child.width) / 2});
+  }, [view]);
+  return <nav ref={navigation} className={styles.tabs} aria-label="Secciones de Carrera">{CAREER_TABS.map(tab => <button type="button" key={tab.id} aria-current={view === tab.id ? "page" : undefined} onClick={() => onView(tab.id)}>{tab.label}</button>)}</nav>;
 }
 export function CareerEmptyState({ title, description, action, onAction }: { title: string; description?: string; action?: string; onAction?: () => void }) {
   return <div className={styles.empty}><span className={styles.emptyMark} aria-hidden="true">⚑</span><h3>{title}</h3>{description && <p>{description}</p>}{action && onAction && <button type="button" className={styles.goldButton} onClick={onAction}>{action} <span aria-hidden="true">›</span></button>}</div>;
