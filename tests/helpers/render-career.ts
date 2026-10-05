@@ -13,7 +13,7 @@ export function careerModule(relative: string): Record<string, any> {
   if (cache.has(file)) return cache.get(file)!;
   const exports: Record<string, any> = {}; cache.set(file, exports);
   const source = ts.transpileModule(readFileSync(file, "utf8"), { fileName: file, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
-  runInNewContext(source, { exports, URL, URLSearchParams, Date, Set, Map, Object, Number, Math, Intl, console, require(id: string) {
+  runInNewContext(source, { exports, URL, URLSearchParams, Date, Set, Map, Object, Number, Math, Intl, console, process: {env:{}}, require(id: string) {
     if (id.endsWith(".css")) return { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) };
     if (!id.startsWith(".")) return realRequire(id);
     const path = resolve(dirname(file), id);
