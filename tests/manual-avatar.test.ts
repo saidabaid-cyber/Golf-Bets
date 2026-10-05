@@ -205,7 +205,9 @@ test("Home, navegación, ronda y Social consumen el mismo media validado; onboar
   const social = readFileSync("app/components/social-connections-panel.tsx", "utf8");
   const group = readFileSync("app/components/beta-onboarding-flow.tsx", "utf8");
   assert.match(media, /safeProfileAvatarValue\(value\)/);
-  assert.match(home, /<ProfileAvatarMedia[^>]*value=\{avatarUrl\}/);
+  // The legacy composer avatar moved out of Home. Personal QR still receives
+  // the same identity media through the embedded FriendsHub.
+  assert.match(home, /<FriendsHub[^>]*avatar=\{avatarUrl \|\| ""\}/);
   assert.match(navigation, /<ProfileAvatarMedia value=\{avatarUrl\}/);
   assert.match(round, /<ProfileAvatarMedia className=\{styles.avatar\} value=\{activePlayer.id === owner\?\.id \? ownerAvatarUrl : undefined\}/);
   assert.match(social, /<ProfileAvatarMedia value=\{person.avatar_url\}/);

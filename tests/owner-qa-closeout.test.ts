@@ -67,7 +67,7 @@ test("los wizards reinician su propio scroll y conservan el contexto detrás", (
 
 test("Inicio is the existing social feed and round creation remains in Play", () => {
   const home = read("app/components/home-dashboard.tsx");
-  assert.match(home, /data-home-version="community-feed-v3"/);
+  assert.match(home, /data-home-version="social-home"/);
   assert.match(home, /CloudSocialActivity/);
   assert.match(home, /onOpenFriends/);
   assert.match(home, /onOpenRounds/);

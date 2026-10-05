@@ -5,23 +5,23 @@ import test from "node:test";
 const home = readFileSync("app/components/home-dashboard.tsx", "utf8");
 const page = readFileSync("app/page.tsx", "utf8");
 test("Inicio composes the real paginated friends feed, without private local history or duplicate destinations", () => {
-  assert.match(home, /data-home-version="community-feed-v3"/);
-  assert.match(home, /<CloudSocialActivity key=\{identityUserId\} viewerId=\{identityUserId\} accessToken=\{accessToken\} friendsOnly/);
+  assert.match(home, /data-home-version="social-home"/);
+  assert.match(home, /<CloudSocialActivity[^>]*viewerId=\{identityUserId\}[^>]*accessToken=\{accessToken\}[^>]*friendsOnly/);
   assert.doesNotMatch(home, /QuickCard|onOpenStats|onOpenRules|onAiRound|insights|activeRound=|fake|fixture/i);
-  assert.match(home, /Amigos y solicitudes/);
-  assert.match(home, /Qué comparto/);
+  assert.match(home, /Secciones de Inicio/);
+  assert.match(home, /Agregar amigos/);
   assert.match(page, /onPrivacy=\{\(\) => openAccountSettings\("privacy"\)\}/);
 });
-test("composer enables saved rounds and leaves unsupported manual publishing disabled", () => {
-  assert.match(home, /¿Qué estás compartiendo hoy\?/);
-  assert.match(home, /onClick=\{onOpenRounds\}>⚑ Ronda/);
-  for (const label of ["Foto", "Logro", "Encuesta"]) assert.match(home, new RegExp('disabled[^>]*>[^<]*' + label));
+test("Inicio replaces the legacy composer with the three social views", () => {
+  assert.doesNotMatch(home, /¿Qué estás compartiendo hoy\?|Encuesta|styles.composer|Amigos y solicitudes|Qué comparto/);
+  assert.match(home, /'feed','Feed'[\s\S]*'friends','Amigos'[\s\S]*'add-friends','Agregar amigos'/);
   assert.match(page, /onOpenRounds=\{\(\) => setTab\("history"\)\}/);
 });
 test("server-filtered feed retains pagination, truthful empty states, likes and comments", () => {
   const feed = readFileSync("app/components/cloud-social-activity.tsx", "utf8");
   assert.match(feed, /nextCursor/);
-  assert.match(feed, /Ver más actividad/);
+  assert.match(feed, /IntersectionObserver/);
+  assert.doesNotMatch(feed, /Actualizar feed|Ver más actividad/);
   assert.match(feed, /Aún no hay actividad compartida/);
   assert.match(feed, /expectedHash: card.currentHash/);
   assert.match(feed, /\/api\/social\/activity/);

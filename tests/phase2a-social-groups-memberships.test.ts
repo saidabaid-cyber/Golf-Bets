@@ -131,8 +131,10 @@ test("Social UI, server search, memberships and Home V2 remain reachable", () =>
   assert.match(search, /search_social_profiles_v2/);
   assert.doesNotMatch(search, /handicap|club_name/);
   assert.match(membership, /BETA PRO/);
-  assert.match(home, /data-home-version="community-feed-v3"/);
+  assert.match(home, /data-home-version="social-home"/);
   assert.match(home, /CloudSocialActivity/);
-  assert.match(home, /Amigos y solicitudes/);
+  assert.match(home, /Secciones de Inicio/);
+  assert.match(home, /\['friends','Amigos'\]/);
+  assert.match(home, /<FriendsHub/);
   assert.doesNotMatch(home, /Más de The Backyard|CONFIGURAR MANUALMENTE/);
 });

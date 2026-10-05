@@ -68,7 +68,8 @@ test("Career selects exactly five views; Friends remains its existing independen
     click(tree, selected.label);
   }
   assert.deepEqual(views, careerNavigation.CAREER_TABS.map(v => v.id));
-  assert.match(readFileSync("app/page.tsx", "utf8"), /tab === "friends" && <FriendsHub/);
+  assert.match(readFileSync("app/page.tsx", "utf8"), /tab === "welcome" \|\| tab === "friends"/);
+  assert.match(readFileSync("app/components/home-dashboard.tsx","utf8"),/<FriendsHub[\s\S]*embedded/);
 });
 for (const count of [0, 5, 20, 100]) test(`existing graph list supports ${count} friends, local filter and compact profile rows`, async () => {
   const h = setup(count); h.render(); await flush(); let tree = h.render();

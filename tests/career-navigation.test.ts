@@ -21,6 +21,7 @@ test("Carrera reuses authoritative statistics and existing achievement/round han
   assert.match(career, /CareerTabs/);
   assert.match(career, /CareerSkeleton/);
   assert.match(career, /CareerErrorState/);
-  assert.match(page, /tab === "friends" && <FriendsHub/);
+  assert.match(page, /tab === "welcome" \|\| tab === "friends"/);
+  assert.match(readFileSync("app/components/home-dashboard.tsx", "utf8"), /<FriendsHub[\s\S]*?embedded/);
   assert.doesNotMatch(career, /#12|245|Birdie Master|82\.5|77%/);
 });
