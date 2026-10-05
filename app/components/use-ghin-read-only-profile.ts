@@ -101,6 +101,7 @@ function parseCandidate(value: unknown): { challengeId: string; golfer: GhinAuth
 export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnlyProfileController {
   const generation = useRef(0);
   const challenge = useRef<string | null>(null);
+  const scoresAccount = useRef<string | null>(null);
   const [state, setState] = useState({
     featureEnabled: false,
     ready: !accessToken,
@@ -258,7 +259,10 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
     try {
       const parsed = parseScores(await post({ operation: "scores" }));
       if (!parsed) throw new Error("La respuesta de scores no es válida.");
-      if (generation.current === token) setState((current) => ({ ...current, scoresLoading: false, scores: parsed, reauthorizationRequired: false, error: "" }));
+      if (generation.current === token) {
+        scoresAccount.current = accessToken;
+        setState((current) => ({ ...current, scoresLoading: false, scores: parsed, reauthorizationRequired: false, error: "" }));
+      }
     } catch (error) {
       const failure = error as ApiFailure;
       if (generation.current === token) setState((current) => ({ ...current, scoresLoading: false, reauthorizationRequired: failure.code === "REAUTH_REQUIRED", error: failure.message || "No se pudo consultar el scoring record." }));
@@ -275,7 +279,7 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
     reauthorizationRequired: state.reauthorizationRequired,
     profile: state.profile,
     candidate: state.candidate,
-    scores: state.scores,
+    scores: scoresAccount.current === accessToken ? state.scores : null,
     error: state.error,
     authorize,
     confirm,

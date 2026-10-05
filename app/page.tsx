@@ -1817,8 +1817,8 @@ function GolfBetsApp() {
       window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
       return;
     }
-    setTab(target);
-    window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
+    setTab(target, target === "career" ? { careerView: "summary" } : undefined);
+    window.setTimeout(() => window.scrollTo({ top: 0, behavior: target === "career" ? "instant" : "smooth" }), 0);
   }
 
   function openRulesForRound() {

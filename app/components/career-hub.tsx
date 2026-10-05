@@ -7,7 +7,7 @@ import type { GolfInsights } from "../../lib/golf-insights";
 import type { RoundSnapshot } from "../../lib/types";
 import type { SelectedHandicapIndex } from "../../lib/handicap-source";
 import { CAREER_TABS, careerDetailFromSearch, type CareerView } from "../../lib/career-navigation";
-import type { GhinProfileProjection } from "../../lib/ghin/profile";
+import type { GhinReadOnlyProfileController } from "./use-ghin-read-only-profile";
 import type { CareerCompetitionEvidence } from "../../lib/round-achievements";
 import { CareerTabs, CareerSkeleton, CareerErrorState } from "./career-shared";
 import { useViewScrollReset } from "./use-view-scroll-reset";
@@ -20,7 +20,7 @@ const CareerTournaments = dynamic(() => import("./career-tournaments").then(m =>
 export type CareerHubProps = {
   displayName: string; avatarUrl?: string | null; userId: string; index: SelectedHandicapIndex;
   username?: string | null; club?: string | null; city?: string | null; accessToken?: string | null;
-  ghin?: { profile: GhinProfileProjection | null; enabled: boolean;ready?:boolean; error?: string | null };
+  ghin?: Pick<GhinReadOnlyProfileController,"profile"|"enabled"> & Partial<Pick<GhinReadOnlyProfileController,"ready"|"error"|"scores"|"scoresLoading"|"reauthorizationRequired"|"loadScores">>;
   insights: GolfInsights; rounds: RoundSnapshot[]; history?: RoundSnapshot[]; ready: boolean; error?: boolean;
   view: CareerView; onView: (view: CareerView) => void;
   onOpenStats: () => void; onOpenHistory: () => void; onOpenRound: (id: string) => void;

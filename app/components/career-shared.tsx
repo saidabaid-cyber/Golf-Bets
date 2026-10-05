@@ -1,15 +1,9 @@
 "use client";
-import { type ReactNode, type KeyboardEvent, useEffect, useRef } from "react";
+import { type ReactNode, type KeyboardEvent, useRef } from "react";
 import { CAREER_TABS, type CareerView } from "../../lib/career-navigation";
 import styles from "./career-hub.module.css";
 export function CareerTabs({ view, onView }: { view: CareerView; onView: (view: CareerView) => void }) {
   const navigation = useRef<HTMLElement>(null);
-  useEffect(() => {
-    const container = navigation.current, selected = container?.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!container || !selected) return;
-    const parent = container.getBoundingClientRect(), child = selected.getBoundingClientRect();
-    if (child.left < parent.left || child.right > parent.right) container.scrollTo({left: container.scrollLeft + child.left - parent.left - (container.clientWidth - child.width) / 2});
-  }, [view]);
   function onKey(event:KeyboardEvent<HTMLButtonElement>,index:number){
     const next=event.key==="ArrowRight"?(index+1)%CAREER_TABS.length:event.key==="ArrowLeft"?(index+CAREER_TABS.length-1)%CAREER_TABS.length:event.key==="Home"?0:event.key==="End"?CAREER_TABS.length-1:null;
     if(next===null)return;event.preventDefault();onView(CAREER_TABS[next].id);navigation.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus({preventScroll:true});

@@ -97,14 +97,14 @@ test("panels are account-scoped and inactive content stays outside the accessibl
   h.props.userId="qa-other";tree=h.render();assert.equal(uiNodes(tree).filter(n=>n.props.role==="tabpanel").length,1);
   const panel=h.selected(tree)[0];assert.equal(panel.props["aria-labelledby"],"career-tab-rounds");assert.equal(panel.props.tabIndex,0);
 });
-test("tab navigation has linked ARIA states, horizontal overflow, and no document anchors",()=>{
+test("tab navigation has linked ARIA states, five fixed columns, and no document anchors",()=>{
   const shared=readFileSync("app/components/career-shared.tsx","utf8"),hub=readFileSync("app/components/career-hub.tsx","utf8"),css=readFileSync("app/components/career-hub.module.css","utf8");
   assert.match(shared,/role="tablist"/);assert.match(shared,/role="tab"/);assert.match(shared,/aria-selected/);assert.match(shared,/ArrowRight/);assert.match(shared,/ArrowLeft/);assert.match(shared,/preventScroll:true/);
-  assert.match(css,/\.tabs\{position:sticky/);assert.match(css,/--career-header-height/);assert.match(css,/overflow-x:auto/);assert.match(css,/white-space:nowrap/);assert.match(css,/min-height:44px/);assert.match(css,/\.content\[hidden\]\{display:none\}/);
+  assert.match(css,/\.tabs\{position:sticky/);assert.match(css,/--career-header-height/);assert.match(css,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);assert.doesNotMatch(css.match(/\.tabs\{[^}]+\}/)?.[0]??"",/overflow-x:auto/);assert.match(css,/white-space:nowrap/);assert.match(css,/min-height:44px/);assert.match(css,/\.content\[hidden\]\{display:none\}/);
   assert.doesNotMatch(shared+hub,/scrollIntoView|href=["']#|getElementById/);
   assert.deepEqual(CAREER_TABS.map(t=>t.label),["Resumen","Logros","Rivalidades","Rondas","Torneos"]);
 });
-test("narrow tab strip reveals selection horizontally and keyboard focus never scrolls the document",()=>{
+test("fixed tab strip never scrolls horizontally and keyboard focus never scrolls the document",()=>{
   const selections:string[]=[],focusOptions:any[]=[],horizontal:any[]=[];
   const selected={getBoundingClientRect:()=>({left:440,right:530,width:90})};
   const buttons=CAREER_TABS.map(()=>({focus:(options:any)=>focusOptions.push(options)}));
@@ -120,7 +120,7 @@ test("narrow tab strip reveals selection horizontally and keyboard focus never s
   const tabs=uiNodes(tree).filter(n=>n.props.role==="tab");
   assert.equal(tabs.length,5);assert.equal(tabs.filter(n=>n.props["aria-selected"]).length,1);
   assert.equal(tabs[4].props.tabIndex,0);assert.equal(tabs[4].props["aria-controls"],"career-panel-tournaments");
-  assert.equal(horizontal.length,1);assert.equal(typeof horizontal[0].left,"number");assert.equal(horizontal[0].top,undefined);
+  assert.equal(horizontal.length,0);assert.doesNotMatch(readFileSync("app/components/career-shared.tsx","utf8"),/scrollTo|scrollLeft|getBoundingClientRect/);
   let prevented=0;tabs[4].props.onKeyDown({key:"ArrowRight",preventDefault:()=>prevented++});
   tabs[0].props.onKeyDown({key:"End",preventDefault:()=>prevented++});
   tabs[4].props.onKeyDown({key:"Home",preventDefault:()=>prevented++});

@@ -5,7 +5,7 @@ import ts from "typescript";
 import * as navigation from "../lib/app-navigation";
 import * as careerNavigation from "../lib/career-navigation";
 
-type Hook = { tab: navigation.AppTab; careerView:careerNavigation.CareerView;setCareerView:(view:careerNavigation.CareerView)=>void; historyDetailId: string | null; setTab: (tab: navigation.AppTab, options?: { roundId?: string | null }) => void; setNavigationGuard: (guard: (tab: navigation.AppTab) => navigation.AppTab) => void };
+type Hook = { tab: navigation.AppTab; careerView:careerNavigation.CareerView;setCareerView:(view:careerNavigation.CareerView)=>void; historyDetailId: string | null; setTab: (tab: navigation.AppTab, options?: { roundId?: string | null; careerView?: careerNavigation.CareerView }) => void; setNavigationGuard: (guard: (tab: navigation.AppTab) => navigation.AppTab) => void };
 
 /** Execute the real navigation hook with browser history and React state
  * boundaries, without loading unrelated providers or a remote database. */
@@ -72,6 +72,21 @@ test("Career subviews do not change global routes or prevent returning to Inicio
   const browser=browserAt("?screen=career&career=rounds"),render=mount(browser);
   for(const tab of ["welcome","play","coach","rules","career"] as const){render().setTab(tab);assert.equal(render().tab,tab);}
   assert.equal(render().careerView,"rounds");
+});
+
+for (const previous of ["achievements", "tournaments"] as const) test(`bottom-nav Career opens summary after visiting ${previous}, preserving Back/Forward`, () => {
+  const browser=browserAt(`?screen=career&career=${previous}&careerDetail=index`),render=mount(browser);
+  render().setTab("welcome");
+  render().setTab("career",{careerView:"summary"});
+  assert.equal(render().careerView,"summary");
+  assert.equal(render().tab,"career");
+  assert.equal(new URLSearchParams(browser.location.search).has("careerDetail"),false);
+  browser.history.back();assert.equal(render().tab,"welcome");
+  browser.history.back();assert.equal(render().careerView,previous);
+  browser.history.forward();browser.history.forward();assert.equal(render().careerView,"summary");
+  const page=readFileSync("app/page.tsx","utf8");
+  const adapter=page.slice(page.indexOf("function navigateFromBottomBar"),page.indexOf("function openRulesForRound"));
+  assert.match(adapter,/setTab\(target, target === "career" \? \{ careerView: "summary" \} : undefined\)/);
 });
 
 test("opening another historical round and browser Back restore the respective selections", () => {
