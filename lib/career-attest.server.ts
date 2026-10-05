@@ -6,7 +6,7 @@ import { careerAttestSummary, type AttestEvidence, type CareerAttestCard } from 
 import type { RoundSnapshot } from "./types";
 type Row={id:string;owner_id:string;local_round_id:string;version:number;snapshot:RoundSnapshot};
 /** Private own-history projection. No social-sharing opt-in is required to read one's own attest status. */
-export async function readCareerAttest(admin:SupabaseClient,account:string) {
+export async function readCareerAttest(admin:SupabaseClient,account:string,viewer:SupabaseClient) {
   const [owned,links]=await Promise.all([
     admin.from("rounds_cloud").select("id,owner_id,local_round_id,version,snapshot").eq("owner_id",account).order("created_at",{ascending:false}).limit(1000),
     admin.from("social_round_account_links_v3").select("round_id,player_key,verified_by").eq("user_id",account).eq("verified_by","SELF_CONFIRMED").limit(1000),
@@ -26,7 +26,9 @@ export async function readCareerAttest(admin:SupabaseClient,account:string) {
   }
   candidates.sort((a,b)=>b.row.snapshot.date.localeCompare(a.row.snapshot.date)||b.row.snapshot.completedAt!.localeCompare(a.row.snapshot.completedAt!)||b.row.id.localeCompare(a.row.id));
   const recent=candidates.slice(0,20),ids=recent.map(c=>c.row.id);
-  const attestations=ids.length?await admin.from("social_round_attestations_v3").select("round_id,target_user_id,attester_id,expected_hash,expected_version").eq("target_user_id",account).in("round_id",ids).limit(1000):{data:[],error:null};
+  // The existing authenticated SELECT policy already protects own received
+  // attestations. Service-role source reads do not expand these permissions.
+  const attestations=ids.length?await viewer.from("social_round_attestations_v3").select("round_id,target_user_id,attester_id,expected_hash,expected_version").eq("target_user_id",account).in("round_id",ids).limit(1000):{data:[],error:null};
   if(attestations.error||(attestations.data?.length??0)>=1000)throw Error("CAREER_ATTEST_UNAVAILABLE");
   const cards:Omit<CareerAttestCard,"attested">[]=[];
   for(const {row,card} of recent){const hash=await roundMaterialFingerprint(row.snapshot,account);if(!hash)continue;cards.push({roundId:row.id,date:card.date,completedAt:row.snapshot.completedAt,courseName:card.courseName,score:card.ownerScore!,currentHash:hash,version:Number(row.version)});}
