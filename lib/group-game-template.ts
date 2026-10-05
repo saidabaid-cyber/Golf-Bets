@@ -581,6 +581,18 @@ export function updateGroupTemplateFromRound(
     const player = source.players.find((candidate) => candidate.id === playerId);
     return player ? [[memberId, player] as const] : [];
   }));
+  const gameTemplate = createGroupGameTemplate(source, memberIdByPlayerId);
+  gameTemplate.personalBets = gameTemplate.personalBets.map(bet => {
+    const previous = group.gameTemplate?.personalBets.find(candidate => candidate.id === bet.id);
+    if (!previous?.memberAssignment || !bet.memberAssignment) return bet;
+    if (bet.memberAssignment.principalMemberId && bet.memberAssignment.rivalMemberId) return bet;
+    // Not playing today must not erase a habitual member reference, even when
+    // the owner explicitly saves other round defaults back into the group.
+    return { ...bet, enabled: previous.enabled, advantageReceiver: previous.advantageReceiver, memberAssignment: {
+      principalMemberId: bet.memberAssignment.principalMemberId || previous.memberAssignment.principalMemberId,
+      rivalMemberId: bet.memberAssignment.rivalMemberId || previous.memberAssignment.rivalMemberId,
+    } };
+  });
   return {
     status: "updated",
     group: {
@@ -588,7 +600,7 @@ export function updateGroupTemplateFromRound(
       players: group.players.map((member) => member.memberId && roundPlayerByMemberId.has(member.memberId)
         ? { ...member, handicap: roundPlayerByMemberId.get(member.memberId)!.handicapIndex ?? roundPlayerByMemberId.get(member.memberId)!.handicap }
         : member),
-      gameTemplate: templateWithoutPlayerAssignments(createGroupGameTemplate(source, memberIdByPlayerId)),
+      gameTemplate: templateWithoutPlayerAssignments(gameTemplate),
       updatedAt,
     },
   };

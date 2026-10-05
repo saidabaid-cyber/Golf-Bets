@@ -80,6 +80,19 @@ test("a recurring personal cannot select the same member on both sides", () => {
   assert.ok(groupTemplateConfigurationIssues(group.gameTemplate!, group.players.map(member => ({ id: member.memberId!, name: member.name, handicap: member.handicap }))).blocking.some(issue => issue.code.endsWith("same-player")));
 });
 
+test("saving other round defaults does not erase a rival absent only today", () => {
+  const group = fixture(), round = instantiateGroupGameTemplate(group, id, ["said", "diego"]);
+  const bet = round.supplementalBets[0] as IndividualNassauBet;
+  assert.equal(bet.enabled, false);
+  bet.value = 150;
+  const updated = updateGroupTemplateFromRound(group, round.origin, round, "updated");
+  assert.equal(updated.status, "updated");
+  const habitual = updated.group.gameTemplate!.personalBets[0];
+  assert.deepEqual(habitual.memberAssignment, { principalMemberId: "said", rivalMemberId: "carlos" });
+  assert.equal(habitual.enabled, true); assert.equal(habitual.baseValue, 150);
+  assert.equal(habitual.advantageReceiver, "rival");
+});
+
 test("habitual personal summary and validation use the selected member pair", () => {
   const group = fixture(), players = group.players.map(member => ({ id: member.memberId!, name: member.name, handicap: member.handicap }));
   assert.ok(frequentGroupTemplateDetails(group).includes("Nassau individual · Said vs Carlos $100"));
