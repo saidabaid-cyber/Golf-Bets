@@ -15,6 +15,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { createHash } from "node:crypto";
 import { finalizeOwnerRound } from "../lib/owner-round-finalize";
+import { preserveRoundStatisticsOrigin } from "../lib/statistics-reset";
 
 const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222", C = "33333333-3333-4333-8333-333333333333";
 test("withheld notification privileges preserve card access without bypassing preferences", async () => {
@@ -74,6 +75,15 @@ function group(): FrequentGroup {
   result.gameTemplate = patchGroupTemplateCore(createEmptyGroupGameTemplate(result), "foursome", { enabled: true, mode: "fixed", fixedValue: 200, segmentSize: 6 });
   return result;
 }
+
+test("first canonical completion retains its instant even when an earlier client cached the live card as history", () => {
+  const completed = round();
+  const live = { ...completed, lifecycleState: "live" as const, completedAt: undefined };
+  assert.equal(preserveRoundStatisticsOrigin(completed, live).completedAt, completed.completedAt);
+  assert.equal(preserveRoundStatisticsOrigin(completed, { ...live, lifecycleState: "completed" }).completedAt, completed.completedAt);
+  const legacy = { ...completed, scorekeeping: undefined, completedAt: undefined };
+  assert.equal(preserveRoundStatisticsOrigin(completed, legacy).completedAt, undefined, "old date-only historical records keep their original semantics");
+});
 test("12-member recurring roster serializes while today's outing remains at most five", () => {
   const saved = parseFrequentGroups(serializeFrequentGroups([group()]))[0];
   assert.equal(saved.players.length, 12);

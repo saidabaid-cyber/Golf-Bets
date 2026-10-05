@@ -50,6 +50,10 @@ function roundStatisticsInstant(round: RoundSnapshot) {
  * instead of acquiring a new completion instant during an edit. */
 export function preserveRoundStatisticsOrigin(snapshot: RoundSnapshot, priorRound?: RoundSnapshot | null): RoundSnapshot {
   if (!priorRound || priorRound.id !== snapshot.id) return snapshot;
+  // A live canonical card is not a historical sporting date. Earlier clients
+  // could import it into history before closing; never lose the actual first
+  // completion instant by treating that card as a correction.
+  if (priorRound.scorekeeping?.version === 1 && (priorRound.lifecycleState === "live" || !priorRound.completedAt)) return snapshot;
   return {
     ...snapshot,
     date: priorRound.date,
