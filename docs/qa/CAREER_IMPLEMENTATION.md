@@ -1,5 +1,7 @@
 # Carrera — ejecución en DEV
 
+Este reporte conserva la auditoría y el estado anterior a la aplicación controlada. El [cierre posterior](CAREER_CONTROLLED_CLOSEOUT.md) documenta ambas migraciones aplicadas y verificadas en DEV, la nueva evidencia de permisos/runtime y los pendientes actuales.
+
 ## Entorno y recuperación
 
 Base canónica: `integration/backyard-current`, `e6b9390d1e4ba58e10e02dc6dc7237e1b0963599`, igual al upstream y al deployment READY de `https://dev.thebackyard.com.mx` verificado en Vercel.

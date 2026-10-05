@@ -52,6 +52,18 @@ test("API denies expired auth before service access, is private and cannot use a
   let serviceCalls=0;const exports:any={};runInNewContext(source,{exports,require:()=>({NextResponse:{json:(body:any,options:any)=>({body,...options})},authenticatedRequest:async()=>({ok:false,status:401,error:"Expired",code:"AUTH_REQUIRED"}),getSupabaseAdmin(){serviceCalls++;}})});
   const result=await exports.GET({nextUrl:new URL("https://dev.thebackyard.com.mx/api/career/tournaments?userId=other")});
   assert.equal(result.status,401);assert.equal(serviceCalls,0);assert.equal(result.headers["cache-control"],"private, no-store");
+  const authenticatedExports:any={},readCalls:Array<[string,number]>=[];
+  runInNewContext(source,{exports:authenticatedExports,require:()=>({
+    NextResponse:{json:(body:any,options:any)=>({body,...options})},
+    authenticatedRequest:async()=>({ok:true,userId:"authenticated-owner"}),
+    getSupabaseAdmin(){serviceCalls++;return {};},
+    readCareerTournaments:async(_admin:unknown,userId:string,offset:number)=>{readCalls.push([userId,offset]);return{events:[],nextOffset:null,ranking:null};},
+  })});
+  const scoped=await authenticatedExports.GET({nextUrl:new URL("https://dev.thebackyard.com.mx/api/career/tournaments?userId=other&profile_id=other&offset=10")});
+  assert.deepEqual(readCalls,[["authenticated-owner",10]]);
+  assert.equal(scoped.headers.vary,"Authorization");assert.equal(scoped.headers["cache-control"],"private, no-store");
+  const invalid=await authenticatedExports.GET({nextUrl:new URL("https://dev.thebackyard.com.mx/api/career/tournaments?offset=-1")});
+  assert.equal(invalid.status,400);assert.equal(serviceCalls,1);assert.equal(readCalls.length,1);
 });
 test("tournament reader rejects a truncated participant page before ranking",async()=>{
   const source=ts.transpileModule(readFileSync("lib/career-tournaments.server.ts","utf8"),{fileName:"server.ts",compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
