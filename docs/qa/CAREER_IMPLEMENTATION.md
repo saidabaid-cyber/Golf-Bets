@@ -73,7 +73,7 @@ La inspección posterior identificó el bloqueo real: la DB canónica no concede
 
 ## Verificación final
 
-Código operativo revisado: `03b57de9bbff54e05d2c78095ae264b2f5cd0dee`. Deployment DEV READY `dpl_EWahC7VeuXaS2EY79RsKoA6adiek`, target Preview/null y alias canónico `dev.thebackyard.com.mx`, verificados mediante metadata de Vercel y sesión autenticada en Chrome. El commit final del reporte sólo añade documentación a ese código; debe comprobarse su deployment tras el push.
+Snapshot de QA interactiva: `03b57de9bbff54e05d2c78095ae264b2f5cd0dee`, deployment DEV READY `dpl_EWahC7VeuXaS2EY79RsKoA6adiek`, target Preview/null y alias canónico `dev.thebackyard.com.mx`, verificados mediante metadata de Vercel y sesión autenticada en Chrome. Después se protegió también el enlace al tablero Polla (`32eaef9`) y se ajustó el entorno aislado del harness SSR (`8e7c492`), conservando sus aserciones y sin secretos. La ejecución final vuelve a comprobar suite completa/typecheck/lint/build; el SHA de cierre se obtiene de `git rev-parse HEAD` y se verifica contra el deployment que alimenta el dominio canónico.
 
 | Verificación | Estado | Evidencia y límite |
 | --- | --- | --- |
