@@ -42,3 +42,7 @@ Perfil/club/ciudad e índice canónicos, métricas de tarjetas completas, balanc
 ## Fase 3 — Logros
 
 Catálogo extensible dentro de `round-achievements`, usando su validador estricto de tarjetas. Siete criterios documentados, estados/progreso derivados, fechas y referencia del hito, filtros de estado y detalle de logro. No persiste porcentajes. Salón de la Fama con placa de honor, contrato de ranking empatado y vacío real: no existe fuente global autorizada. 14 tests PASS (5 nuevos y 9 del motor original). CTA social traducido a Logros.
+
+## Fase 4 — Rivalidades
+
+Proyección deportiva sin campos financieros; score bruto, tarjetas completas y mismo par. Identidad Auth/grupo estable, invitado sin vínculo separado por ronda. Filtros, G-P-E, tasa con empates incluidos, rachas, hitos, cara a cara y detalle histórico. Balance propio consolidado del periodo, no del rival seleccionado. Resumen/Win Streak reutilizan esos cálculos. 10 tests de Logros/Rivalidades PASS, incluyendo inyección de dinero en props y SSR de filas/hero que garantiza no renderizarlo. Ninguna nueva tabla.
