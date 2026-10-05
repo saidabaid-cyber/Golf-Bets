@@ -50,6 +50,69 @@ DEV binding: `bymeopxkxapfizeeqeyb`, non-default `phase2-full-platform-qa`, bran
 
 ## Runtime QA
 
-PENDING_INTERACTIVE_QA until deployment. Physical Safari/PWA/iPhone QA remains `PENDING_DEVICE_QA`; viewport checks are not physical-device verification.
+Notification deployment `412d82a46cb13fc045fca0845eabe7f8ce50f7cd`: Vercel Preview READY, alias `dev.thebackyard.com.mx`, health HTTP 200 and exact SHA verified by the guarded QA runner. No Production deployment/promotion.
+
+28 real DEV API checks PASS with existing Diego Green, Carlos Fairway and Fernanda Putt accounts. No accounts created/deleted, no fabricated notification insertion. Event/Social choices persist on fresh GET; master OFF/ON retains their values. Friend-request OFF suppresses the existing trigger insertion. Carlos' OFF request was cancelled by Carlos, his ON request rejected by Fernanda, and Diego's real request accepted by Fernanda. Reciprocal friendship and actor profile resolve correctly. Fernanda accepted the existing QA Foursome invitation, and canonical cloud sync contains the joined group. Read/unread/all-read do not resolve pending invitations. Existing Carlos canonical card `0d37b6e4-0aae-4cdf-81e1-93e8bded8d1d` can be read; confirmation retry preserves one history entry. This retry is not evidence of a newly emitted scorecard notification.
+
+Client RLS checks PASS: Carlos cannot select Fernanda's notices or event preferences; his global notice selection contains only his own recipient ID. Post-QA metadata confirms RLS enabled, anon SELECT false, client recipient reassignment false, own read_at UPDATE true. Server delivery grants remain false: the rejected migration was not applied. 90 event rows / 112 preference rows after ordinary QA actions and existing triggers; no direct event insertion by the QA runner.
+
+**PENDING_INTERACTIVE_QA**: browser access offers email-code login; existing QA credentials use example.invalid addresses and cannot receive that code. No Auth code change, session/storage injection, administrative login link or new account was used. An authenticated DEV browser session was requested. Consequently live bell/actions/Back/Forward/reload have not been declared verified.
+
+Viewport component QA PASS at 390×844 and 430×932 using SSR of the actual notification rows/preferences and actual persisted QA data, in a local static artifact. No page overflow; rows with actions 115px; touch targets at least 44px; 15 switches and zero checkboxes. This static render does not prove client interactions or the authenticated DEV shell. Screenshots in ignored QA artifacts are explicitly labelled static. Physical Safari/PWA/iPhone QA remains **PENDING_DEVICE_QA**.
+
+## Delivery checklist
+
+PASS below denotes an automated component/contract test or the real API checks described above. The separate interactive gate remains pending; **DONE is not declared**.
+
+| NOTIFICATION CENTER | Result |
+| --- | --- |
+| BELL OPENS DIRECTLY / NO COMMUNITY INTERMEDIATE | PASS — navigation contract |
+| UNIFIED LIST / FILTER ALL / FILTER FRIENDS / FILTER GROUPS / FILTER ROUNDS | PASS — presentation tests |
+| UNREAD STATE / MARK READ / MARK ALL READ | PASS — components and real read_at API |
+| NO DUPLICATES | PASS — identity normalization tests |
+
+| FRIENDS | Result |
+| --- | --- |
+| REQUEST / ACCEPT / REJECT | PASS — real DEV requests |
+| FRIEND ACCEPTED | FAIL — no accepted-event emitter; friendship acceptance itself PASS |
+| PROFILE DEEP LINK | PASS — exact actor destination contract and private profile API |
+
+| GROUPS | Result |
+| --- | --- |
+| INCOMING GROUP INVITE / ACCEPT / GROUP APPEARS / OUTGOING NOT COUNTED | PASS — real API and badge normalization |
+| REJECT | BLOCKED — GROUP_INVITE_REJECT_BLOCKED; canonical RPC has no decline action |
+
+| ROUNDS | Result |
+| --- | --- |
+| ROUND INVITE | NOT_EMITTED |
+| ROUND STARTED | FAIL — BLOCKED_EXTERNAL_NOTIFICATION_PERMISSIONS |
+| ROUND FINISHED | NOT_EMITTED |
+| SCORECARD READY | FAIL — BLOCKED_EXTERNAL_NOTIFICATION_PERMISSIONS |
+| PARTICIPANT REVIEW | PASS — existing real card, idempotent confirmation API and component destination; new-notice interaction pending |
+
+| PREFERENCES | Result |
+| --- | --- |
+| NO CHECKBOXES / SWITCHES ONLY | PASS — all 15 rendered controls |
+| MASTER SWITCH | PASS — canonical preference preserves individual settings |
+| FRIEND REQUEST / FRIEND ACCEPTED / GROUP INVITES / ROUND INVITES / ROUND STARTED / ROUND RESULTS / SCORECARD READY | PASS — each event preference saved and reread in DEV |
+| LIKES / COMMENTS / ATTEST / FRIEND ACHIEVEMENTS / EQUIPMENT | PASS — each Social preference saved and reread in DEV |
+| PERSIST AFTER RELOAD | PASS — fresh API reads; browser reload pending |
+
+| DELIVERY / MOBILE | Result |
+| --- | --- |
+| IN_APP | PASS — real friend-request delivery and preference gates; round emitter limitation above |
+| PUSH PROVIDER / EMAIL PROVIDER | NOT_CONFIGURED |
+| NO FALSE PUSH CLAIM / NO FALSE EMAIL CLAIM | PASS |
+| 390x844 / 430x932 / TOUCH TARGETS | PASS — component visual QA only |
+| BOTTOM NAV | PASS — source unchanged, regression contract, baseline DEV observation |
+
+| REGRESSION / BUILD | Result |
+| --- | --- |
+| FRIENDS UNCHANGED / GROUPS UNCHANGED | PASS — existing UX/API contracts; notification adapters only |
+| ROUND ENGINE UNCHANGED / BET ENGINE UNCHANGED / CAREER UNCHANGED / RULES UNCHANGED | PASS — no source changes |
+| TESTS | FAIL — only the five documented baseline failures; 4,350 PASS plus 117 script PASS, zero new FAIL |
+| TYPECHECK / LINT / BUILD | PASS |
+| DEV PUSH | PASS — canonical branch only |
+| DEPLOYMENT | READY — Preview, DEV alias |
 
 Course branch preserved at `6f4f06180d4b0572b298dc705fbcf9c568be70d7`, zero commits merged. Engines, Career, Rules, GHIN, Equipment, Auth, onboarding and Groups/Friends UX sources unchanged (only notification adapters in shared shells/inbox).
