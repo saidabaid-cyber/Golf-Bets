@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createEmptyGroupGameTemplate, instantiateGroupGameTemplate, templateWithoutPlayerAssignments, updateGroupTemplateFromRound } from "../lib/group-game-template";
+import { createEmptyGroupGameTemplate, frequentGroupTemplateDetails, instantiateGroupGameTemplate, templateWithoutPlayerAssignments, updateGroupTemplateFromRound } from "../lib/group-game-template";
 import { parseFrequentGroups, serializeFrequentGroups } from "../lib/frequent-templates";
 import { calculatePersonalBet } from "../lib/engine";
 import { calculateSupplementalBets } from "../lib/supplemental-bets";
@@ -78,6 +78,17 @@ test("runtime edits are isolated; only explicit update stores the changed habitu
 test("a recurring personal cannot select the same member on both sides", () => {
   const group = fixture(); group.gameTemplate!.personalBets[0].memberAssignment!.rivalMemberId = "said";
   assert.ok(groupTemplateConfigurationIssues(group.gameTemplate!, group.players.map(member => ({ id: member.memberId!, name: member.name, handicap: member.handicap }))).blocking.some(issue => issue.code.endsWith("same-player")));
+});
+
+test("habitual personal summary and validation use the selected member pair", () => {
+  const group = fixture(), players = group.players.map(member => ({ id: member.memberId!, name: member.name, handicap: member.handicap }));
+  assert.ok(frequentGroupTemplateDetails(group).includes("Nassau individual · Said vs Carlos $100"));
+  assert.equal(groupTemplateConfigurationIssues(group.gameTemplate!, players).pending.some(issue => issue.code.includes("rival")), false);
+  // A principal distinct from the template owner is still a valid habitual duel.
+  group.gameTemplate!.personalBets[0].memberAssignment!.principalMemberId = "diego";
+  assert.equal(groupTemplateConfigurationIssues(group.gameTemplate!, players).pending.some(issue => issue.code.includes("rival")), false);
+  group.gameTemplate!.personalBets[0].baseValue = -1;
+  assert.ok(groupTemplateConfigurationIssues(group.gameTemplate!, players).blocking.some(issue => issue.code.endsWith("stake")));
 });
 
 

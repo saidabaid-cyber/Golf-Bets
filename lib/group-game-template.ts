@@ -651,7 +651,13 @@ export function frequentGroupTemplateDetails(group: FrequentGroup) {
   add(bets.camels.enabled, "Camellos", bets.camels.value);
   add(bets.fish.enabled, "Peces", bets.fish.value);
   add(bets.loba.enabled, "Loba", bets.loba.value);
-  for (const bet of template.personalBets) add(bet.enabled !== false, `Nassau individual · ${bet.rivalName}`, bet.baseValue);
+  for (const bet of template.personalBets) {
+    const pair = bet.memberAssignment;
+    const principal = pair && group.players.find(player => player.memberId === pair.principalMemberId)?.name;
+    const rival = pair && group.players.find(player => player.memberId === pair.rivalMemberId)?.name;
+    const label = pair ? `${principal || "Principal por elegir"} vs ${rival || "Rival por elegir"}` : bet.rivalName;
+    add(bet.enabled !== false, `Nassau individual · ${label}`, bet.baseValue);
+  }
   for (const bet of template.supplementalBets) {
     const label = "label" in bet && typeof bet.label === "string" && bet.label.trim() ? bet.label : bet.type.replaceAll("_", " ");
     add(bet.enabled !== false, label, "value" in bet && typeof bet.value === "number" ? bet.value : undefined);

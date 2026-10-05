@@ -70,7 +70,7 @@ export function groupTemplateConfigurationIssues(template: GroupGameTemplate, pl
     ownerId: template.ownerMemberId,
     bets: template.betConfig,
     segments: template.foursomeSegments,
-    personalBets: template.personalBets,
+    personalBets: template.personalBets.filter(bet => !bet.memberAssignment),
     supplementalBets: template.supplementalBets,
     manualBets: template.manualBets.map(bet => ({ ...bet, amounts: bet.initialAmounts ?? bet.amounts })),
     roundHoles: template.roundDefaults.roundHoles,
@@ -80,6 +80,18 @@ export function groupTemplateConfigurationIssues(template: GroupGameTemplate, pl
   for (const bet of template.personalBets) {
     if (bet.enabled === false || !bet.memberAssignment) continue;
     const { principalMemberId, rivalMemberId } = bet.memberAssignment;
+    // Validate each habitual duel against its own stable principal, using the
+    // existing personal validator. The template never stores runtime IDs.
+    const personalIssues = collectBetConfigurationIssues({
+      players, ownerId: principalMemberId, bets: template.betConfig,
+      segments: template.foursomeSegments,
+      personalBets: [{ ...bet, rivalMode: "group", rivalPlayerId: rivalMemberId }],
+      supplementalBets: [], manualBets: [],
+      roundHoles: template.roundDefaults.roundHoles,
+      startHole: template.roundDefaults.startHole,
+      handicapBasis: template.roundDefaults.handicapBasis,
+    }).filter(issue => issue.code === "personal-owner" || issue.code.startsWith(`personal-${bet.id}-`));
+    issues.push(...personalIssues);
     if (principalMemberId && principalMemberId === rivalMemberId) issues.push({ code: `habitual-${bet.id}-same-player`, sectionId: "setup-personals", message: "Principal y rival deben ser jugadores distintos." });
   }
   return { blocking: issues.filter((issue) => !isFutureRoundTemplateIssue(issue)), pending: issues.filter(isFutureRoundTemplateIssue) };

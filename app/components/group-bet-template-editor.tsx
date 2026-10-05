@@ -204,7 +204,7 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
     }
     const renderSelection = (items: ReturnType<typeof groupTemplateSelectionDefinitions>, heading: string) => <section className={styles.selectionSection} aria-labelledby={`template-${heading === "Apuestas personales" ? "personal" : "general"}`}>
       <h3 id={`template-${heading === "Apuestas personales" ? "personal" : "general"}`}>{heading}</h3>
-      {heading === "Apuestas personales" && <p className={styles.intro}>Guarda tu configuración habitual; rival, parejas y participantes definitivos se resuelven en cada ronda.</p>}
+      {heading === "Apuestas personales" && <p className={styles.intro}>Guarda principal, rival y reglas habituales. Al iniciar la ronda se verificará quién juega hoy.</p>}
       <div className={styles.modeGrid}>
         {[...items].sort((a,b)=>(presentation.get(a.id)?.order??a.templateEditor.sortOrder)-(presentation.get(b.id)?.order??b.templateEditor.sortOrder)).map((item) => {
           const active = selectionState(item);
@@ -219,7 +219,7 @@ export function GroupBetTemplateEditor({ value, players, ownerId, mode, onChange
       </div>
     </section>;
     return <div className={styles.selection}>
-    <p className={styles.intro}>{mode === "selection" ? "Selecciona tus apuestas habituales. En la siguiente pantalla podrás editar valores y reglas." : "Activa una apuesta para configurar sus valores y reglas. Los jugadores y parejas se eligen al iniciar cada ronda."}</p>
+    <p className={styles.intro}>{mode === "selection" ? "Selecciona tus apuestas habituales. En la siguiente pantalla podrás editar valores y reglas." : "Activa una apuesta para configurar sus valores y reglas. Puedes guardar el principal y rival habituales de tus personales."}</p>
     {mode === "complete" && handicapBasis}
     {renderSelection(sections.general, "Apuestas grupales")}
     {renderSelection(sections.personal, "Apuestas personales")}
