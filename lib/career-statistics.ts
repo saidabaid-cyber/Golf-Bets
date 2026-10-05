@@ -2,6 +2,19 @@ import { deduplicateRoundSnapshots } from "./balance-ledger";
 import { attributableHistory, personalRoundPerspective } from "./participant-history";
 import type { GolfInsights, ScoredRoundInsight } from "./golf-insights";
 import type { RoundSnapshot } from "./types";
+import { validTotalOnly } from "./total-score-round";
+
+export type CareerScoreSample = Pick<ScoredRoundInsight,"id" | "date" | "holeCount" | "gross" | "courseName" | "teeName"> & { relativeToPar?: number; source?: "card" | "declared" };
+export function careerScoreSamples(rounds: readonly RoundSnapshot[], insights: GolfInsights, userId: string): CareerScoreSample[] {
+  const rows: CareerScoreSample[] = insights.recentRounds.map(r => ({ ...r, source:"card" }));
+  const seen = new Set(rows.map(r => r.id));
+  for (const round of ownCareerHistory(rounds,userId)) {
+    if (seen.has(round.id) || !validTotalOnly(round,userId) || !/^\d{4}-\d{2}-\d{2}$/.test(round.date)
+      || !Number.isFinite(Date.parse(round.date)) || new Date(round.date).toISOString().slice(0,10) !== round.date) continue;
+    rows.push({id:round.id,date:round.date,holeCount:round.roundHoles!,gross:round.totalScoreCapture!.grossTotal,courseName:round.courseName,teeName:round.teeName,source:"declared"});
+  }
+  return rows.sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+}
 
 export const careerNumber = (value: number | null | undefined, digits = 0) => value == null || !Number.isFinite(value) ? "—" : value.toLocaleString("es-MX", { maximumFractionDigits: digits, minimumFractionDigits: digits });
 export const careerDate = (date: string) => {
@@ -18,15 +31,15 @@ export function ownCareerHistory(rounds: readonly RoundSnapshot[], userId: strin
     return [perspective];
   });
 }
-const mean = (rows: readonly ScoredRoundInsight[]) => rows.length ? rows.reduce((sum, row) => sum + row.gross, 0) / rows.length : undefined;
+const mean = (rows: readonly CareerScoreSample[]) => rows.length ? rows.reduce((sum, row) => sum + row.gross, 0) / rows.length : undefined;
 /** Recent five versus the preceding five; never mixes 9 and 18 holes. */
-export function careerTrend(rows: readonly ScoredRoundInsight[]) {
+export function careerTrend(rows: readonly CareerScoreSample[]) {
   const sorted = [...rows].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
   if (sorted.length < 4 || new Set(sorted.map(r => r.holeCount)).size !== 1) return undefined;
   const size = Math.min(5, Math.floor(sorted.length / 2));
   return mean(sorted.slice(0, size))! - mean(sorted.slice(size, size * 2))!;
 }
-export function careerSeason(rows: readonly ScoredRoundInsight[], year: number, holes: 9 | 18) {
+export function careerSeason(rows: readonly CareerScoreSample[], year: number, holes: 9 | 18) {
   const current = rows.filter(r => r.holeCount === holes && r.date.startsWith(`${year}-`));
   const previous = rows.filter(r => r.holeCount === holes && r.date.startsWith(`${year - 1}-`));
   const months = Array.from({ length: 12 }, (_, month) => {
@@ -37,7 +50,7 @@ export function careerSeason(rows: readonly ScoredRoundInsight[], year: number, 
     evolution: current.length && previous.length ? mean(current)! - mean(previous)! : undefined,
     trend: careerTrend(current), months };
 }
-export function careerDistribution(rows: readonly ScoredRoundInsight[], holes: 9 | 18) {
+export function careerDistribution(rows: readonly CareerScoreSample[], holes: 9 | 18) {
   const edges = holes === 18 ? [70, 75, 80, 85, 90] : [35, 40, 45, 50, 55];
   return Array.from({ length: 6 }, (_, i) => ({ label: i === 0 ? `<${edges[0]}` : i === 5 ? `${edges[4]}+` : `${edges[i - 1]}–${edges[i] - 1}`,
     count: rows.filter(r => r.holeCount === holes && (i === 0 || r.gross >= edges[i - 1]) && (i === 5 || r.gross < edges[i])).length }));

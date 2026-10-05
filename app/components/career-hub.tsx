@@ -11,6 +11,7 @@ import styles from "./career-hub.module.css";
 const CareerOverview = dynamic(() => import("./career-overview").then(m => m.CareerOverview), { loading: CareerSkeleton });
 const CareerAchievements = dynamic(() => import("./career-achievements").then(m => m.CareerAchievements), { loading: CareerSkeleton });
 const CareerRivalries = dynamic(() => import("./career-rivalries").then(m => m.CareerRivalries), { loading: CareerSkeleton });
+const CareerRounds = dynamic(() => import("./career-rounds").then(m => m.CareerRounds), { loading: CareerSkeleton });
 export type CareerHubProps = {
   displayName: string; avatarUrl?: string | null; userId: string; index: SelectedHandicapIndex;
   username?: string | null; club?: string | null; city?: string | null; accessToken?: string | null;
@@ -24,6 +25,6 @@ export type CareerHubProps = {
 };
 export function CareerHub(props: CareerHubProps) {
   return <section className={styles.screen} aria-label="Carrera"><CareerHeader /><CareerTabs view={props.view} onView={props.onView} /><div className={styles.content} key={props.view}>
-    {!props.ready && !props.error ? <CareerSkeleton /> : props.view === "summary" ? <CareerOverview {...props} /> : props.error ? <CareerErrorState onRetry={props.onRetry} /> : props.view === "achievements" ? <CareerAchievements {...props} /> : props.view === "rivalries" ? <CareerRivalries {...props} /> : <CareerEmptyState title={props.view === "rounds" ? "Tu historia empieza con tu primera ronda." : "Todavía no tienes torneos registrados."} action="Crear ronda" onAction={props.onCreateRound} />}
+    {!props.ready && !props.error ? <CareerSkeleton /> : props.view === "summary" ? <CareerOverview {...props} /> : props.error ? <CareerErrorState onRetry={props.onRetry} /> : props.view === "achievements" ? <CareerAchievements {...props} /> : props.view === "rivalries" ? <CareerRivalries {...props} /> : props.view === "rounds" ? <CareerRounds {...props} /> : <CareerEmptyState title="Todavía no tienes torneos registrados." action="Crear ronda" onAction={props.onCreateRound} />}
   </div></section>;
 }

@@ -46,3 +46,7 @@ Catálogo extensible dentro de `round-achievements`, usando su validador estrict
 ## Fase 4 — Rivalidades
 
 Proyección deportiva sin campos financieros; score bruto, tarjetas completas y mismo par. Identidad Auth/grupo estable, invitado sin vínculo separado por ronda. Filtros, G-P-E, tasa con empates incluidos, rachas, hitos, cara a cara y detalle histórico. Balance propio consolidado del periodo, no del rival seleccionado. Resumen/Win Streak reutilizan esos cálculos. 10 tests de Logros/Rivalidades PASS, incluyendo inyección de dinero en props y SSR de filas/hero que garantiza no renderizarlo. Ninguna nueva tabla.
+
+## Fase 5 — Rondas
+
+Histórico íntegro con estados, filtros, paginación de 10, captura existente del detalle y scorecard real. Analítica respeta reset, separa 9/18 hoyos, distribución, promedio y tendencia (últimas cinco vs. cinco previas, mínimo cuatro); gráfica por fecha y agregación mensual para >40 muestras. Totales declarados válidos aportan sólo score bruto, sin datos por hoyo ni logros. Precisión exclusivamente explícita. 8 tests de Rondas/estadísticas PASS, incluidos datos escasos/muchos y falsos positivos de precisión.
