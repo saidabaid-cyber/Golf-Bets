@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CloudRetryBudget, CloudSyncGate } from "../lib/cloud-sync-gate";
-import { cloudDataFingerprint, cloudSyncPayloadFingerprint, cloudUploadDelta, downloadCloudData, mergeLocalAndCloud, uploadCloudData, type CloudDataBundle } from "../lib/cloud-sync";
+import { cloudDataFingerprint, cloudSyncPayloadFingerprint, cloudSyncUploadRequired, cloudUploadDelta, downloadCloudData, mergeLocalAndCloud, uploadCloudData, type CloudDataBundle } from "../lib/cloud-sync";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { ownerRoundSyncFingerprint, ownerRoundTransportPayload, syncOwnerRound } from "../lib/owner-round-sync";
 import { readCloudBundle, writeCloudBundle } from "../lib/cloud-sync-service";
@@ -135,6 +135,34 @@ test("real cloud service delta merge keeps canonical history, draft scores and r
   const canonical = await readCloudBundle(db.client, "qa", true);
   assert.equal(canonical.history.length, 1); assert.equal(db.rows("rounds_cloud")[0].id, "canonical");
   assert.deepEqual(canonical.activeDraft, next.activeDraft);
+});
+
+test("same-device equal-clock display hydration does not retransmit canonical history", () => {
+  const original = { ...round("display-only"), lifecycleState: "completed" as const, updatedAt: at };
+  const base = bundle({ history: [original], deviceId: "iphone" });
+  const local = { ...base, history: [{ ...original, presentation: { playMode: "score_only" } } as RoundSnapshot] };
+  assert.equal(cloudUploadDelta(local, base).history.length, 0);
+  assert.equal(cloudSyncUploadRequired(local, base), false, "hydration alone never creates a POST");
+  assert.equal(cloudUploadDelta({ ...local, deviceId: "another-device" }, base).history.length, 1,
+    "another device still sends conflicting material for the existing server preflight");
+  assert.equal(cloudUploadDelta({ ...local, history: [{ ...local.history[0], updatedAt: "2026-10-05T12:01:00.000Z" }] }, base).history.length, 1);
+  assert.equal(cloudSyncUploadRequired({ ...local, history: [{ ...local.history[0], updatedAt: "2026-10-05T12:01:00.000Z" }] }, base), true);
+});
+
+test("a live-to-completed owner transition is sent even with an equal revision clock", () => {
+  const original = { ...round("closing"), updatedAt: at, scorekeeping: { version: 1, mode: "owner" } } as RoundSnapshot;
+  const base = bundle({ history: [original], deviceId: "iphone" });
+  const local = { ...base, history: [{ ...original, lifecycleState: "completed" as const, completedAt: at }] };
+  assert.equal(cloudUploadDelta(local, base).history.length, 1);
+});
+
+test("normalizing same-device course cache retains the canonical row and real drafts still upload", () => {
+  const course = { id: "course", name: "Canonical course", updatedAt: at } as CloudDataBundle["courses"][number];
+  const remote = bundle({ deviceId: "iphone", courses: [course] });
+  const local = { ...remote, courses: [{ ...course, localRules: [] }] };
+  assert.equal(cloudSyncUploadRequired(local, remote), false);
+  const edited = { ...local, activeDraft: { roundId: "live", scores: { 1: { p: 4 } } }, activeDraftUpdatedAt: "2026-10-05T12:01:00.000Z" };
+  assert.equal(cloudSyncUploadRequired(edited, remote), true);
 });
 
 test("conditional private GET returns known bundle using only a small receipt", async () => {

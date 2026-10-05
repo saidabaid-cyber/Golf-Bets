@@ -185,7 +185,7 @@ import type { GroupPreference, UserPreference } from "../lib/backyard-ai/memory/
 import { normalizeMexicanSpanish } from "../lib/backyard-ai/runtime/intent-parser";
 import { roundSetupChangeContainsBettingData, runRoundSetupActionWithBettingConsent } from "../lib/backyard-ai/runtime/betting-consent-boundary";
 import type { CompletionSection } from "../lib/profile-completion";
-import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, cloudDraftApplyPlan, cloudSyncPayloadFingerprint, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, hasLocalCloudPreferenceState, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudCheckpoint, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
+import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, cloudDraftApplyPlan, cloudSyncPayloadFingerprint, cloudSyncUploadRequired, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, hasLocalCloudPreferenceState, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudCheckpoint, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
@@ -1320,7 +1320,7 @@ function GolfBetsApp() {
         const completed = await runCloudSyncCycle({
           read, current, status: setCloudStatus,
           merge: mergeLocalAndCloud,
-          shouldUpload: (_local, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
+          shouldUpload: (_local, remote, merged) => cloudSyncUploadRequired(merged, remote),
           download: async () => {
             const data = await withCloudAuthRetry(token => downloadCloudData(token, knownCloud, event => cloudSyncDiagnostic({ ...event,
               trigger, fingerprint, endpoint: "/api/cloud/sync", reason: "canonical-read", result: event.success ? "success" : "failure" })),

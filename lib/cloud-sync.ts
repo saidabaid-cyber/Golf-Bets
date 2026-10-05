@@ -735,11 +735,30 @@ async function parseCloudResponse(response: Response) {
 export function cloudUploadDelta(bundle: CloudDataBundle, base: CloudDataBundle) {
   const delta = { ...bundle };
   for (const key of ["history", "frequentPlayers", "frequentGroups", "rivals", "courses"] as const) {
-    const remote = new Map(base[key].map(item => [item.id, JSON.stringify(stableValue(item))]));
+    const remote = new Map(base[key].map(item => [item.id, item]));
     // These collections are individually keyed, not ordered gameplay arrays.
-    (delta[key] as Array<{ id: string }>) = bundle[key].filter(item => remote.get(item.id) !== JSON.stringify(stableValue(item)));
+    (delta[key] as Array<{ id: string }>) = bundle[key].filter(item => {
+      const other = remote.get(item.id);
+      if (!other) return true;
+      if (JSON.stringify(stableValue(other)) === JSON.stringify(stableValue(item))) return false;
+      if (bundle.deviceId && bundle.deviceId === base.deviceId) {
+        const localRound = item as RoundSnapshot, cloudRound = other as RoundSnapshot;
+        const closing = key === "history" && cloudRound.lifecycleState === "live" && localRound.lifecycleState === "completed" && localRound.scorekeeping?.version === 1;
+        // CAS keeps an equal-clock canonical row. Local display defaults are
+        // not a new revision. Never omit the special live→completed transition
+        // or suppress another device's conflicting material.
+        if (!closing && localRound.updatedAt && localRound.updatedAt === cloudRound.updatedAt) return false;
+      }
+      return true;
+    });
   }
   return delta;
+}
+
+/** Compare the effect of the delta, not local-only display normalization that
+ * CAS would retain unchanged. This also keeps reload hydration GET-only. */
+export function cloudSyncUploadRequired(bundle: CloudDataBundle, remote: CloudDataBundle) {
+  return cloudSyncPayloadFingerprint(mergeLocalAndCloud(cloudUploadDelta(bundle, remote), remote)) !== cloudSyncPayloadFingerprint(remote);
 }
 
 export async function uploadCloudData(bundle: CloudDataBundle, accessToken: string, base?: CloudDataBundle,

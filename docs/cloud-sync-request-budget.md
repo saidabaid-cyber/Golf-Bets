@@ -59,10 +59,23 @@ minimal QA, record actual counts/bytes, and stop.
 
 ## Local verification before DEV deployment
 
-24 additional request-budget/component tests. Directed suite: 181/181 PASS.
+24 initial request-budget/component tests. Directed suite: 181/181 PASS.
 Fresh isolated compilation full suite: 4,477 tests, 4,472 PASS; the same five
 pre-existing failures (equipment owner review, equipment UI contract, brand
 equipment media, Rules accordion and reproducible nightly catalog artifacts).
 Zero new failures. Typecheck, lint and build PASS with external credentials
 blanked. Tests preserve two-device CAS/conflicts, active capture, history,
 owner cancel/finalize, notifications and shared participant behavior.
+
+The minimal DEV opening confirmed idle silence and zero full sync during normal
+tab navigation. Entering Score creates a genuine account-player setup draft
+under the existing hasRoundProgress contract; this is not idle polling.
+Its upload also exposed old equal-clock display defaults in historical rows.
+Omit only those same-device rows that CAS would already retain unchanged;
+keep different-device conflicts and live-to-completed owner transitions.
+Additional tests cover both safeguards and confirm reload hydration remains
+GET-only when the delta has no canonical effect. The mega QA is still paused.
+
+Final local reduction check: 27 new tests in total; 184/184 directed PASS.
+Fresh full suite: 4,480 tests, 4,475 PASS, the same five baseline failures,
+zero new failures. Typecheck/lint/build PASS after the reduction.
