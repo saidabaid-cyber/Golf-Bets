@@ -16,14 +16,14 @@ export type SocialFeedProps = {
   notificationsEnabled: boolean; onNotificationsEnabledChange: (value: boolean) => void;
   onOpenRound: (roundId: string) => void; onOpenGroup: (groupId: string) => void;
   onCreateRound: () => void; onOpenGroups: () => void; onPrivacy?: () => void;
-  onHome?: () => void;
+  onHome?: () => void; onNotifications?: () => void;
 };
-export function SocialFeed({ initialView = "activity", onOpenFriends, identityUserId, accessToken, onOpenGroups, onPrivacy, onHome }: SocialFeedProps) {
+export function SocialFeed({ initialView = "activity", onOpenFriends, identityUserId, accessToken, onOpenGroups, onPrivacy, onHome, onNotifications }: SocialFeedProps) {
   const { retryCloudSync } = useBackyardAccount();
   const [view, setView] = useState<SocialView>(initialView), [menu, setMenu] = useState(false);
   const { unread, refreshUnread } = useGroupNotificationsBadge(accessToken);
   useViewScrollReset(view);
-  function open(next: SocialView) { setMenu(false); if (next === "friends" || next === "qr" || next === "scan") { onOpenFriends(next === "friends" ? "list" : next); return; } setView(next); }
+  function open(next: SocialView) { setMenu(false); if(next === "notifications" && onNotifications){onNotifications();return;} if (next === "friends" || next === "qr" || next === "scan") { onOpenFriends(next === "friends" ? "list" : next); return; } setView(next); }
   function backToActivity() { if (onHome) onHome(); else open("activity"); }
   return <section className={styles.screen} aria-labelledby="social-title">
     <header className={styles.header}><div><span>THE BACKYARD</span><h1 id="social-title">Comunidad</h1></div><div className={styles.actions}>

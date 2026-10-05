@@ -8,13 +8,15 @@ import { ProfileAvatarMedia } from "./profile-avatar-media";
 import styles from "./cloud-social-activity.module.css";
 import { RoundParticipationCard } from "./round-participation-card";
 import { useBackyardAccount } from "./account-provider";
+import { NotificationSwitch } from "./notification-preferences";
+import { notificationsChanged } from "../../features/notifications/client";
 
 const preferenceLabels: Array<[keyof Omit<SocialActivityPreferences, "updatedAt">, string]> = [
   ["enabledForFriends", "Permitir que mis amigos vean la actividad que elija compartir"],
   ["shareRounds", "Compartir rondas terminadas"], ["shareAchievements", "Compartir logros"],
   ["shareEquipment", "Compartir cambios de equipo"], ["shareCourses", "Compartir campos después de jugar"],
   ["notifyLike", "Avisarme de likes"], ["notifyComment", "Avisarme de comentarios"],
-  ["notifyAttest", "Avisarme de attest"], ["notifyFriendAchievement", "Logros de amigos"], ["notifyEquipment", "Equipo de amigos"],
+  ["notifyAttest", "Confirmaciones de tarjeta"], ["notifyFriendAchievement", "Logros de amigos"], ["notifyEquipment", "Equipo de amigos"],
   ["notifyFriendRequest", "Solicitudes de amistad"],
 ];
 
@@ -37,14 +39,16 @@ export function SocialSharingPreferences({ accessToken, section = 'all' }: { acc
     writing.current = true; setBusy(true); setMessage("");
     try {
       const result = await socialRequest<{ data: SocialActivityPreferences }>("/api/social/preferences", accessToken, { method: "PUT", body: { ...prefs, [key]: value } });
-      if (live.current) { setPrefs(result.data); setMessage("Preferencias guardadas."); }
+      if (live.current) { setPrefs(result.data); setMessage("Preferencias guardadas."); notificationsChanged(); }
     } catch (error) { if (live.current) setMessage(socialErrorMessage(error)); }
     finally { writing.current = false; if (live.current) setBusy(false); }
   }
   const labels = preferenceLabels.filter(([key]) => section === 'all' || (key.startsWith('notify') ? section === 'notifications' : section === 'sharing'));
   return <section className={styles.preferences}><h3>{section === 'notifications' ? 'Avisos de Social' : section === 'sharing' ? 'Actividad que comparto' : 'Privacidad y avisos de Social'}</h3>
     {section !== 'notifications' && <p>Compartir es opcional. Activa el acceso de tus amigos y elige los tipos de actividad. Un perfil público por sí solo no comparte rondas. No publicamos ubicación en tiempo real.</p>}
-    {prefs ? <fieldset disabled={busy}>{labels.map(([key, label]) => <label key={key}><input type="checkbox" checked={prefs[key]} onChange={(event) => void change(key, event.target.checked)} /><span>{label}</span></label>)}</fieldset> : !message && <p role="status">Cargando preferencias…</p>}
+    {prefs ? <fieldset disabled={busy}>{labels.map(([key, label]) => key.startsWith("notify")
+      ? <NotificationSwitch key={key} label={label} copy={key === "notifyAttest" ? "Avísame cuando un compañero confirme una tarjeta." : "Avisos dentro de The Backyard."} checked={prefs[key]===true} disabled={busy} onChange={value=>void change(key,value)} />
+      : <label key={key}><input type="checkbox" checked={prefs[key]} onChange={(event) => void change(key, event.target.checked)} /><span>{label}</span></label>)}</fieldset> : !message && <p role="status">Cargando preferencias…</p>}
     {message && <p role="status">{message}</p>}
   </section>;
 }
@@ -120,7 +124,7 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
   </article>;
 }
 
-const notificationLabels: Record<SocialNotification["type"], string> = { like: "Recibiste un like", comment: "Nuevo comentario", attest: "Un compañero atestó tu tarjeta", friend_achievement: "Un amigo consiguió un logro", equipment: "Un amigo actualizó su bolsa", friend_request: "Nueva solicitud de amistad", round_started: "Un compañero inició una ronda contigo · Ver ronda", scorecard_ready: "Registraron tu tarjeta · Revisar tarjeta" };
+const notificationLabels: Record<SocialNotification["type"], string> = { like: "Recibiste un like", comment: "Nuevo comentario", attest: "Un compañero atestó tu tarjeta", friend_achievement: "Un amigo consiguió un logro", equipment: "Un amigo actualizó su bolsa", friend_request: "Nueva solicitud de amistad", friend_accepted:"Solicitud aceptada",group_invite:"Invitación a un grupo",round_invite:"Invitación a una ronda",round_finished:"Resultados de ronda disponibles", round_started: "Un compañero inició una ronda contigo · Ver ronda", scorecard_ready: "Registraron tu tarjeta · Revisar tarjeta" };
 
 export function CloudSocialNotifications({ viewerId, accessToken, onFriends, onReadChange }: { viewerId: string; accessToken?: string; onFriends?: () => void; onReadChange?: () => void }) {
   const { retryCloudSync } = useBackyardAccount();

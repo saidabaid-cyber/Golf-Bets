@@ -133,6 +133,8 @@ import { PlayHub } from "./components/play-hub";
 import type { AiRoundSetupTelemetry } from "./components/backyard-ai/ai-round-setup";
 import { RoundFinalResult } from "./components/backyard-ai/round-final-result";
 import { SocialFeed, type SocialView } from "./components/social-feed";
+import { NotificationCenter } from "./components/notification-center";
+import { NotificationPreferences } from "./components/notification-preferences";
 import { FriendsHub, type FriendsView } from "./components/social-connections-panel";
 import { PENDING_SOCIAL_KEY } from "./components/social-qr";
 import { socialIdFromQr } from "../lib/social-connections";
@@ -3834,7 +3836,8 @@ function GolfBetsApp() {
     }
     goBack();
   };
-  const showPageBack = !isPrimaryTab(tab) && !(["groups", "social", "account", "round"] as AppTab[]).includes(tab);
+  const showPageBack = !isPrimaryTab(tab) && !(["groups", "social", "account", "round"] as AppTab[]).includes(tab)
+    && tab !== "notifications" && tab !== "notificationPreferences";
   const availableHistoryYears = useMemo(() => historyYears(history), [history]);
   const filteredHistory = useMemo(() => filterHistory(history, historyYear, historyMonth), [history, historyYear, historyMonth]);
   const personalModesActive = personalBets.some((bet) => bet.enabled !== false)
@@ -3868,7 +3871,7 @@ function GolfBetsApp() {
       scoreOnly={roundPresentation.playMode === "score_only"} canBet={bettingConsentGranted} onFriends={() => void openFirstExperienceFriends()}
       onCreateGroup={() => void openFirstExperienceGroup()} onSkip={() => void skipFirstSocialExperience()} />
     <FeedbackDialog key={`feedback:${identity.userId}`} token={identity.accessToken} email={identity.email} screen={tab} />
-    {isPrimaryTab(tab) && <PrimaryHeader tab={tab} notificationCount={groupNotificationsUnread} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => setTab("welcome")} onNotifications={() => { setSocialInitialView("notifications"); setTab("social"); }} />}
+    {isPrimaryTab(tab) && <PrimaryHeader tab={tab} notificationCount={groupNotificationsUnread} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => setTab("welcome")} onNotifications={() => setTab("notifications")} />}
     {!isPrimaryTab(tab) && tab !== "round" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BackyardWordmark /></button>
       <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><ProfileNavigationButton avatarUrl={identity.avatarUrl} displayName={identity.displayName} onClick={openProfileRoot} /></div>
@@ -3976,7 +3979,9 @@ function GolfBetsApp() {
       onOpenPrivacy={() => { setScorecardScanStartedAt(null); setOpenAiPrivacySettings(true); setTab("account"); }}
     />}
 
-    {tab === "social" && <SocialFeed onHome={() => setTab("welcome")} key={`${identity.userId}:${socialInitialView}`} initialView={socialInitialView} onOpenFriends={openCareerFriends} onPrivacy={() => setTab("account")} activity={personalActivity} identityUserId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} knownProfiles={EMPTY_SOCIAL_DIRECTORY} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
+    {tab === "social" && <SocialFeed onHome={() => setTab("welcome")} key={`${identity.userId}:${socialInitialView}`} initialView={socialInitialView} onNotifications={() => setTab("notifications")} onOpenFriends={openCareerFriends} onPrivacy={() => setTab("account")} activity={personalActivity} identityUserId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} knownProfiles={EMPTY_SOCIAL_DIRECTORY} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} onOpenRound={openHistoricalRound} onOpenGroup={() => setTab("groups")} onCreateRound={requestNewRound} onOpenGroups={() => setTab("groups")} />}
+    {tab === "notifications" && <NotificationCenter key={identity.userId} viewerId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} onBack={handlePageBack} onPreferences={() => setTab("notificationPreferences")} onFriend={id => { if(id){const url=new URL(location.href);url.searchParams.set("friend",id);window.history.replaceState(window.history.state,"",url);} openCareerFriends(id ? "list" : "requests",id); }} />}
+    {tab === "notificationPreferences" && <NotificationPreferences key={identity.userId} accessToken={identity.accessToken || undefined} onBack={() => setTab("notifications")} onMasterChange={changeNotifications} />}
     {tab === "balances" && <BalanceLedgerPanel history={history} currentUserId={identity.mode === "authenticated" ? identity.userId : undefined} />}
     {tab === "stats" && (statisticsReady ? <StatsDashboard insights={betaGolfInsights} rounds={statisticsHistory} consentOwnerId={identity.userId || undefined} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode === "authenticated"} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} /> : <section className="card" role="status"><h1>Estadísticas</h1><p>{statisticsAuthority.state === "unavailable" ? statisticsAuthority.error : "Verificando tus estadísticas…"}</p><p>Tu histórico permanece intacto. No mostramos métricas anteriores hasta verificar la fecha de reinicio.</p><button type="button" className="secondary" onClick={() => setStatisticsRetry((value) => value + 1)}>Reintentar</button><button type="button" className="textButton" onClick={() => setTab("history")}>Ver Histórico</button></section>)}
     {tab === "courseLibrary" && <CourseLibrary key={`course-library-${identity.userId}`} permissionOwnerId={identity.userId} accessToken={identity.accessToken} courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}

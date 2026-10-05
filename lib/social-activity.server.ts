@@ -760,42 +760,67 @@ export async function attestRound(
   return { data: { attested: true } };
 }
 
-export async function listNotifications(ctx: SocialContext): Promise<SocialNotificationPage> {
-  const preferences = await cachedPrefs(ctx, ctx.userId);
-  const { data, error } = await ctx.client.from("notification_events_v2")
-    .select("id,event_type,resource_id,created_at,read_at")
-    .eq("recipient_id", ctx.userId).in("event_type", ["like", "comment", "attest", "friend_achievement", "equipment", "friend_request", "round_started", "scorecard_ready"])
-    .order("created_at", { ascending: false }).limit(50);
-  if (error) dbError(error);
-  const visible = [] as SocialNotificationPage["data"];
-  for (const event of data || []) {
-    if (!UUID.test(event.resource_id)) continue;
-    if (event.event_type === "round_started" || event.event_type === "scorecard_ready") {
-      const round = await ctx.client.from("rounds_cloud").select("owner_id,snapshot").eq("id", event.resource_id).maybeSingle();
-      if (round.error) dbError(round.error);
-      const snapshot = round.data?.snapshot as RoundSnapshot | undefined;
-      if (round.data?.owner_id !== ctx.userId && snapshot?.players?.filter(player => player.accountUserId === ctx.userId).length === 1
-        && (event.event_type !== "scorecard_ready" || snapshot.lifecycleState === "completed"))
-        visible.push({ id: event.id, type: event.event_type, activityId: event.resource_id, createdAt: event.created_at, readAt: event.read_at });
-      continue;
+export async function listNotifications(ctx: SocialContext, options: { offset?: number; unreadOnly?: boolean } = {}): Promise<SocialNotificationPage> {
+  const {NOTIFICATION_EVENT_TYPES} = await import("../features/notifications/domain");
+  const [preferences, eventPrefs, master] = await Promise.all([
+    cachedPrefs(ctx, ctx.userId),
+    ctx.client.from("notification_preferences_v2").select("event_type,in_app").eq("user_id",ctx.userId),
+    ctx.client.from("user_preferences").select("notifications_enabled").eq("user_id",ctx.userId).maybeSingle(),
+  ]);
+  if (eventPrefs.error) dbError(eventPrefs.error); if (master.error) dbError(master.error);
+  if (master.data?.notifications_enabled !== true) return {data:[],nextCursor:null};
+  const types = [...NOTIFICATION_EVENT_TYPES, "like", "comment", "attest", "friend_achievement", "equipment"];
+  let query = ctx.client.from("notification_events_v2").select("id,event_type,resource_type,resource_id,created_at,read_at")
+    .eq("recipient_id",ctx.userId).in("event_type",types).order("created_at",{ascending:false}).order("id",{ascending:false});
+  if (options.unreadOnly) query = query.is("read_at",null);
+  const offset = options.offset || 0;
+  const {data,error} = await query.range(offset,offset+49); if (error) dbError(error);
+  const events = (data || []).filter(event => UUID.test(event.resource_id));
+  const ids = (kinds: string[]) => [...new Set(events.filter(event => kinds.includes(event.event_type)).map(event => event.resource_id))];
+  // Batch resource reads under the same authenticated RLS as their canonical views.
+  const roundIds = ids(["round_started","scorecard_ready","round_finished","round_invite"]);
+  const friendIds = ids(["friend_request","friend_accepted"]);
+  const activityIds = ids(["like","comment","attest","friend_achievement","equipment"]);
+  const [rounds, friends, activities, groups] = await Promise.all([
+    roundIds.length ? ctx.client.from("rounds_cloud").select("id,owner_id,snapshot").in("id",roundIds) : {data:[],error:null},
+    friendIds.length ? ctx.client.from("friend_requests").select("id,state,requester_id,addressee_id").in("id",friendIds) : {data:[],error:null},
+    activityIds.length ? ctx.client.from("social_activities_v3").select("id,author_id,material_hash").in("id",activityIds).eq("active",true) : {data:[],error:null},
+    ids(["group_invite"]).length ? ctx.client.rpc("group_invitation_action_v1",{action:"list",payload:{}}) : {data:{invitations:[]},error:null},
+  ]);
+  for (const result of [rounds,friends,activities,groups]) if (result.error) dbError(result.error);
+  const people = new Map<string,Promise<SocialActivityAuthor | null>>();
+  const person = async (id: string | undefined) => {
+    if (!id) return null;
+    if (!people.has(id)) people.set(id,(async () => {
+      const result = await ctx.client.rpc("social_profile_card_v1",{target:id}); if (result.error) return null;
+      const row = result.data?.[0]; return row ? {userId:row.user_id,displayName:row.display_name,username:row.username,avatarUrl:row.avatar_url} : null;
+    })());
+    return people.get(id)!;
+  };
+  const socialFlags = {like:"notifyLike",comment:"notifyComment",attest:"notifyAttest",friend_achievement:"notifyFriendAchievement",equipment:"notifyEquipment",friend_request:"notifyFriendRequest"} as const;
+  const visible: SocialNotificationPage["data"] = [];
+  for (const event of events) {
+    if (eventPrefs.data?.some(pref => pref.event_type === event.event_type && !pref.in_app)) continue;
+    const flag = socialFlags[event.event_type as keyof typeof socialFlags]; if (flag && !preferences[flag]) continue;
+    let actor: string | undefined, allowed = false, courseName: string | null = null;
+    if (["round_started","round_finished","round_invite","scorecard_ready"].includes(event.event_type)) {
+      const round = rounds.data?.find(row => row.id === event.resource_id), snapshot = round?.snapshot as RoundSnapshot | undefined;
+      allowed = Boolean(round && (round.owner_id === ctx.userId || snapshot?.players?.filter(player => player.accountUserId === ctx.userId).length === 1)
+        && (event.event_type !== "scorecard_ready" || snapshot?.lifecycleState === "completed"));
+      actor = round?.owner_id; courseName = snapshot?.courseSnapshot?.name || null;
+    } else if (event.event_type === "friend_request" || event.event_type === "friend_accepted") {
+      const request = friends.data?.find(row => row.id === event.resource_id);
+      allowed = Boolean(request && (event.event_type === "friend_request" ? request.addressee_id === ctx.userId && request.state === "PENDING"
+        : request.requester_id === ctx.userId && request.state === "ACCEPTED"));
+      actor = event.event_type === "friend_request" ? request?.requester_id : request?.addressee_id;
+    } else if (event.event_type === "group_invite") {
+      allowed = (groups.data?.invitations || []).some((invite: {id:string;group_id:string;outgoing:boolean;state:string;expires_at:string}) => !invite.outgoing && invite.state === "PENDING" && Date.parse(invite.expires_at) > Date.now() && [invite.id,invite.group_id].includes(event.resource_id));
+    } else {
+      const activity = activities.data?.find(row => row.id === event.resource_id); allowed = Boolean(activity && SHA256.test(activity.material_hash));
+      if (event.event_type === "friend_achievement" || event.event_type === "equipment") actor = activity?.author_id;
     }
-    if (event.event_type === "friend_request") {
-      if (!preferences.notifyFriendRequest) continue;
-      const request = await ctx.client.from("friend_requests").select("id,state").eq("id", event.resource_id).eq("addressee_id", ctx.userId).maybeSingle();
-      if (request.error) dbError(request.error);
-      if (request.data?.state === "PENDING") visible.push({ id: event.id, type: "friend_request", activityId: event.resource_id, createdAt: event.created_at, readAt: event.read_at });
-      continue;
-    }
-    try {
-      const activity = await authorizedRow(ctx, event.resource_id);
-      if (!SHA256.test(activity.material_hash)) continue;
-      visible.push({
-        id: event.id, type: event.event_type as SocialNotificationPage["data"][number]["type"],
-        activityId: event.resource_id, createdAt: event.created_at, readAt: event.read_at,
-      });
-    } catch (failure) {
-      if (!(failure instanceof SocialServiceError) || failure.code !== "NOT_FOUND") throw failure;
-    }
+    if (allowed) visible.push({id:event.id,type:event.event_type as SocialNotificationPage["data"][number]["type"],activityId:event.resource_id,
+      createdAt:event.created_at,readAt:event.read_at,person:await person(actor),courseName});
   }
-  return { data: visible, nextCursor: null };
+  return {data:visible,nextCursor:data?.length === 50 ? String(offset+50) : null};
 }

@@ -222,8 +222,10 @@ test('scoped social controls hide unrelated settings without changing the persis
   const jsx=(type:unknown,props:Record<string,unknown>)=>({type,props});
   runInNewContext(source,{exports,require:(id:string)=>id==='react'?{useState:(initial:unknown)=>[slot++===0?{}:initial,()=>{}],useRef:()=>({current:false}),useEffect:()=>{}}:id==='react/jsx-runtime'?{jsx,jsxs:jsx}:new Proxy({},{get:()=>()=>{}})});
   const tree=exports.SocialSharingPreferences({accessToken:'synthetic',section});
-  const labels=elements(tree).filter(e=>e.type==='label').map(e=>text(e));
+  const controls=elements(tree).filter(e=>e.type==='label'||typeof e.props.label==='string');
+  const labels=controls.map(e=>typeof e.props.label==='string'?e.props.label:text(e));
   assert.equal(labels.length,section==='all'?11:section==='notifications'?6:5);
+  assert.equal(elements(tree).filter(e=>e.type==='input'&&e.props.type==='checkbox').length,section==='notifications'?0:5);
   assert.equal(labels.includes('Compartir rondas terminadas'),section!=='notifications');
   assert.equal(labels.includes('Avisarme de likes'),section!=='sharing');
   assert.equal(labels.includes('Solicitudes de amistad'),section!=='sharing');

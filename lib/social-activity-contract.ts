@@ -72,10 +72,12 @@ export type SocialActivityDetail = { data: SocialActivityCard };
 
 export type SocialNotification = {
   id: string;
-  type: "like" | "comment" | "attest" | "friend_achievement" | "equipment" | "friend_request" | "round_started" | "scorecard_ready";
+  type: "like" | "comment" | "attest" | "friend_achievement" | "equipment" | "friend_request" | "friend_accepted" | "group_invite" | "round_invite" | "round_started" | "round_finished" | "scorecard_ready";
   activityId: string;
   createdAt: string;
   readAt: string | null;
+  person?: SocialActivityAuthor | null;
+  courseName?: string | null;
 };
 
 export type SocialNotificationPage = { data: SocialNotification[]; nextCursor: string | null };

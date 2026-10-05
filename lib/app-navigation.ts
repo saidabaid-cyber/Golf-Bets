@@ -1,5 +1,5 @@
 import { careerViewFromSearch, type CareerView } from "./career-navigation";
-export type AppTab = "welcome" | "career" | "friends" | "coach" | "play" | "totalScore" | "aiSetup" | "setup" | "round" | "scorecardScan" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "balances" | "stats" | "courseLibrary" | "courses" | "rules" | "pollaLive" | "account" | "profile" | "groups" | "social";
+export type AppTab = "welcome" | "career" | "friends" | "coach" | "play" | "totalScore" | "aiSetup" | "setup" | "round" | "scorecardScan" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "balances" | "stats" | "courseLibrary" | "courses" | "rules" | "pollaLive" | "account" | "profile" | "groups" | "social" | "notifications" | "notificationPreferences";
 
 export const BOTTOM_NAV_TARGETS = {
   Inicio: "welcome",
@@ -29,7 +29,7 @@ export function isPrimaryTab(tab: AppTab) {
   return Object.values(BOTTOM_NAV_TARGETS).some((target) => target === tab);
 }
 
-const SCREEN_TABS = new Set<string>([...Object.values(BOTTOM_NAV_TARGETS), ...PLAY_TABS, "stats", "history", "historyDetail", "personals", "profile", "account", "social", "friends"]);
+const SCREEN_TABS = new Set<string>([...Object.values(BOTTOM_NAV_TARGETS), ...PLAY_TABS, "stats", "history", "historyDetail", "personals", "profile", "account", "social", "friends", "notifications", "notificationPreferences"]);
 
 /** One URL per view, retaining the existing app instance and round state. */
 const ROUND_REFERENCE = /^[A-Za-z0-9:_-]{1,128}$/;
@@ -47,6 +47,7 @@ export function screenHref(tab: AppTab, search = "", roundId?: string | null, ca
   params.delete("screen");
   params.delete("round");
   params.delete("career");
+  if (tab !== "notifications") { params.delete("notice"); params.delete("resource"); }
   if (tab === "career") params.set("career", careerView ?? careerViewFromSearch(search));
   if (tab !== "welcome") params.set("screen", tab);
   if (tab === "historyDetail" && selectedRound && ROUND_REFERENCE.test(selectedRound)) params.set("round", selectedRound);
