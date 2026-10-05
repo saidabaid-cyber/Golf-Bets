@@ -25,7 +25,7 @@ export type HomeDashboardProps = {
 export function HomeDashboard({ displayName, avatarUrl, identityUserId, accessToken, onOpenAchievements, onOpenSocialProfile, friendsInitialView="list", friendsEntry=0, targetId, onCloseTarget, username="" }: HomeDashboardProps) {
   const [view, setView] = useState<HomeSocialView>("feed");
   useEffect(() => { const read=()=>setView(homeSocialViewFromSearch(location.search)); read(); window.addEventListener("popstate",read); return ()=>window.removeEventListener("popstate",read); }, []);
-  useEffect(() => { if(friendsEntry || targetId) setView(friendsInitialView === "add" || friendsInitialView === "search" ? "add-friends" : "friends"); }, [friendsEntry,friendsInitialView,targetId]);
+  useEffect(() => { if(friendsEntry || targetId) setView(friendsInitialView === "add" || friendsInitialView === "search" ? "add-friends" : "friends"); else setView(homeSocialViewFromSearch(location.search)); }, [friendsEntry,friendsInitialView,targetId]);
   function select(next:HomeSocialView) { setView(next); onCloseTarget?.(); window.history.pushState({...window.history.state,backyardTab:"welcome"},"",homeSocialHref(next,location.search)); window.scrollTo({top:0}); }
   return <section className={styles.home} data-home-version="social-home" aria-label="Inicio social">
     <nav className={styles.selector} aria-label="Secciones de Inicio">{([['feed','Feed'],['friends','Amigos'],['add-friends','Agregar amigos']] as const).map(([id,label])=><button type="button" key={id} aria-current={view===id?"page":undefined} className={id==="add-friends"?styles.addFriends:undefined} onClick={()=>select(id)}>{label}</button>)}</nav>

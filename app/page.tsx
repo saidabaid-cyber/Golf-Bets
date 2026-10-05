@@ -3880,7 +3880,7 @@ function GolfBetsApp() {
     {(tab === "welcome" || tab === "friends") && <HomeDashboard
       displayName={identity.displayName}
       avatarUrl={identity.avatarUrl}
-      username={identity.username || ""} friendsInitialView={friendsInitialView} friendsEntry={tab === "friends" ? friendsEntry : 0} targetId={socialTarget} onCloseTarget={closeFriendTarget}
+      username={identity.username || ""} friendsInitialView={friendsInitialView} friendsEntry={tab === "friends" ? friendsEntry : 0} targetId={tab === "friends" ? socialTarget : null} onCloseTarget={closeFriendTarget}
       identityUserId={identity.userId}
       accessToken={identity.accessToken || undefined}
       onOpenRounds={() => setTab("history")}
