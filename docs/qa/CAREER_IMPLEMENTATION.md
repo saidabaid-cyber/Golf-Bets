@@ -34,3 +34,7 @@ Navegación global observada en DEV: Inicio, Carrera, Play, My Coach, Reglas. Se
 ## Fase 1 — shell
 
 Cinco vistas canónicas con selección en URL, recarga directa y Back/Forward. Amigos mantiene su dominio existente y sus entradas desde Inicio, notificaciones y QR, mediante `screen=friends`. Los cambios de tab reinician el scroll; la página no añade overflow. Header, skeleton y errores reutilizables. 23 tests de navegación/Carrera/Amigos PASS. Las expectativas del contrato anterior de cuatro destinos se actualizan al producto solicitado; las pruebas funcionales de Amigos se conservan.
+
+## Fase 2 — Resumen
+
+Perfil/club/ciudad e índice canónicos, métricas de tarjetas completas, balance propio verificado, temporada por cohorte de hoyos, meses sin actividad, rondas recientes con handler histórico y GHIN de lectura. No se infiere antigüedad de cuenta ni nivel. Precisión usa exclusivamente capturas explícitas; nunca score+putts para GIR. Queries deportivas existentes y loading/error se preservan; el error deportivo no oculta perfil/GHIN. 4 tests de cálculo/SSR PASS, además de los contratos existentes.
