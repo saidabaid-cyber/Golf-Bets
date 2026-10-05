@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseForUser } from "../../../../lib/supabase/server";
 import { cloudServerEnabled } from "../../../../lib/feature-flags";
 import type { CloudDataBundle, CloudDataConflict } from "../../../../lib/cloud-sync";
+import { cloudSyncPayloadFingerprint } from "../../../../lib/cloud-sync";
 import { readCloudBundle, writeCloudBundle } from "../../../../lib/cloud-sync-service";
 import { authUserFailure } from "../../../../lib/auth-errors";
 import { scheduleSocialPublication } from "../../../../lib/social-publication.server";
@@ -64,6 +65,9 @@ export async function GET(request: NextRequest) {
     // The additive cloud schema is part of the deployed migration baseline.
     // Runtime probing adds a failure point and previously blocked valid users.
     const data = await readCloudBundle(account.client, account.userId, true);
+    const fingerprint = cloudSyncPayloadFingerprint(data);
+    if (request.nextUrl.searchParams.get("fingerprint") === fingerprint)
+      return NextResponse.json({ unchanged: true, fingerprint }, { headers: { "cache-control": "private, no-store" } });
     return NextResponse.json({ data }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     logFailure("read", error);
@@ -87,6 +91,11 @@ export async function POST(request: NextRequest) {
     const result = await writeCloudBundle(account.client, account.userId, body as { data: CloudDataBundle; fingerprint: string }, { extendedSchema: true });
     const delivery = await syncSharedRoundParticipants(account.client, account.userId, (body.data.history || []).filter(round => !round.cloudReadOnly && round.scorekeeping?.version === 1).map(round => String(round.id)));
     if (hasCompletedRoundPublicationCandidate(body.data.history)) scheduleSocialPublication(account.userId, "round");
+    if (request.headers.get("x-backyard-sync-canonical") === "1") {
+      const data = await readCloudBundle(account.client, account.userId, true);
+      return NextResponse.json({ ...result, delivery, data, canonicalFingerprint: cloudSyncPayloadFingerprint(data) },
+        { headers: { "cache-control": "private, no-store" } });
+    }
     return NextResponse.json({ ...result, delivery }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     logFailure("write", error);

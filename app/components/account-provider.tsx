@@ -659,7 +659,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         setCloudStatus(navigator.onLine ? "pending" : "offline");
         setAccountReloadRevision((value) => value + 1);
         setLegalRetryRevision((value) => value + 1);
-        window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent("backyard-sync-retry", { detail: { trigger: "online" } })), 0);
       }
       return;
     }
@@ -808,7 +808,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
           setLegalRetryRevision((value) => value + 1);
           accountHydrationRevision.current += 1;
           setAccountReloadRevision((value) => value + 1);
-          window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+          window.setTimeout(() => window.dispatchEvent(new CustomEvent("backyard-sync-retry", { detail: { trigger: "online" } })), 0);
         }
       }).catch(error => {
         if (!mounted) return;
@@ -1991,12 +1991,12 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         // depend on Supabase rotating the token or emitting an auth event.
         setLegalRetryRevision(value => value + 1);
         setAccountReloadRevision(value => value + 1);
-        window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+        window.setTimeout(() => window.dispatchEvent(new CustomEvent("backyard-sync-retry", { detail: { trigger: "manual" } })), 0);
       } catch { return; }
     } else {
       setLegalRetryRevision(value => value + 1);
       setAccountReloadRevision(value => value + 1);
-      window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+      window.setTimeout(() => window.dispatchEvent(new CustomEvent("backyard-sync-retry", { detail: { trigger: "manual" } })), 0);
     }
     setRawCloudStatus("pending");
   };

@@ -1,5 +1,6 @@
 import { roundMaterialPayload } from "./round-achievements";
 import type { RoundSnapshot } from "./types";
+import { acknowledgeOwnerRound, ownerRoundAcknowledged, ownerRoundSyncFingerprint, ownerRoundTransportPayload } from "./owner-round-sync";
 
 /** Close this canonical card independently of unrelated history sync conflicts.
  * The remembered revision is mandatory: a fresh GET never authorizes overwriting
@@ -10,14 +11,17 @@ export async function finalizeOwnerRound(round: RoundSnapshot, userId: string, a
     || !round.completedAt || round.scorekeeping?.version !== 1 || round.scorekeeping.mode !== "owner")
     throw new Error("La tarjeta no puede cerrarse desde este dispositivo.");
   const headers = { authorization: `Bearer ${accessToken}`, "content-type": "application/json" };
+  const key = `backyard-owner-round-revision:${userId}:${round.id}`;
+  const fingerprint = ownerRoundSyncFingerprint(ownerRoundTransportPayload(round, false));
+  if (ownerRoundAcknowledged(storage, key, fingerprint)) return { alreadyCompleted: true };
   const response = await request(`/api/cloud/rounds?localRoundId=${encodeURIComponent(round.id)}`, { headers, cache: "no-store" });
   const existing = await response.json();
   if (!response.ok) throw new Error(existing.error || "No pudimos comprobar la ronda canónica.");
-  const key = `backyard-owner-round-revision:${userId}:${round.id}`;
   if (existing.data?.snapshot?.lifecycleState === "completed") {
     const localMaterial = roundMaterialPayload(round, userId);
     if (!localMaterial || localMaterial !== roundMaterialPayload(existing.data.snapshot, userId))
       throw new Error("La tarjeta de nube ya está cerrada. Revisa sus resultados; tu copia local se conserva.");
+    acknowledgeOwnerRound(storage, key, fingerprint);
     return { roundId: existing.data.id, alreadyCompleted: true, delivery: undefined };
   }
   const remembered = Number(storage.getItem(key));
@@ -28,5 +32,6 @@ export async function finalizeOwnerRound(round: RoundSnapshot, userId: string, a
   const result = await saved.json();
   if (result.version) storage.setItem(key, String(result.version));
   if (!saved.ok) throw new Error(result.error || "Cierre de nube pendiente; tu tarjeta local se conserva.");
+  acknowledgeOwnerRound(storage, key, fingerprint);
   return result as { roundId: string; version?: number; alreadyCompleted?: boolean; delivery?: { notifications?: string } };
 }

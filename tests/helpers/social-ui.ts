@@ -7,7 +7,7 @@ export function uiNodes(node:any):UINode[]{return Array.isArray(node)?node.flatM
 export function uiText(node:any):string{return Array.isArray(node)?node.map(uiText).join(" ").replace(/\s+/g," ").trim():node?.props?uiText(node.props.children):typeof node==="string"||typeof node==="number"?String(node):"";}
 export function uiFind(tree:any,predicate:(n:UINode)=>boolean){const node=uiNodes(tree).find(predicate);assert.ok(node);return node;}
 /** Execute application components and their event handlers; replace only React's scheduler and external boundaries. */
-export function socialUI(file:string,boundaries:Record<string,any>={}) {
+export function socialUI(file:string,boundaries:Record<string,any>={},globals:Record<string,unknown>={}) {
   const slots:any[]=[],effects:any[]=[];let cursor=0,pending:Array<()=>void>=[];
   const memo=(fn:any,deps:any[])=>{const i=cursor++;if(!slots[i]||!deps.every((d,j)=>Object.is(d,slots[i].deps[j])))slots[i]={deps,value:fn()};return slots[i].value;};
   const react={useState(value:any){const i=cursor++;if(!(i in slots))slots[i]=typeof value==="function"?value():value;return[slots[i],(next:any)=>{slots[i]=typeof next==="function"?next(slots[i]):next;}];},useRef(value:any){return slots[cursor++]||=( {current:value});},useMemo:memo,useCallback(fn:any,deps:any[]){return memo(()=>fn,deps);},useEffect(fn:any,deps:any[]){const i=cursor++;if(effects[i]&&deps.every((d,j)=>Object.is(d,effects[i].deps[j])))return;effects[i]?.cleanup?.();effects[i]={deps};pending.push(()=>{effects[i].cleanup=fn();});}};
@@ -22,7 +22,7 @@ export function socialUI(file:string,boundaries:Record<string,any>={}) {
   class Element{closest(){return null;}}
   const exports:any={};
   const source=ts.transpileModule(readFileSync(file,"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;
-  runInNewContext(source,{exports,window,document,location,IntersectionObserver:Observer,Element,URL,URLSearchParams,Set,Map,Promise,AbortController,Event,setTimeout,clearTimeout,crypto:{randomUUID:()=>"test-operation"},require(id:string){
+  runInNewContext(source,{exports,window,document,location,IntersectionObserver:Observer,Element,URL,URLSearchParams,Set,Map,Promise,AbortController,Event,setTimeout,clearTimeout,crypto:{randomUUID:()=>"test-operation"},...globals,require(id:string){
     if(id==="react")return react;
     if(id==="react/jsx-runtime")return{jsx:(type:any,props:any)=>({type,props}),jsxs:(type:any,props:any)=>({type,props}),Fragment:"fragment"};
     if(id.endsWith(".css"))return{__esModule:true,default:new Proxy({},{get:(_t,k)=>String(k)})};

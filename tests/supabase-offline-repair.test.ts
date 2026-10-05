@@ -250,7 +250,8 @@ test("UI distingue guardado local, pendiente, offline, nube y error", () => {
   assert.match(page, /Ronda guardada en este dispositivo · sincronización pendiente\./);
   assert.doesNotMatch(page, /todavía tiene cambios pendientes de sincronizar/);
   assert.doesNotMatch(page, /window\.addEventListener\("focus",/);
-  assert.match(page, /45_000/);
+  assert.doesNotMatch(page, /45_000|foregroundRefresh/, "idle cloud polling must stay removed");
+  assert.match(page, /downloadCloudData\(token, knownCloud/);
 });
 
 test("dos dispositivos conservan identidad estable y una ronda se actualiza sin duplicarse", async () => {

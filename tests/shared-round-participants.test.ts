@@ -283,7 +283,9 @@ test("finalize client never adopts a freshly fetched revision to overwrite an un
 });
 
 test("completed card finalize retry verifies material and never rewrites the canonical historical row", async () => {
-  const storage = { getItem: () => "4", setItem: () => { throw new Error("unexpected cache write"); } };
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => key.endsWith(":ack") ? values.get(key) || null : "4",
+    setItem: (key: string, value: string) => { assert.ok(key.endsWith(":ack"), "checking a closed card must not adopt a fresh owner revision"); values.set(key, value); } };
   let calls = 0;
   const snapshot = round();
   snapshot.roundHoles = 18;
@@ -297,6 +299,8 @@ test("completed card finalize retry verifies material and never rewrites the can
   };
   assert.equal((await finalizeOwnerRound(snapshot, A, "synthetic", storage, request)).alreadyCompleted, true);
   assert.equal(calls, 1);
+  assert.equal((await finalizeOwnerRound(snapshot, A, "synthetic", storage, request)).alreadyCompleted, true);
+  assert.equal(calls, 1, "an unchanged closed-card remount uses its material ACK");
   const modified = structuredClone(snapshot); modified.scores![1].a = 8;
   await assert.rejects(finalizeOwnerRound(modified, A, "synthetic", storage, request), /ya está cerrada/);
 });

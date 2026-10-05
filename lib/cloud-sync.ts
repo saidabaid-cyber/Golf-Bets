@@ -197,6 +197,7 @@ function cloudOwnedPreferenceValue(preferences: CloudPreferences) {
  * Device and three-way-merge metadata are local coordination details and must
  * never turn an otherwise identical foreground poll into another POST. */
 export function cloudSyncPayloadFingerprint(bundle: CloudDataBundle) {
+  const byId = <T extends { id: string }>(items: T[]) => [...items].sort((a, b) => a.id.localeCompare(b.id));
   const preferences = {
     highContrast: bundle.preferences.highContrast,
     language: bundle.preferences.language,
@@ -205,15 +206,15 @@ export function cloudSyncPayloadFingerprint(bundle: CloudDataBundle) {
   };
   return fingerprint({
     version: bundle.version,
-    history: bundle.history,
-    frequentPlayers: bundle.frequentPlayers,
-    frequentGroups: bundle.frequentGroups,
-    rivals: bundle.rivals,
-    courses: bundle.courses,
+    history: byId(bundle.history),
+    frequentPlayers: byId(bundle.frequentPlayers),
+    frequentGroups: byId(bundle.frequentGroups),
+    rivals: byId(bundle.rivals),
+    courses: byId(bundle.courses),
     preferences,
     activeDraft: stripLocalRoundUi(bundle.activeDraft),
     activeDraftUpdatedAt: bundle.activeDraftUpdatedAt,
-    tombstones: bundle.tombstones,
+    tombstones: [...bundle.tombstones].sort((a, b) => `${a.entityType}:${a.localId}`.localeCompare(`${b.entityType}:${b.localId}`)),
   });
 }
 
@@ -723,30 +724,61 @@ export async function withCloudAuthRetry<T>(
 }
 
 async function parseCloudResponse(response: Response) {
-  const payload = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; code?: string; conflicts?: CloudDataConflict[]; data?: CloudDataBundle; fingerprint?: string };
+  const payload = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; code?: string; conflicts?: CloudDataConflict[]; data?: CloudDataBundle; fingerprint?: string; canonicalFingerprint?: string; unchanged?: boolean };
   if (!response.ok) throw new CloudSyncHttpError(payload.error || "No fue posible sincronizar la nube.", response.status, payload.code || "", Array.isArray(payload.conflicts) ? payload.conflicts : []);
   return payload;
 }
 
-export async function uploadCloudData(bundle: CloudDataBundle, accessToken: string) {
+/** Omitted unchanged collection rows retain the current server version through
+ * the existing merge protocol. Tombstones remain explicit; never omit draft or
+ * preference revision/base metadata required for three-way reconciliation. */
+export function cloudUploadDelta(bundle: CloudDataBundle, base: CloudDataBundle) {
+  const delta = { ...bundle };
+  for (const key of ["history", "frequentPlayers", "frequentGroups", "rivals", "courses"] as const) {
+    const remote = new Map(base[key].map(item => [item.id, JSON.stringify(stableValue(item))]));
+    // These collections are individually keyed, not ordered gameplay arrays.
+    (delta[key] as Array<{ id: string }>) = bundle[key].filter(item => remote.get(item.id) !== JSON.stringify(stableValue(item)));
+  }
+  return delta;
+}
+
+export async function uploadCloudData(bundle: CloudDataBundle, accessToken: string, base?: CloudDataBundle,
+  trace?: (event: { method: "GET" | "POST"; requestBytes: number; responseBytes: number; durationMs: number; success: boolean }) => void) {
   if (!accessToken?.trim()) throw new Error("Inicia sesión para sincronizar con Supabase.");
+  const submitted = base ? cloudUploadDelta(bundle, base) : bundle;
+  const body = JSON.stringify({ data: submitted, fingerprint: cloudDataFingerprint(submitted) });
+  const started = Date.now();
   const response = await fetchWithTimeout("/api/cloud/sync", {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ data: bundle, fingerprint: cloudDataFingerprint(bundle) }),
+    headers: { "content-type": "application/json", authorization: `Bearer ${accessToken}`, "x-backyard-sync-canonical": "1" },
+    cache: "no-store", body,
   });
-  const payload = await parseCloudResponse(response);
-  if (payload.ok !== true || payload.fingerprint !== cloudDataFingerprint(bundle)) throw new Error("La nube no confirmó todos los datos. Reintenta la sincronización.");
+  const payload = await parseCloudResponse(response).catch(error => {
+    trace?.({ method: "POST", requestBytes: new TextEncoder().encode(body).byteLength,
+      responseBytes: Number(response.headers.get("content-length")) || 0, durationMs: Date.now() - started, success: response.ok });
+    throw error;
+  });
+  if (payload.ok !== true || payload.fingerprint !== cloudDataFingerprint(submitted)) throw new Error("La nube no confirmó todos los datos. Reintenta la sincronización.");
+  if (payload.data && (!payload.canonicalFingerprint || payload.canonicalFingerprint !== cloudSyncPayloadFingerprint(payload.data)))
+    throw new Error("La nube no confirmó la versión canónica. Tu copia local se conserva.");
+  trace?.({ method: "POST", requestBytes: new TextEncoder().encode(body).byteLength,
+    responseBytes: new TextEncoder().encode(JSON.stringify(payload)).byteLength, durationMs: Date.now() - started, success: true });
   return payload;
 }
 
-export async function downloadCloudData(accessToken: string) {
+export async function downloadCloudData(accessToken: string, known?: CloudDataBundle,
+  trace?: (event: { method: "GET" | "POST"; requestBytes: number; responseBytes: number; durationMs: number; success: boolean }) => void) {
   if (!accessToken?.trim()) throw new Error("Inicia sesión para sincronizar con Supabase.");
-  const response = await fetchWithTimeout("/api/cloud/sync", {
+  const started = Date.now();
+  const query = known ? `?fingerprint=${encodeURIComponent(cloudSyncPayloadFingerprint(known))}` : "";
+  const response = await fetchWithTimeout(`/api/cloud/sync${query}`, {
     headers: { authorization: `Bearer ${accessToken}` },
     cache: "no-store",
   });
   const payload = await parseCloudResponse(response);
+  trace?.({ method: "GET", requestBytes: 0, responseBytes: new TextEncoder().encode(JSON.stringify(payload)).byteLength,
+    durationMs: Date.now() - started, success: true });
+  if (payload.unchanged && known && payload.fingerprint === cloudSyncPayloadFingerprint(known)) return known;
   if (!payload.data) throw new Error("La nube respondió sin datos.");
   return payload.data;
 }

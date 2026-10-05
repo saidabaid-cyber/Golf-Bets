@@ -27,7 +27,8 @@ export async function GET(request: NextRequest) {
   try {
     const localId = new URL(request.url).searchParams.get("localRoundId");
     if (localId) {
-      const row = await authenticated.supabase.from("rounds_cloud").select("id,version,snapshot").eq("owner_id", authenticated.userId).eq("local_id", localId).maybeSingle();
+      const columns = new URL(request.url).searchParams.get("metadata") === "1" ? "id,version" : "id,version,snapshot";
+      const row = await authenticated.supabase.from("rounds_cloud").select(columns).eq("owner_id", authenticated.userId).eq("local_id", localId).maybeSingle();
       if (row.error) throw row.error;
       return NextResponse.json({ data: row.data }, { headers: { "cache-control": "private, no-store" } });
     }

@@ -191,9 +191,10 @@ import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from
 import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { CloudConflictResolutionBuffer } from "../lib/cloud-conflict-resolution";
-import { CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
+import { CloudRetryBudget, CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
+import { cloudSyncDiagnostic } from "../lib/cloud-sync-diagnostics";
 import { adoptGuestPhotoJobs, flushPhotoQueue, queuePhoto, photoJobs, roundScorecardPhotoIds } from "../lib/photo-sync-queue";
-import { acknowledgeOfflineBundle, getOfflineDeviceId, markOfflineAttempt, offlineRetryDelayMs, persistOfflineBundle, restoreOfflineWorkspace, writeCloudBundleToStorage } from "../lib/offline-store";
+import { acknowledgeOfflineBundle, getOfflineDeviceId, markOfflineAttempt, persistOfflineBundle, restoreOfflineWorkspace, writeCloudBundleToStorage } from "../lib/offline-store";
 import { PRIVATE_POLLA_LINK_KEY, parsePrivatePollaLink, privatePollaScoreChanges } from "../lib/polla-private-link";
 import { enqueuePollaScore } from "../lib/polla-offline";
 import { isLaVistaCourse, withDefaultLaVistaRules } from "../lib/local-rules";
@@ -1148,6 +1149,7 @@ function GolfBetsApp() {
       if (!ownsLocalWorkspace(localStorage, identity.userId)) return false;
       try {
         const draft = withDerivedRoundLifecycle({ version: 11, course, courseSelected, courseIdentity: courseSelected ? undefined : pendingCourseIdentity ?? undefined, playerTeeAssignments, startHole, roundHoles, handicapBasis: roundHandicapBasis, presentation: normalizeRoundPresentation(roundPresentation), players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scorecardPhotoIds, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending, templateOrigin: roundTemplateOrigin ?? undefined });
+        const previousFingerprint = cloudSyncPayloadFingerprint(collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current));
         const activeDraft = roundClosed ? null : draft;
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
@@ -1163,6 +1165,7 @@ function GolfBetsApp() {
         setDraftAvailable(!roundClosed && hasRoundProgress(draft));
         const offline = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
         offline.deviceId = offlineDeviceId.current;
+        if (previousFingerprint !== cloudSyncPayloadFingerprint(offline)) requestCloudSync.current?.();
         void persistOfflineBundle(identity.userId, offline, identity.mode === "authenticated" && cloudLinked)
           .then(() => setSaveStatus("saved"))
           .catch(() => setSaveStatus("error"));
@@ -1233,15 +1236,16 @@ function GolfBetsApp() {
       applyDraft(reconciled.activeDraft, { preserveLocalUi: true });
     }
     const mergedCourses = mergeDefaultCourses(reconciled.courses);
+    const normalizedHistory = reconciled.history.map(normalizeHistorySnapshot);
     if (changed(local.courses, reconciled.courses)) setCourses(mergedCourses);
-    if (changed(local.history, reconciled.history)) setHistory(reconciled.history.map(normalizeHistorySnapshot));
+    if (changed(local.history, normalizedHistory)) setHistory(normalizedHistory);
     if (changed(local.rivals, reconciled.rivals)) setSavedPersonalRivals(reconciled.rivals);
     if (changed(local.frequentPlayers, reconciled.frequentPlayers)) setFrequentPlayers(reconciled.frequentPlayers);
     if (changed(local.frequentGroups, reconciled.frequentGroups)) setFrequentGroups(reconciled.frequentGroups);
     if (local.preferences.highContrast !== reconciled.preferences.highContrast) setHighContrast(reconciled.preferences.highContrast);
     if (!Object.is(local.preferences.defaultHandicap, reconciled.preferences.defaultHandicap)) applyCloudPreferences(reconciled.preferences);
     localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
-    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(reconciled.history));
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(normalizedHistory));
     localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(reconciled.rivals));
     localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(reconciled.frequentPlayers));
     localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(reconciled.frequentGroups));
@@ -1262,11 +1266,12 @@ function GolfBetsApp() {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let scheduledTrigger: CloudSyncTrigger = "mount";
-    let failedAttempts = 0;
-    let nextAutoAttemptAt = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let knownCloud: CloudDataBundle | undefined;
+    const retryBudget = new CloudRetryBudget();
     const gate = new CloudSyncGate();
     const debug = (event: string, trigger?: CloudSyncTrigger) => {
-      if (process.env.NODE_ENV === "development") console.info("[cloud-sync]", event, { trigger });
+      cloudSyncDiagnostic({ trigger: trigger || "local", reason: event, result: event === "error" ? "failure" : "performed" });
     };
     const current = () => !cancelled && !localStorage.getItem(accountDeletionMarkerKey(userId)) && ownsLocalWorkspace(localStorage, userId) && liveIdentity.current.userId === userId && Boolean(liveIdentity.current.accessToken);
     const readStoredState = () => {
@@ -1279,7 +1284,7 @@ function GolfBetsApp() {
     const schedule = (trigger: CloudSyncTrigger = "local") => {
       if (!current()) return;
       clearTimeout(timer);
-      const priority: Record<CloudSyncTrigger, number> = { local: 0, visible: 1, online: 2, mount: 3, manual: 4 };
+      const priority: Record<CloudSyncTrigger, number> = { local: 0, visible: 1, online: 2, mount: 3, retry: 4, manual: 5 };
       if (priority[trigger] > priority[scheduledTrigger]) scheduledTrigger = trigger;
       setCloudStatus("pending");
       timer = setTimeout(() => {
@@ -1291,7 +1296,9 @@ function GolfBetsApp() {
     const sync = async (trigger: CloudSyncTrigger) => {
       if (!current()) return;
       if (!navigator.onLine) { setCloudStatus("offline"); return; }
-      if (trigger !== "manual" && Date.now() < nextAutoAttemptAt) { setCloudStatus("error"); return; }
+      if (!retryBudget.allow(trigger)) {
+        cloudSyncDiagnostic({ trigger, reason: "retry-budget", result: "skipped" }); setCloudStatus("error"); return;
+      }
       let fingerprint = "";
       let queued: CloudSyncTrigger | null = null;
       try {
@@ -1299,17 +1306,34 @@ function GolfBetsApp() {
         const offlineFingerprint = cloudDataFingerprint(initial);
         fingerprint = cloudSyncPayloadFingerprint(initial);
         const decision = gate.begin(fingerprint, trigger);
+        cloudSyncDiagnostic({ trigger, fingerprint, reason: decision, result: decision === "run" ? "performed" : decision === "busy" ? "coalesced" : "skipped" });
         const skippedStatus = syncStatusAfterSkip(decision);
-        if (skippedStatus) { setCloudStatus(skippedStatus); return; }
+        if (skippedStatus) {
+          if (decision === "unchanged") void acknowledgeOfflineBundle(userId, offlineFingerprint);
+          setCloudStatus(skippedStatus); return;
+        }
         if (decision !== "run") return;
+        clearTimeout(retryTimer);
+        if (trigger === "manual") retryBudget.reset();
         debug("start", trigger);
         let appliedFingerprint = "";
         const completed = await runCloudSyncCycle({
           read, current, status: setCloudStatus,
           merge: mergeLocalAndCloud,
           shouldUpload: (_local, remote, merged) => cloudSyncPayloadFingerprint(remote) !== cloudSyncPayloadFingerprint(merged),
-          download: () => withCloudAuthRetry(downloadCloudData, liveIdentity.current.accessToken || "", refreshCloudSession),
-          upload: data => withCloudAuthRetry(token => uploadCloudData(data, token), liveIdentity.current.accessToken || "", refreshCloudSession),
+          download: async () => {
+            const data = await withCloudAuthRetry(token => downloadCloudData(token, knownCloud, event => cloudSyncDiagnostic({ ...event,
+              trigger, fingerprint, endpoint: "/api/cloud/sync", reason: "canonical-read", result: event.success ? "success" : "failure" })),
+              liveIdentity.current.accessToken || "", refreshCloudSession);
+            knownCloud = data; return data;
+          },
+          upload: async (data, remote) => {
+            const receipt = await withCloudAuthRetry(token => uploadCloudData(data, token, remote, event => cloudSyncDiagnostic({ ...event,
+              trigger, fingerprint, endpoint: "/api/cloud/sync", reason: "local-change", result: event.success ? "success" : "failure" })),
+              liveIdentity.current.accessToken || "", refreshCloudSession);
+            if (receipt.data) knownCloud = receipt.data;
+            return receipt;
+          },
           conflicts: (local, cloud) => {
             const conflicts = actionableCloudConflicts(findAmbiguousCloudConflicts(local, cloud));
             if (!conflicts.length) return false;
@@ -1360,7 +1384,7 @@ function GolfBetsApp() {
           // uses the complete snapshot fingerprint, so acknowledge exactly the
           // mutation that entered this cycle and never a newer local write.
           void acknowledgeOfflineBundle(userId, offlineFingerprint);
-          failedAttempts = 0; nextAutoAttemptAt = 0;
+          retryBudget.reset();
           clearCloudSyncError();
           debug("finish", trigger);
         } else {
@@ -1369,6 +1393,7 @@ function GolfBetsApp() {
         }
       } catch (error) {
         gate.failure(fingerprint);
+        const retryDelay = retryBudget.failure();
         if (isCloudFieldConflict(error) && current()) {
           try {
             const local = read();
@@ -1385,19 +1410,19 @@ function GolfBetsApp() {
               return;
             }
             // The write raced with a compatible field. Rebase on the latest
-            // canonical copy, keep local navigation, and retry immediately.
+            // canonical copy and keep local navigation. Recovery is automatic,
+            // bounded and delayed; it must never impersonate a manual retry.
             const rebased = mergeLocalAndCloud(local, cloud);
             applyCloudBundle(rebased, local);
             clearCloudSyncError();
             setCloudStatus("pending");
-            window.setTimeout(() => window.dispatchEvent(new Event("backyard-sync-retry")), 0);
+            if (retryDelay !== null) retryTimer = setTimeout(() => schedule("retry"), retryDelay);
             return;
           } catch (recoveryError) {
             if (current()) reportCloudSyncError(recoveryError);
           }
         }
-        failedAttempts += 1;
-        nextAutoAttemptAt = Date.now() + offlineRetryDelayMs(failedAttempts);
+        if (retryDelay !== null && current()) retryTimer = setTimeout(() => schedule("retry"), retryDelay);
         const message = cloudSyncErrorMessage(error);
         if (current() && message) reportCloudSyncError(error);
         if (current()) void markOfflineAttempt(userId, message || "Sincronización cancelada");
@@ -1409,23 +1434,20 @@ function GolfBetsApp() {
     requestCloudSync.current = () => schedule("local");
     const onOnline = () => schedule("online");
     const onOffline = () => { if (current()) setCloudStatus("offline"); };
-    const onRetry = () => schedule("manual");
+    // Provider auth restoration is automatic. Only the explicit retry button
+    // tags an event as manual and may reset the failed-fingerprint budget.
+    const onRetry = (event: Event) => schedule((event as CustomEvent).detail?.trigger === "manual" ? "manual" : "online");
     const onVisible = () => { if (document.visibilityState === "visible") schedule("visible"); };
-    // Realtime is intentionally not required for round ownership sync. A
-    // bounded foreground refresh makes two open devices converge without
-    // maintaining a fragile channel while a player is moving on the course.
-    const foregroundRefresh = window.setInterval(() => {
-      if (document.visibilityState === "visible" && navigator.onLine) schedule("visible");
-    }, 45_000);
+    // No idle polling. Real foreground transitions check a small conditional
+    // receipt; real edits still fetch/merge under the existing CAS safeguards.
     window.addEventListener("online", onOnline);
     window.addEventListener("offline", onOffline);
     window.addEventListener("backyard-sync-retry", onRetry);
     document.addEventListener("visibilitychange", onVisible);
     schedule("mount");
     return () => {
-      cancelled = true; gate.cancel(); clearTimeout(timer); requestCloudSync.current = null;
+      cancelled = true; gate.cancel(); clearTimeout(timer); clearTimeout(retryTimer); requestCloudSync.current = null;
       window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline);
-      window.clearInterval(foregroundRefresh);
       window.removeEventListener("backyard-sync-retry", onRetry);
       document.removeEventListener("visibilitychange", onVisible);
     };

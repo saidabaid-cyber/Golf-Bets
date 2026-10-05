@@ -1,6 +1,6 @@
 import type { SyncStatus } from "./cloud-sync-cycle";
 
-export type CloudSyncTrigger = "mount" | "local" | "online" | "visible" | "manual";
+export type CloudSyncTrigger = "mount" | "local" | "online" | "visible" | "retry" | "manual";
 
 /** Small state machine used by the page-level scheduler. It coalesces work,
  * suppresses the sync produced by its own cloud hydration, and remembers a
@@ -11,26 +11,31 @@ export class CloudSyncGate {
   private queued: CloudSyncTrigger | null = null;
   private acknowledged = "";
   private failed = "";
+  private checkedAt = 0;
 
-  begin(fingerprint: string, trigger: CloudSyncTrigger): "run" | "busy" | "unchanged" | "failed" | "cancelled" {
+  begin(fingerprint: string, trigger: CloudSyncTrigger, now = Date.now()): "run" | "busy" | "unchanged" | "failed" | "cancelled" {
     if (this.cancelled) return "cancelled";
     if (this.running) { this.queue(trigger); return "busy"; }
-    const force = trigger !== "local";
-    if (!force && fingerprint === this.acknowledged) return "unchanged";
+    const force = trigger === "manual" || trigger === "retry";
     if (!force && fingerprint === this.failed) return "failed";
+    // Only a real foreground transition may probe another device's changes.
+    // There is no timer. A recent successful flight absorbs overlapping events.
+    const foregroundProbe = (trigger === "visible" || trigger === "online") && now - this.checkedAt >= 30_000;
+    if (!force && !foregroundProbe && fingerprint === this.acknowledged) return "unchanged";
     this.running = true;
     return "run";
   }
 
   queue(trigger: CloudSyncTrigger) {
     if (this.cancelled) return;
-    const priority: Record<CloudSyncTrigger, number> = { local: 0, visible: 1, online: 2, mount: 3, manual: 4 };
+    const priority: Record<CloudSyncTrigger, number> = { local: 0, visible: 1, online: 2, mount: 3, retry: 4, manual: 5 };
     if (!this.queued || priority[trigger] > priority[this.queued]) this.queued = trigger;
   }
 
-  success(fingerprint: string) {
+  success(fingerprint: string, now = Date.now()) {
     this.acknowledged = fingerprint;
     this.failed = "";
+    this.checkedAt = now;
     return this.release();
   }
 
@@ -54,6 +59,23 @@ export class CloudSyncGate {
     this.queued = null;
     return queued;
   }
+}
+
+/** One initial attempt plus at most two automatic retries, even when conflict
+ * rebasing changes the hash. UI/auth/foreground events never reset this budget. */
+export class CloudRetryBudget {
+  private attempts = 0;
+  private until = 0;
+  allow(trigger: CloudSyncTrigger, now = Date.now()) {
+    return trigger === "manual" || (this.attempts < 3 && now >= this.until);
+  }
+  failure(now = Date.now()) {
+    this.attempts += 1;
+    const delay = Math.min(300_000, 5_000 * 2 ** (this.attempts - 1));
+    this.until = now + delay;
+    return this.attempts < 3 ? delay : null;
+  }
+  reset() { this.attempts = 0; this.until = 0; }
 }
 
 export function cloudSyncErrorMessage(error: unknown) {

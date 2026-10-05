@@ -319,5 +319,6 @@ test("Guardar → nube atrasada → aplicar respuesta → Histórico → reload 
   const start = page.indexOf("const applyCloudBundle");
   const end = page.indexOf("useEffect(() =>", start);
   assert.match(page.slice(start, end), /const reconciled = mergeLocalAndCloud\(local, data\)/);
-  assert.match(page.slice(start, end), /JSON\.stringify\(reconciled\.history\)/);
+  assert.match(page.slice(start, end), /const normalizedHistory = reconciled\.history\.map\(normalizeHistorySnapshot\)/);
+  assert.match(page.slice(start, end), /JSON\.stringify\(normalizedHistory\)/);
 });

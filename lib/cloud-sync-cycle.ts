@@ -1,10 +1,10 @@
-import { cloudDataFingerprint, mergeLocalAndCloud, stableValue, stripLocalRoundUi, type CloudDataBundle } from "./cloud-sync";
+import { cloudSyncPayloadFingerprint, mergeLocalAndCloud, stableValue, stripLocalRoundUi, type CloudDataBundle } from "./cloud-sync";
 
 export type SyncStatus = "local" | "saving" | "offline" | "syncing" | "synced" | "pending" | "error";
 type CycleOptions = {
   read: () => CloudDataBundle;
   download: () => Promise<CloudDataBundle>;
-  upload: (bundle: CloudDataBundle) => Promise<unknown>;
+  upload: (bundle: CloudDataBundle, remote: CloudDataBundle) => Promise<unknown>;
   media: (bundle: CloudDataBundle) => Promise<void>;
   apply: (bundle: CloudDataBundle) => void;
   current: () => boolean;
@@ -30,15 +30,14 @@ export async function runCloudSyncCycle(options: CycleOptions) {
     }
     const merged = merge(before, remote);
     const uploadNeeded = options.shouldUpload?.(before, remote, merged) ?? true;
-    if (uploadNeeded) {
-      await options.upload(merged); check();
-    }
-    // A write is refetched to detect a concurrent winner. An unchanged
-    // foreground poll stays GET-only.
-    const canonical = uploadNeeded ? await options.download() : remote; check();
+    const receipt = uploadNeeded ? await options.upload(merged, remote) : null; check();
+    // New servers return the actual winner after CAS, projection and shared
+    // links. ACK-only legacy servers retain the safe full-read fallback.
+    const received = receipt && typeof receipt === "object" && "data" in receipt ? receipt.data as CloudDataBundle : null;
+    const canonical = received || (uploadNeeded ? await options.download() : remote); check();
     await options.media(canonical); check();
     const latest = options.read();
-    if (cloudDataFingerprint(before) !== cloudDataFingerprint(latest)) {
+    if (cloudSyncPayloadFingerprint(before) !== cloudSyncPayloadFingerprint(latest)) {
       // Rebase the newer local edit on the write that the server actually
       // confirmed. This records the canonical base without letting an older
       // response overwrite text that changed while the request was in flight.
