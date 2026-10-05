@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { freezeScorecardProfileSelection } from "./course-scorecard-profiles";
-import { findAmbiguousCloudConflicts, mergeLocalAndCloud, stableValue, type CloudDataBundle, type CloudEntityType, type CloudTombstone } from "./cloud-sync";
+import { actionableCloudConflicts, findAmbiguousCloudConflicts, mergeLocalAndCloud, stableValue, type CloudDataBundle, type CloudEntityType, type CloudTombstone } from "./cloud-sync";
 import { writeVersionedRow } from "./cloud-write";
 import { parseFrequentGroups } from "./frequent-templates";
 import type { RoundSnapshot } from "./types";
@@ -297,7 +297,10 @@ export async function writeCloudBundle(
   const extendedSchema = options.extendedSchema ?? true;
   try {
     const currentCloud = await readCloudBundle(client, userId, extendedSchema);
-    const lateConflicts = findAmbiguousCloudConflicts(body.data, currentCloud);
+    // Match the client's same-installation rebase policy. Equal-clock local
+    // normalization must not block an unrelated closeout forever. Each row
+    // still uses CAS below, so the equal-clock canonical copy is preserved.
+    const lateConflicts = actionableCloudConflicts(findAmbiguousCloudConflicts(body.data, currentCloud));
     if (lateConflicts.length) throw Object.assign(new Error("Hay un cambio simultáneo en el mismo dato."), { code: "CLOUD_FIELD_CONFLICT", conflicts: lateConflicts });
     const incoming = mergeLocalAndCloud(body.data, currentCloud);
     history = safeArray<Record<string, unknown>>(incoming.history, 1000)
