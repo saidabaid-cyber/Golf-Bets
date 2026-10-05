@@ -4,7 +4,7 @@ import { projectCareerTournament, type TournamentSource, type TournamentPlayerSo
 const PAGE=10;
 export async function readCareerTournaments(admin:SupabaseClient,userId:string,offset=0) {
   const links=await admin.from("tournament_players").select("id,tournament_id,profile_id").eq("profile_id",userId).order("created_at",{ascending:false}).order("id").range(offset,offset+PAGE);
-  if(links.error) throw new Error("CAREER_TOURNAMENTS_UNAVAILABLE");
+  if(links.error) throw new Error(links.error.code==="42501"?"CAREER_TOURNAMENTS_READ_PENDING":"CAREER_TOURNAMENTS_UNAVAILABLE");
   const page=(links.data??[]).slice(0,PAGE),ids=[...new Set(page.map(p=>p.tournament_id))];
   if(!ids.length) return {events:[],nextOffset:null,ranking:null};
   const [tournaments,access]=await Promise.all([

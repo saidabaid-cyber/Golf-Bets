@@ -12,5 +12,8 @@ export async function GET(request:NextRequest) {
   const admin=getSupabaseAdmin("cloud",10000);
   if(!admin) return NextResponse.json({code:"TOURNAMENTS_UNAVAILABLE"},{status:503,headers:PRIVATE});
   try {return NextResponse.json(await readCareerTournaments(admin,account.userId,offset),{headers:PRIVATE});}
-  catch {return NextResponse.json({error:"Esta información no está disponible por el momento.",code:"TOURNAMENTS_UNAVAILABLE"},{status:503,headers:PRIVATE});}
+  catch (error) {
+    const pending=error instanceof Error&&error.message==="CAREER_TOURNAMENTS_READ_PENDING";
+    return NextResponse.json({error:"Esta información no está disponible por el momento.",code:pending?"TOURNAMENT_HISTORY_READ_PENDING":"TOURNAMENTS_UNAVAILABLE"},{status:503,headers:PRIVATE});
+  }
 }

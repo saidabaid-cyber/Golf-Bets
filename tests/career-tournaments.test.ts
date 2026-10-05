@@ -32,6 +32,7 @@ test("tournament states render loading, error, empty, real hero/history and rank
   const p={events:[],loading:false,error:false,authenticated:true,nextOffset:null,reload(){},loadMore(){},today:"2026-10-05"};
   const render=(props:object)=>renderCareer("app/components/career-tournaments.tsx","CareerTournamentsContent",{...p,...props});
   assert.match(render({}),/Todavía no tienes torneos registrados/);assert.match(render({loading:true}),/Cargando Carrera/);assert.match(render({error:true}),/Esta información no está disponible/);
+  const pending=render({error:true,readPending:true});assert.match(pending,/La consulta de torneos aún no está habilitada/);assert.doesNotMatch(pending,/Torneos jugados|Resumen de torneos/);
   const e=tournaments.projectCareerTournament(event,players,scores,"owner")!;
   assert.match(render({events:[e,{...e,id:"next",status:"upcoming"}]}),/5 días/);assert.match(render({events:[e]}),/Historial competitivo/);
   const emptyRanking=renderCareer("app/components/career-tournaments.tsx","TournamentRanking",{});assert.doesNotMatch(emptyRanking,/Posición|Puntos/);
