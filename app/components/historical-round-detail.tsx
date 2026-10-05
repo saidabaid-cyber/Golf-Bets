@@ -16,6 +16,7 @@ import { calculateBackyardIndex } from "../../lib/backyard-index";
 import { BACKYARD_INDEX_REASON_LABELS } from "../../lib/backyard-index-labels";
 import { RoundAchievementSummary } from "./round-achievement-summary";
 import { OwnerRoundFinalizeSync } from "./owner-round-finalize-sync";
+import { attributableHistory } from "../../lib/participant-history";
 const RoundSharingPanel = dynamic(() => import("./round-sharing-panel").then((module) => module.RoundSharingPanel));
 const RoundParticipationCard = dynamic(() => import("./round-participation-card").then(module => module.RoundParticipationCard));
 
@@ -66,11 +67,12 @@ function legacyOwnerCategories(round: RoundSnapshot) {
   });
 }
 
-export function HistoricalRoundDetail({ round, priorRounds, accountUserId, accessToken, onEdit, onPhoto }: {
+export function HistoricalRoundDetail({ round, priorRounds, accountUserId, accessToken, onParticipantConfirmed, onEdit, onPhoto }: {
   round: RoundSnapshot;
   priorRounds?: readonly RoundSnapshot[];
   accountUserId?: string;
   accessToken?: string;
+  onParticipantConfirmed?: () => Promise<void> | void;
   onEdit: () => void;
   onPhoto: () => void;
 }) {
@@ -144,10 +146,10 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
   ].filter((part): part is string => Boolean(part));
 
   return <div className="historicalDetail">
-    {accountUserId && <RoundAchievementSummary round={round} priorRounds={priorRounds} accountUserId={accountUserId} />}
+    {accountUserId && attributableHistory([round], accountUserId).length > 0 && <RoundAchievementSummary round={round} priorRounds={priorRounds} accountUserId={accountUserId} />}
     {accountUserId && accessToken && <RoundSharingPanel key={`${accountUserId}:${round.id}`} round={round} userId={accountUserId} accessToken={accessToken} />}
     {accountUserId && accessToken && round.scorekeeping?.version === 1 && !round.cloudReadOnly && round.lifecycleState === "completed" && <OwnerRoundFinalizeSync round={round} userId={accountUserId} accessToken={accessToken} />}
-    {accountUserId && accessToken && round.scorekeeping?.version === 1 && <RoundParticipationCard key={`participants:${accountUserId}:${round.id}`} accessToken={accessToken} roundId={round.cloudRoundId} localRoundId={round.cloudRoundId ? undefined : round.id} />}
+    {accountUserId && accessToken && round.scorekeeping?.version === 1 && <RoundParticipationCard key={`participants:${accountUserId}:${round.id}`} accessToken={accessToken} roundId={round.cloudRoundId} localRoundId={round.cloudRoundId ? undefined : round.id} onConfirmed={onParticipantConfirmed} />}
     {indexRecord && <section className="card"><details><summary>{indexRecord.eligible ? `ÍNDICE BACKYARD · Diferencial ${indexRecord.scoreDifferential?.toFixed(1)}` : "NO ELEGIBLE PARA ÍNDICE"}</summary><p>{indexRecord.eligible ? "Evidencia congelada al cerrar la ronda. Estimación local, no oficial." : indexRecord.reasons.map((reason) => BACKYARD_INDEX_REASON_LABELS[reason]).join(" ")}</p>{indexRecord.pccKind === "DECLARED_LOCAL_ZERO" && <p>PCC 0 declarado localmente. No es un PCC oficial publicado.</p>}</details></section>}
     <section className="card historicalHero">
       <div>

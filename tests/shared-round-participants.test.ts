@@ -84,6 +84,19 @@ test("first canonical completion retains its instant even when an earlier client
   const legacy = { ...completed, scorekeeping: undefined, completedAt: undefined };
   assert.equal(preserveRoundStatisticsOrigin(completed, legacy).completedAt, undefined, "old date-only historical records keep their original semantics");
 });
+
+test("historical participant UI gates personal achievement badges and refreshes canonical proof after self-confirmation", () => {
+  const detail = readFileSync("app/components/historical-round-detail.tsx", "utf8");
+  assert.match(detail, /attributableHistory\(\[round\], accountUserId\)\.length > 0 && <RoundAchievementSummary/);
+  assert.match(detail, /<RoundParticipationCard[^\n]*onConfirmed=\{onParticipantConfirmed\}/);
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /<HistoricalRoundDetail[^\n]*onParticipantConfirmed=\{refreshConfirmedSharedHistory\}/);
+  const refresh = page.slice(page.indexOf("async function refreshConfirmedSharedHistory()"), page.indexOf("function openHistoricalRound("));
+  assert.match(refresh, /withCloudAuthRetry\(downloadCloudData/);
+  assert.match(refresh, /liveIdentity\.current\.userId !== actor\.userId/);
+  assert.match(refresh, /canonical\.history\.filter\(round => round\.cloudReadOnly\)/);
+  assert.doesNotMatch(refresh, /cloudParticipant\s*:/, "UI never invents confirmation proof");
+});
 test("12-member recurring roster serializes while today's outing remains at most five", () => {
   const saved = parseFrequentGroups(serializeFrequentGroups([group()]))[0];
   assert.equal(saved.players.length, 12);
