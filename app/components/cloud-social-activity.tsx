@@ -100,7 +100,7 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
     {card.round ? <><h3>{card.round.courseName}</h3><p className={styles.score}>{card.round.ownerScore ?? "—"}<span>golpes · {card.round.holesPlayed} hoyos{card.round.totalOnly ? " · Sólo total" : ""}</span></p></> : <h3>{card.type === "EQUIPMENT_UPDATED" ? "Actualizó su bolsa." : "Logros de ronda"}</h3>}
     {card.courseEvent && <p>Nuevo campo jugado · fuera de su Home Club</p>}
     {card.round?.teeName && <p className={styles.tee}>Tee · {card.round.teeName}</p>}
-    {card.achievements.length > 0 && <><ul className={styles.achievements}>{card.achievements.map((item) => <li key={item}>{item}</li>)}</ul>{card.author.userId === viewerId && onOpenAchievements && <button type="button" className="textButton" onClick={onOpenAchievements}>Ver en Trophy Room</button>}</>}
+    {card.achievements.length > 0 && <><ul className={styles.achievements}>{card.achievements.map((item) => <li key={item}>{item}</li>)}</ul>{card.author.userId === viewerId && onOpenAchievements && <button type="button" className="textButton" onClick={onOpenAchievements}>Ver en Logros</button>}</>}
     {card.round && <p className={styles.attest}>{card.attestCount ? `Atestada por ${card.attestCount} ${card.attestCount === 1 ? "jugador" : "jugadores"}` : "Sin atestar"}<small>Confirmación de compañeros. No es certificación GHIN/WHS.</small></p>}
     <div className={styles.actions}>
       <button type="button" disabled={busy} aria-pressed={card.likedByMe} onClick={() => void act(like)}>{card.likedByMe ? "♥" : "♡"} Like · {card.likesCount}</button>

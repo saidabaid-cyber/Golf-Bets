@@ -38,3 +38,7 @@ Cinco vistas canónicas con selección en URL, recarga directa y Back/Forward. A
 ## Fase 2 — Resumen
 
 Perfil/club/ciudad e índice canónicos, métricas de tarjetas completas, balance propio verificado, temporada por cohorte de hoyos, meses sin actividad, rondas recientes con handler histórico y GHIN de lectura. No se infiere antigüedad de cuenta ni nivel. Precisión usa exclusivamente capturas explícitas; nunca score+putts para GIR. Queries deportivas existentes y loading/error se preservan; el error deportivo no oculta perfil/GHIN. 4 tests de cálculo/SSR PASS, además de los contratos existentes.
+
+## Fase 3 — Logros
+
+Catálogo extensible dentro de `round-achievements`, usando su validador estricto de tarjetas. Siete criterios documentados, estados/progreso derivados, fechas y referencia del hito, filtros de estado y detalle de logro. No persiste porcentajes. Salón de la Fama con placa de honor, contrato de ranking empatado y vacío real: no existe fuente global autorizada. 14 tests PASS (5 nuevos y 9 del motor original). CTA social traducido a Logros.

@@ -25,7 +25,7 @@ test("server-filtered feed retains pagination, truthful empty states, likes and 
   assert.match(feed, /Aún no hay actividad compartida/);
   assert.match(feed, /expectedHash: card.currentHash/);
   assert.match(feed, /\/api\/social\/activity/);
-  assert.match(feed, /Ver en Trophy Room/);
+  assert.match(feed, /Ver en Logros/);
 });
 test("community feed scrolls within a shell that reserves safe-area navigation space", () => {
   assert.match(readFileSync("app/components/home-dashboard-clean.module.css", "utf8"), /overflow:visible/);

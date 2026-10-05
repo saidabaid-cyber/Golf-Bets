@@ -1,6 +1,66 @@
 import { derivedGreenInRegulation } from "./advanced-stats";
 import { validTotalOnly } from "./total-score-round";
 import type { AdvancedHoleStat, Player, RoundSnapshot } from "./types";
+import { ownCareerHistory } from "./career-statistics";
+
+export type CareerAchievementDefinition = {
+  id: string; slug: string; name: string; description: string; category: "scoring" | "activity" | "competition";
+  icon: "trophy" | "bird" | "flag" | "bars" | "star" | "flame" | "ace";
+  criterion: "best18" | "birdies" | "pars" | "rounds" | "aces" | "streak" | "podiums";
+  threshold: number; milestones: readonly number[];
+};
+/** The catalogue extends the existing round evidence engine; no parallel achievement store. */
+export const CAREER_ACHIEVEMENTS: readonly CareerAchievementDefinition[] = [
+  { id:"low-round",slug:"low-round",name:"Low Round",description:"Completa una tarjeta de 18 hoyos con 80 golpes o menos.",category:"scoring",icon:"trophy",criterion:"best18",threshold:80,milestones:[100,90,85,80] },
+  { id:"birdie-club",slug:"birdie-club",name:"Birdie Club",description:"Suma 10 birdies en tarjetas completas de 9 o 18 hoyos.",category:"scoring",icon:"bird",criterion:"birdies",threshold:10,milestones:[1,5,10] },
+  { id:"par-master",slug:"par-master",name:"Par Master",description:"Registra 50 pares en tarjetas completas.",category:"scoring",icon:"flag",criterion:"pars",threshold:50,milestones:[10,25,50] },
+  { id:"consistency",slug:"consistency",name:"Consistency",description:"Completa 12 tarjetas de 9 o 18 hoyos.",category:"activity",icon:"bars",criterion:"rounds",threshold:12,milestones:[3,6,12] },
+  { id:"top-finish",slug:"top-finish",name:"Top Finish",description:"Termina en el podio de un torneo con resultados vinculados a tu cuenta.",category:"competition",icon:"star",criterion:"podiums",threshold:1,milestones:[1] },
+  { id:"win-streak",slug:"win-streak",name:"Win Streak",description:"Gana tres enfrentamientos seguidos contra el mismo rival en score bruto.",category:"competition",icon:"flame",criterion:"streak",threshold:3,milestones:[1,2,3] },
+  { id:"ace-club",slug:"ace-club",name:"Ace Club",description:"Registra un hoyo en uno en una tarjeta completa.",category:"scoring",icon:"ace",criterion:"aces",threshold:1,milestones:[1] },
+];
+export type CareerAchievement = CareerAchievementDefinition & {
+  value: number | null; progress: number; status: "unlocked" | "in_progress" | "locked";
+  unlocked_at: string | null; round_id: string | null; course_id: string | null; courseName: string | null;
+  tournament_id: string | null; season: number | null; metadata: { basis: string; available: boolean };
+};
+export type CareerCompetitionEvidence = { bestWinStreak?: number; streakAt?: string; streakRoundId?: string; podiums?: Array<{ id: string; date: string; courseName: string }> };
+export function deriveCareerAchievements(rounds: readonly RoundSnapshot[], accountUserId: string, competition: CareerCompetitionEvidence = {}): CareerAchievement[] {
+  const evidence = ownCareerHistory(rounds,accountUserId).map(round => ({ round, card: comparableScorecard(round,accountUserId,round.roundHoles === 9 ? 9 : 18) }))
+    .filter(item => item.card !== null).sort((a,b) => a.round.date.localeCompare(b.round.date) || a.round.id.localeCompare(b.round.id));
+  return CAREER_ACHIEVEMENTS.map(definition => {
+    let value: number | null = definition.criterion === "best18" ? null : 0;
+    let milestone: RoundSnapshot | undefined, unlockedAt: string | null = null;
+    for (const { round, card } of evidence) {
+      if (!card) continue;
+      const prior = value;
+      if (definition.criterion === "best18" && card.holes.length === 18) value = Math.min(value ?? Infinity,card.gross);
+      if (definition.criterion === "rounds") value = (value ?? 0) + 1;
+      if (definition.criterion === "birdies") value = (value ?? 0) + card.holes.filter(h => h.score === h.par - 1).length;
+      if (definition.criterion === "pars") value = (value ?? 0) + card.holes.filter(h => h.score === h.par).length;
+      if (definition.criterion === "aces") value = (value ?? 0) + card.holes.filter(h => h.score === 1).length;
+      if (value !== prior && !unlockedAt) milestone = round;
+      const reached = value !== null && (definition.criterion === "best18" ? value <= definition.threshold : value >= definition.threshold);
+      if (reached && !unlockedAt) { unlockedAt = round.date; milestone = round; }
+    }
+    if (definition.criterion === "streak") { value = competition.bestWinStreak ?? null; unlockedAt = value !== null && value >= definition.threshold ? competition.streakAt ?? null : null; }
+    if (definition.criterion === "podiums") { value = competition.podiums?.length ?? null; unlockedAt = competition.podiums?.[0]?.date ?? null; }
+    const reached = value !== null && (definition.criterion === "best18" ? value <= definition.threshold : value >= definition.threshold);
+    const progress = value === null || value === 0 ? 0 : Math.min(100, definition.criterion === "best18" ? definition.threshold / value * 100 : value / definition.threshold * 100);
+    return { ...definition,value,progress,status:reached ? "unlocked" : value === null || value === 0 ? "locked" : "in_progress",
+      unlocked_at:unlockedAt,round_id:definition.criterion === "streak" ? competition.streakRoundId ?? null : milestone?.id ?? null,
+      course_id:milestone?.courseSnapshot?.id ?? null,courseName:definition.criterion === "podiums" ? competition.podiums?.[0]?.courseName ?? null : milestone?.courseName ?? null,
+      tournament_id:definition.criterion === "podiums" ? competition.podiums?.[0]?.id ?? null : null,season:null,
+      metadata:{basis:definition.description,available:value !== null} };
+  });
+}
+export type FameEntry = { userId: string; name: string; avatarUrl?: string | null; achievements: number; position?: number };
+/** Tie-aware ordering for a future authorized global aggregate, never built from private cards. */
+export function rankFameEntries(entries: readonly FameEntry[]): FameEntry[] {
+  const unique = new Map(entries.filter(e => Number.isInteger(e.achievements) && e.achievements > 0).map(e => [e.userId,e]));
+  const sorted = [...unique.values()].sort((a,b) => b.achievements - a.achievements || a.userId.localeCompare(b.userId));
+  return sorted.map((entry,i) => ({...entry,position:i && sorted[i-1].achievements === entry.achievements ? sorted.findIndex(e => e.achievements === entry.achievements)+1 : i+1}));
+}
 
 export type RoundAchievementCode =
   | "PERSONAL_BEST_18H"
@@ -52,6 +112,9 @@ export function roundAchievementLabels(summary: RoundAchievementSummary): string
 
 type ScorecardHole = { number: number; par: number; strokeIndex: number; score: number };
 type ComparableScorecard = { player: Player; holes: ScorecardHole[]; gross: number; par: number };
+export function careerScorecardEvidence(round: RoundSnapshot, accountUserId: string) {
+  return comparableScorecard(round, accountUserId, round.roundHoles === 9 ? 9 : 18);
+}
 
 function validPlayedDate(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
