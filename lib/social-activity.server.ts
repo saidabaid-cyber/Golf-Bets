@@ -9,6 +9,7 @@ import { BACKYARD_INDEX_METADATA_KEY, parseIndexPreference } from "./backyard-in
 import { newCoursePlayedEvent } from "./new-course-activity";
 import { INTERNAL_GOLF_COURSE_CATALOG } from "./golf-course-directory";
 import { safeEquipmentSummary } from "./social-feed-presentation";
+import { socialActivityCursor } from "./social-activity-cursor";
 import { golfClubCatalog, golfBallCatalog } from "./golf-equipment-catalog";
 import type { EquipmentProfile } from "./golf-equipment";
 import type { SocialRoundCard } from "./social-activity-contract";
@@ -76,7 +77,6 @@ const EMPTY_PREFS: SocialActivityPreferences = {
 };
 const SHA256 = /^[0-9a-f]{64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const UTC_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
 
 export class SocialServiceError extends Error {
   constructor(public code: SocialMutationErrorCode, public status: number, message: string) { super(message); }
@@ -556,9 +556,10 @@ export async function listActivity(
     builder = builder.eq("local_round_id", query.localRoundId);
   }
   if (query.cursor) {
-    const [at, id, extra] = query.cursor.split("|");
-    if (extra || !at || !id || !UTC_INSTANT.test(at) || !Number.isFinite(Date.parse(at)) || !UUID.test(id))
+    const cursor = socialActivityCursor(query.cursor);
+    if (!cursor)
       throw new SocialServiceError("INVALID_REQUEST", 400, "Cursor inválido.");
+    const { at, id } = cursor;
     builder = builder.or(`created_at.lt."${at}",and(created_at.eq."${at}",id.lt.${id})`);
   }
   const { data, error } = await builder.limit(limit * 3 + 1);
