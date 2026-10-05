@@ -469,12 +469,11 @@ function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
   const ghinControl = useGhinReadOnlyProfile(identity.mode === "authenticated" ? identity.accessToken : null);
-  const { tab, setTab, goBack, setNavigationGuard, historyDetailId } = useScreenNavigation();
+  const { tab, setTab, goBack, setNavigationGuard, historyDetailId, careerView, setCareerView } = useScreenNavigation();
   const { unread: groupNotificationsUnread } = useGroupNotificationsBadge(identity.accessToken, isPrimaryTab(tab));
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const [profileCompletionTarget, setProfileCompletionTarget] = useState<CompletionSection | null>(null);
   const [profileRootRevision, setProfileRootRevision] = useState(0);
-  const [careerView, setCareerView] = useState<"friends" | "summary" | "trophy">("summary");
   const [launchMonitorEntry, setLaunchMonitorEntry] = useState(false);
   const [roundGpsIntent, setRoundGpsIntent] = useState(false);
   useEffect(() => { if (tab !== "round") setRoundGpsIntent(false); }, [tab]);
@@ -491,7 +490,7 @@ function GolfBetsApp() {
     if (identity.mode !== "authenticated") return;
     let id = socialIdFromQr(location.href, location.origin);
     try { id ||= sessionStorage.getItem(PENDING_SOCIAL_KEY); } catch { /* URL remains usable. */ }
-    if (id && /^[0-9a-f-]{36}$/i.test(id)) { setSocialTarget(id); setFriendsInitialView("list"); setCareerView("friends"); setTab("career"); }
+    if (id && /^[0-9a-f-]{36}$/i.test(id)) { setSocialTarget(id); setFriendsInitialView("list"); setTab("friends"); }
   }, [identity.mode, identity.userId, setTab]);
   const ownerClubChoices = useMemo(() => {
     if (typeof window === "undefined" || tab !== "round") return [];
@@ -649,7 +648,7 @@ function GolfBetsApp() {
   }
   function openCareerFriends(view: FriendsView = "list", targetId?: string) {
     if (!targetId) closeFriendTarget(); else setSocialTarget(targetId);
-    setFriendsEntry(value => value + 1); setFriendsInitialView(view); setCareerView("friends"); setTab("career");
+    setFriendsEntry(value => value + 1); setFriendsInitialView(view); setTab("friends");
   }
   async function openFirstExperienceFriends() {
     if (await firstSocialExperience.resolve("friendDiscovery", "opened")) openCareerFriends();
@@ -3881,11 +3880,12 @@ function GolfBetsApp() {
       onOpenRounds={() => setTab("history")}
       onOpenFriends={() => openCareerFriends()}
       onPrivacy={() => openAccountSettings("privacy")}
-      onOpenAchievements={() => { setCareerView("trophy"); setTab("career"); }}
+      onOpenAchievements={() => { setCareerView("achievements"); }}
     />}
     {showPageBack && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
-    {tab === "career" && <CareerHub displayName={identity.displayName} avatarUrl={identity.avatarUrl} userId={identity.userId} index={accountIndex} insights={betaGolfInsights} rounds={statisticsHistory} ready={statisticsReady} view={careerView} onView={view => { if (view === "friends") openCareerFriends(); else setCareerView(view); }} friends={<FriendsHub key={`${identity.userId}:${friendsInitialView}:${friendsEntry}`} ownerId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} name={identity.displayName} username={identity.username || ""} avatar={identity.avatarUrl || ""} initialView={friendsInitialView} targetId={socialTarget} onCloseTarget={closeFriendTarget} />} onOpenStats={() => setTab("stats")} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} />}
+    {tab === "career" && <CareerHub displayName={identity.displayName} avatarUrl={identity.avatarUrl} userId={identity.userId} index={accountIndex} insights={betaGolfInsights} rounds={statisticsHistory} ready={statisticsReady} history={history} error={statisticsAuthority.state === "unavailable"} view={careerView} onView={setCareerView} onOpenStats={() => setTab("stats")} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} onCreateRound={requestNewRound} onFindRival={() => openCareerFriends("search")} onRetry={() => setStatisticsRetry(value => value + 1)} />}
+    {tab === "friends" && <FriendsHub key={`${identity.userId}:${friendsInitialView}:${friendsEntry}`} ownerId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} name={identity.displayName} username={identity.username || ""} avatar={identity.avatarUrl || ""} initialView={friendsInitialView} targetId={socialTarget} onCloseTarget={closeFriendTarget} />}
     {tab === "coach" && <MyCoach insights={betaGolfInsights} ready={statisticsReady} onBallFit={() => openCoachFitting(false)} onLaunchMonitor={() => openCoachFitting(true)} onProgress={() => setTab("stats")} onEquipment={() => { setLaunchMonitorEntry(false); setProfileCompletionTarget("equipment"); setProfileFocus("equipment"); setTab("profile"); }} />}
 
     {tab === "play" && <PlayHub

@@ -30,3 +30,7 @@ Rivalidades se derivan de tarjetas completas comparables, identidad estable y re
 Torneos Polla: `tournaments`, `tournament_players.profile_id`, `tournament_scores`, RLS de owner/admin. Un torneo organizado no implica participación. Ranking por puntos global y clasificación global de logros no cuentan con fuente suficiente: estados honestos y contratos extensibles, sin jugadores inventados.
 Analytics: existe `recordProductEvent` y allowlist/constraint de DB; cualquier ampliación deberá respetar ambos.
 Navegación global observada en DEV: Inicio, Carrera, Play, My Coach, Reglas. Se preserva.
+
+## Fase 1 — shell
+
+Cinco vistas canónicas con selección en URL, recarga directa y Back/Forward. Amigos mantiene su dominio existente y sus entradas desde Inicio, notificaciones y QR, mediante `screen=friends`. Los cambios de tab reinician el scroll; la página no añade overflow. Header, skeleton y errores reutilizables. 23 tests de navegación/Carrera/Amigos PASS. Las expectativas del contrato anterior de cuatro destinos se actualizan al producto solicitado; las pruebas funcionales de Amigos se conservan.

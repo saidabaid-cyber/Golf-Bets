@@ -17,11 +17,10 @@ test("Carrera reuses authoritative statistics and existing achievement/round han
   const career = readFileSync("app/components/career-hub.tsx", "utf8");
   assert.match(page, /<CareerHub[^>]*insights=\{betaGolfInsights\} rounds=\{statisticsHistory\} ready=\{statisticsReady\}/);
   assert.match(page, /<CareerHub[\s\S]*?onOpenRound=\{openHistoricalRound\}/);
-  assert.match(career, /deriveRoundAchievements\(round, rounds, userId\)/);
-  assert.match(career, /Resumen/);
-  assert.match(career, /Estadísticas/);
-  assert.match(career, /Historial/);
-  assert.match(career, /Trophy Room/);
-  assert.match(career, /Mejor ronda · 18 hoyos/);
+  assert.match(career, /CareerHeader/);
+  assert.match(career, /CareerTabs/);
+  assert.match(career, /CareerSkeleton/);
+  assert.match(career, /CareerErrorState/);
+  assert.match(page, /tab === "friends" && <FriendsHub/);
   assert.doesNotMatch(career, /#12|245|Birdie Master|82\.5|77%/);
 });

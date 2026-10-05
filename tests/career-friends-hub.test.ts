@@ -6,6 +6,7 @@ import ts from "typescript";
 import * as discovery from "../lib/friends-discovery";
 import * as connections from "../lib/social-connections";
 import { buildGolfInsights } from "../lib/golf-insights";
+import * as careerNavigation from "../lib/career-navigation";
 type Node = { type: any; props: Record<string, any> };
 function harness(path: string, boundaries: Record<string, any> = {}) {
   const slots: any[] = [], effects: any[] = []; let cursor = 0; let pending: Array<() => void> = [];
@@ -59,14 +60,16 @@ function setup(count = 5, initialView = "list") {
   return { render: () => h.render("FriendsHub", props), calls, graph: () => data, setGraph(next: connections.ConnectionPage) { data = next; }, props };
 }
 
-test("Career places Friends before Summary and preserves summary, trophy and authoritative actions", () => {
-  const h = harness("app/components/career-hub.tsx"), views: string[] = [];
-  const props = { displayName: "QA", userId: "owner", index: { value: null }, insights: buildGolfInsights([]), rounds: [], ready: true, view: "summary", onView: (v: string) => views.push(v), onOpenStats() {}, onOpenHistory() {}, onOpenRound() {}, friends: "canonical-friends" };
-  let tree = h.render("CareerHub", props); const nav = find(tree, n => n.type === "nav");
-  assert.equal(text(nav), "Amigos Resumen Estadísticas Historial"); click(tree, "Amigos"); assert.deepEqual(views, ["friends"]);
-  assert.match(text(tree), /Score promedio[\s\S]*Trophy Room[\s\S]*Récords personales/);
-  tree = h.render("CareerHub", { ...props, view: "friends", ready: false }); assert.match(text(tree), /canonical-friends/); assert.doesNotMatch(text(tree), /Preparando tu Carrera/);
-  tree = h.render("CareerHub", { ...props, view: "trophy" }); assert.match(text(tree), /Trophy Room[\s\S]*Birdies registrados/);
+test("Career selects exactly five views; Friends remains its existing independent domain", () => {
+  const h = harness("app/components/career-shared.tsx", { "career-navigation": careerNavigation }), views: string[] = [];
+  for (const selected of careerNavigation.CAREER_TABS) {
+    const tree = h.render("CareerTabs", { view: selected.id, onView: (v: string) => views.push(v) });
+    assert.equal(text(tree), "Resumen Logros Rivalidades Rondas Torneos");
+    assert.equal(nodes(tree).filter(n => n.props["aria-current"] === "page").length, 1);
+    click(tree, selected.label);
+  }
+  assert.deepEqual(views, careerNavigation.CAREER_TABS.map(v => v.id));
+  assert.match(readFileSync("app/page.tsx", "utf8"), /tab === "friends" && <FriendsHub/);
 });
 for (const count of [0, 5, 20, 100]) test(`existing graph list supports ${count} friends, local filter and compact profile rows`, async () => {
   const h = setup(count); h.render(); await flush(); let tree = h.render();
@@ -123,8 +126,8 @@ test("ranking prioritizes exact username, exact name and same public club withou
 test("Home, first nudge and preserved QR URL/cache route explicitly to Carrera Friends", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const nudge = page.split("async function openFirstExperienceFriends()")[1].split("\n  }")[0]; assert.match(nudge, /resolve\("friendDiscovery", "opened"\)[\s\S]*openCareerFriends\(\)/); assert.doesNotMatch(nudge, /setTab\("social"\)/);
-  assert.match(page, /onOpenFriends=\{\(\) => openCareerFriends\(\)\}/); assert.match(page, /setSocialTarget\(id\); setFriendsInitialView\("list"\); setCareerView\("friends"\); setTab\("career"\)/); assert.match(page, /sessionStorage.getItem\(PENDING_SOCIAL_KEY\)/);
-  assert.match(page, /const \[careerView, setCareerView\].*\("summary"\)/);
+  assert.match(page, /onOpenFriends=\{\(\) => openCareerFriends\(\)\}/); assert.match(page, /setSocialTarget\(id\); setFriendsInitialView\("list"\); setTab\("friends"\)/); assert.match(page, /sessionStorage.getItem\(PENDING_SOCIAL_KEY\)/);
+  assert.match(page, /careerView, setCareerView.*useScreenNavigation/);
 });
 
 test("profile response exposes only authorized identity and an already-public club; denied card never reads club", async () => {
