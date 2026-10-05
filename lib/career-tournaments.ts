@@ -19,7 +19,7 @@ export function projectCareerTournament(t:TournamentSource,players:readonly Tour
   const valid=(rows:readonly TournamentScoreSource[])=>rows.length===order.length&&new Set(rows.map(s=>s.hole)).size===order.length&&rows.every(s=>Number.isInteger(s.score)&&s.score>0&&s.score<=20);
   const complete=valid(ownScores),gross=complete?ownScores.reduce((sum,s)=>sum+s.score,0):null;
   const courseValid=Array.isArray(t.course_snapshot)&&order.every(h=>t.course_snapshot.filter(d=>d.number===h).length===1&&t.course_snapshot.some(d=>d.number===h&&Number.isInteger(d.par)&&d.par>=3&&d.par<=6&&Number.isInteger(d.strokeIndex)&&d.strokeIndex!>=1&&d.strokeIndex!<=18));
-  const hcpValid=participants.every(p=>p.handicap!==null&&p.handicap!==""&&Number.isFinite(Number(p.handicap))&&Number(p.handicap)>=-15&&Number(p.handicap)<=54)&&Number.isFinite(t.hcp_pct)&&t.hcp_pct>=0&&t.hcp_pct<=100&&["ceil","floor","round","decimal","half_up","half_down","six_up","four_down"].includes(t.handicap_mode);
+  const hcpValid=participants.every(p=>p.handicap!==null&&p.handicap!==""&&Number.isFinite(Number(p.handicap))&&Number(p.handicap)>=-15&&Number(p.handicap)<=54)&&Number.isFinite(t.hcp_pct)&&t.hcp_pct>=0&&t.hcp_pct<=100&&["partial","round","decimal","half_up","half_down","six_up","four_down"].includes(t.handicap_mode);
   let net:number|null=null,relativeToPar:number|null=null,position:number|null=null;
   if(courseValid&&hcpValid) {
     const board=buildPollaLeaderboard({players:participants.map(p=>({id:p.id,name:p.name,handicap:Number(p.handicap)})),scores:played.map(s=>({playerId:s.player_id,hole:s.hole,score:s.score})),courseSnapshot:t.course_snapshot,tournamentHoles:t.holes,startHole:t.start_hole,hcpPct:t.hcp_pct,handicapMode:t.handicap_mode});

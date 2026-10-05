@@ -1,5 +1,7 @@
 "use client";
 import dynamic from "next/dynamic";
+import { useEffect,useRef } from "react";
+import { recordCareerEvent } from "../../features/analytics/career";
 import type { GolfInsights } from "../../lib/golf-insights";
 import type { RoundSnapshot } from "../../lib/types";
 import type { SelectedHandicapIndex } from "../../lib/handicap-source";
@@ -16,7 +18,7 @@ const CareerTournaments = dynamic(() => import("./career-tournaments").then(m =>
 export type CareerHubProps = {
   displayName: string; avatarUrl?: string | null; userId: string; index: SelectedHandicapIndex;
   username?: string | null; club?: string | null; city?: string | null; accessToken?: string | null;
-  ghin?: { profile: GhinProfileProjection | null; enabled: boolean; error?: string | null };
+  ghin?: { profile: GhinProfileProjection | null; enabled: boolean;ready?:boolean; error?: string | null };
   insights: GolfInsights; rounds: RoundSnapshot[]; history?: RoundSnapshot[]; ready: boolean; error?: boolean;
   view: CareerView; onView: (view: CareerView) => void;
   onOpenStats: () => void; onOpenHistory: () => void; onOpenRound: (id: string) => void;
@@ -25,7 +27,15 @@ export type CareerHubProps = {
   competitionEvidence?: CareerCompetitionEvidence;
 };
 export function CareerHub(props: CareerHubProps) {
+  const opened=useRef(""),viewed=useRef("");
+  useEffect(()=>{
+    if(!props.accessToken)return;
+    if(opened.current!==props.userId){opened.current=props.userId;recordCareerEvent("career_opened","career",props.accessToken);}
+    const key=`${props.userId}:${props.view}`;
+    if(viewed.current!==key){viewed.current=key;recordCareerEvent("career_tab_viewed",props.view,props.accessToken);}
+  },[props.userId,props.view,props.accessToken]);
+  const data={...props,onOpenRound:(id:string)=>{recordCareerEvent("round_opened",props.view,props.accessToken);props.onOpenRound(id);}};
   return <section className={styles.screen} aria-label="Carrera"><CareerHeader /><CareerTabs view={props.view} onView={props.onView} /><div className={styles.content} key={props.view}>
-    {props.view === "tournaments" ? <CareerTournaments {...props} /> : !props.ready && !props.error ? <CareerSkeleton /> : props.view === "summary" ? <CareerOverview {...props} /> : props.error ? <CareerErrorState onRetry={props.onRetry} /> : props.view === "achievements" ? <CareerAchievements {...props} /> : props.view === "rivalries" ? <CareerRivalries {...props} /> : <CareerRounds {...props} />}
+    {props.view === "tournaments" ? <CareerTournaments {...data} /> : !props.ready && !props.error ? <CareerSkeleton /> : props.view === "summary" ? <CareerOverview {...data} /> : props.error ? <CareerErrorState onRetry={props.onRetry} /> : props.view === "achievements" ? <CareerAchievements {...data} /> : props.view === "rivalries" ? <CareerRivalries {...data} /> : <CareerRounds {...data} />}
   </div></section>;
 }

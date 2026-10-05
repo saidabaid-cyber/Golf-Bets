@@ -5,7 +5,6 @@ import test from "node:test";
 import ts from "typescript";
 import * as discovery from "../lib/friends-discovery";
 import * as connections from "../lib/social-connections";
-import { buildGolfInsights } from "../lib/golf-insights";
 import * as careerNavigation from "../lib/career-navigation";
 type Node = { type: any; props: Record<string, any> };
 function harness(path: string, boundaries: Record<string, any> = {}) {

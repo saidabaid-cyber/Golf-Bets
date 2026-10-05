@@ -11,6 +11,7 @@ const scores:tournaments.TournamentScoreSource[]=players.flatMap(p=>event.course
 test("tournament projection links account exactly, reuses sports engine and ranks completed results",()=>{
   const e=tournaments.projectCareerTournament(event,players,scores,"owner")!;
   assert.equal(e.gross,72);assert.equal(e.position,1);assert.equal(e.relativeToPar,0);assert.equal(e.resultStatus,"final");
+  assert.equal(tournaments.projectCareerTournament({...event,handicap_mode:"partial"},players,scores,"owner")!.position,1);
   assert.equal(tournaments.projectCareerTournament(event,players,scores,"organizer"),null);
   assert.equal(tournaments.projectCareerTournament(event,[...players,{...players[0],id:"duplicate"}],scores,"owner"),null);
   assert.doesNotMatch(JSON.stringify(e),/QA Rival|profile_id|pin_hash/);
@@ -49,4 +50,12 @@ test("API denies expired auth before service access, is private and cannot use a
   let serviceCalls=0;const exports:any={};runInNewContext(source,{exports,require:()=>({NextResponse:{json:(body:any,options:any)=>({body,...options})},authenticatedRequest:async()=>({ok:false,status:401,error:"Expired",code:"AUTH_REQUIRED"}),getSupabaseAdmin(){serviceCalls++;}})});
   const result=await exports.GET({nextUrl:new URL("https://dev.thebackyard.com.mx/api/career/tournaments?userId=other")});
   assert.equal(result.status,401);assert.equal(serviceCalls,0);assert.equal(result.headers["cache-control"],"private, no-store");
+});
+test("tournament reader rejects a truncated participant page before ranking",async()=>{
+  const source=ts.transpileModule(readFileSync("lib/career-tournaments.server.ts","utf8"),{fileName:"server.ts",compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+  let playerReads=0,scoresRead=false;
+  const admin={from(table:string){if(table==="tournament_players")playerReads++;if(table==="tournament_scores")scoresRead=true;const q:any={select(){return q;},eq(){return q;},in(){return q;},is(){return q;},order(){return q;},range(){return q;},then(fn:any){return Promise.resolve(fn({error:null,count:1001,data:table==="tournament_players"?[players[0]]:table==="tournaments"?[event]:[]}));}};return q;}};
+  const exports:any={};runInNewContext(source,{exports,Set,Date,Promise,require:(id:string)=>id==="server-only"?{}:tournaments});
+  await assert.rejects(()=>exports.readCareerTournaments(admin,"owner",0),/CAREER_TOURNAMENTS_LIMIT/);
+  assert.equal(playerReads,2);assert.equal(scoresRead,false);
 });

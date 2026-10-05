@@ -7,6 +7,7 @@ import type { CareerHubProps } from "./career-hub";
 import { CareerPanel, CareerEmptyState, CareerCta, CareerStatCard } from "./career-shared";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import styles from "./career-hub.module.css";
+import { recordCareerEvent } from "../../features/analytics/career";
 export const streakLabel = (row: CareerRivalry) => `${row.currentStreak.count} ${row.currentStreak.result === "win" ? "victorias" : row.currentStreak.result === "loss" ? "derrotas" : "empates"}`;
 export function RivalryRow({ rivalry:r, onOpen }: { rivalry:CareerRivalry;onOpen:(id:string)=>void }) {
   return <button type="button" className={styles.roundRow} onClick={()=>onOpen(r.playerB)} aria-label={`Ver rivalidad con ${r.name}`}><ProfileAvatarMedia fallback={r.name.slice(0,1)} className={styles.smallAvatar}/><span className={styles.rowMain}><strong>{r.name}</strong><small>{r.matchesPlayed} enfrentamientos · {r.wins}-{r.losses}-{r.ties} G-P-E</small></span><span className={styles.rowScore}><strong>{careerNumber(r.winRate)}%</strong><small>victorias</small></span><span aria-hidden="true">›</span></button>;
@@ -22,7 +23,7 @@ export function CareerRivalries(props:CareerHubProps) {
   const total=useMemo(()=>rivalryTotals(rows),[rows]);
   const personal=useMemo(()=>buildGolfInsights(ownCareerHistory(eligible,props.userId)),[eligible,props.userId]);
   const detail=rows.find(r=>r.playerB===selected),featured=detail??rows[0];
-  const open=(id:string)=>setSelected(id);
+  const open=(id:string)=>{setSelected(id);recordCareerEvent("rivalry_opened","stroke_play",props.accessToken);};
   const oldest=[...rows].sort((a,b)=>a.firstMatch.localeCompare(b.firstMatch))[0],best=[...rows].sort((a,b)=>b.bestWinStreak-a.bestWinStreak)[0];
   return <><div className={styles.filters}><label>Periodo<select value={year} onChange={e=>{setYear(e.target.value);setSelected(null);setRival("all");}}><option value="all">Todo el historial</option>{[...new Set(props.rounds.map(r=>r.date.slice(0,4)))].sort().reverse().map(y=><option key={y} value={y}>{y}</option>)}</select></label><label>Rival<select value={rival} onChange={e=>{setRival(e.target.value);setSelected(null);}}><option value="all">Todos los rivales</option>{all.map(r=><option key={r.playerB} value={r.playerB}>{r.name}</option>)}</select></label><label>Formato<select value={holes} onChange={e=>{setHoles(e.target.value);setSelected(null);setRival("all");}}><option value="all">Stroke Play · todos</option><option value="18">Stroke Play · 18 hoyos</option><option value="9">Stroke Play · 9 hoyos</option></select></label></div>
     <div className={styles.metrics}><CareerStatCard label="Enfrentamientos" value={total.matches}/><CareerStatCard label="Victorias" value={total.winRate===undefined?undefined:`${careerNumber(total.winRate)}%`} hint="Score bruto · empates incluidos"/>{personal.betBalance!==undefined&&<CareerStatCard label="Balance personal" value={personal.betBalance.toLocaleString("es-MX",{style:"currency",currency:"MXN",maximumFractionDigits:0})} hint="Tu resultado consolidado del periodo"/>}</div>

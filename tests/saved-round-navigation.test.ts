@@ -3,8 +3,9 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 import * as navigation from "../lib/app-navigation";
+import * as careerNavigation from "../lib/career-navigation";
 
-type Hook = { tab: navigation.AppTab; historyDetailId: string | null; setTab: (tab: navigation.AppTab, options?: { roundId?: string | null }) => void; setNavigationGuard: (guard: (tab: navigation.AppTab) => navigation.AppTab) => void };
+type Hook = { tab: navigation.AppTab; careerView:careerNavigation.CareerView;setCareerView:(view:careerNavigation.CareerView)=>void; historyDetailId: string | null; setTab: (tab: navigation.AppTab, options?: { roundId?: string | null }) => void; setNavigationGuard: (guard: (tab: navigation.AppTab) => navigation.AppTab) => void };
 
 /** Execute the real navigation hook with browser history and React state
  * boundaries, without loading unrelated providers or a remote database. */
@@ -37,7 +38,7 @@ function mount(window: ReturnType<typeof browserAt>) {
   };
   const source = ts.transpileModule(readFileSync("app/components/use-screen-navigation.ts", "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const exported = {} as { useScreenNavigation: () => Hook };
-  new Function("require", "exports", "window", source)((name: string) => name === "react" ? react : name.includes("app-navigation") ? navigation : { useViewScrollReset() {} }, exported, window);
+  new Function("require", "exports", "window", source)((name: string) => name === "react" ? react : name.includes("app-navigation") ? navigation : name.includes("career-navigation") ? careerNavigation : { useViewScrollReset() {} }, exported, window);
   function render() { cursor = 0; const result = exported.useScreenNavigation(); initial = false; return result; }
   render(); effects.forEach(effect => effect());
   return render;
@@ -52,6 +53,11 @@ test("saved round URL survives reload without reconstructing an empty active rou
   render = mount(browser);
   assert.equal(render().tab, "historyDetail");
   assert.equal(render().historyDetailId, "qa-saved-round-9");
+});
+test("all five Carrera tabs survive direct reload and browser Back within the same screen",()=>{
+  const browser=browserAt("?screen=career&career=summary");let render=mount(browser);
+  for(const tab of careerNavigation.CAREER_TABS){render().setCareerView(tab.id);assert.equal(render().careerView,tab.id);render=mount(browser);assert.equal(render().careerView,tab.id);}
+  browser.history.back();assert.equal(render().careerView,"rounds");assert.equal(render().tab,"career");
 });
 
 test("opening another historical round and browser Back restore the respective selections", () => {

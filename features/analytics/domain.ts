@@ -17,6 +17,12 @@ export const PRODUCT_EVENT_NAMES = [
   "ai_insight_viewed",
   "stats_deleted",
   "account_delete_requested",
+  "career_opened",
+  "career_tab_viewed",
+  "achievement_opened",
+  "rivalry_opened",
+  "round_opened",
+  "tournament_opened",
 ] as const;
 
 export type ProductEventName = (typeof PRODUCT_EVENT_NAMES)[number];

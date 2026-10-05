@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     occurred_at: typeof source.occurredAt === "string" && !Number.isNaN(Date.parse(source.occurredAt)) ? source.occurredAt : new Date().toISOString(),
   });
   if (error && error.code !== "23505") {
-    const schemaMissing = ["42P01", "PGRST204", "PGRST205"].includes(error.code || "");
+    const schemaMissing = ["42P01", "PGRST204", "PGRST205"].includes(error.code || "") || (error.code === "23514" && ["career_opened","career_tab_viewed","achievement_opened","rivalry_opened","round_opened","tournament_opened"].includes(source.eventName));
     return NextResponse.json({ error: schemaMissing ? "Analytics se habilitará tras la migración controlada de Preview." : "No pudimos registrar el evento.", code: schemaMissing ? "ANALYTICS_SCHEMA_PENDING" : "ANALYTICS_WRITE_FAILED" }, { status: 503, headers: PRIVATE });
   }
   return NextResponse.json({ ok: true, duplicate: error?.code === "23505" }, { headers: PRIVATE });

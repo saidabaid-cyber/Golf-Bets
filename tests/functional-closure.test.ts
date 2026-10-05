@@ -172,5 +172,5 @@ test("Editar activa y navegar no borra scores; Guardar confirma la captura",()=>
   const app=fs.readFileSync("app/page.tsx","utf8"),nav=fs.readFileSync("app/components/use-screen-navigation.ts","utf8");
   assert.match(app,/function editActiveRound\(\)[\s\S]*?applyDraft\(roundDraftPayload\(\), \{ preserveLocalUi: true \}\)[\s\S]*?setEditingRound\(true\); setTab\("setup"\)/);
   assert.doesNotMatch(app,/if \(tab !== "round"[\s\S]{0,100}ensureHoleScoresAtPar/);
-  assert.match(app,/commitHoleCapture\(scores, scoreEdits, hole, players\)/);assert.doesNotMatch(app,/Confirmar Par/);assert.match(nav,/window.history.back\(\)/);assert.match(nav,/useViewScrollReset\(tab\)/);
+  assert.match(app,/commitHoleCapture\(scores, scoreEdits, hole, players\)/);assert.doesNotMatch(app,/Confirmar Par/);assert.match(nav,/window.history.back\(\)/);assert.match(nav,/useViewScrollReset\(tab === "career" \? `career:\$\{careerView\}` : tab\)/);
 });

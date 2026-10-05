@@ -17,8 +17,9 @@ export async function readCareerTournaments(admin:SupabaseClient,userId:string,o
   const allowedIds=allowed.map(t=>t.id);
   if(!allowedIds.length) return {events:[],nextOffset:links.data!.length>PAGE?offset+PAGE:null,ranking:null};
   // Bounded batched reads, not one query per tournament. Detect limits rather than rank partial data.
-  const players=await admin.from("tournament_players").select("id,tournament_id,profile_id,name,handicap").in("tournament_id",allowedIds).order("id").range(0,1000);
+  const players=await admin.from("tournament_players").select("id,tournament_id,profile_id,name,handicap",{count:"exact"}).in("tournament_id",allowedIds).order("id").range(0,999);
   if(players.error) throw new Error("CAREER_TOURNAMENTS_UNAVAILABLE");
+  if(players.count===null||players.count!==(players.data??[]).length) throw new Error("CAREER_TOURNAMENTS_LIMIT");
   const scores:TournamentScoreSource[]=[];
   for(let start=0;start<20000;start+=1000) {
     const batch=await admin.from("tournament_scores").select("tournament_id,player_id,hole,score").in("tournament_id",allowedIds).order("tournament_id").order("player_id").order("hole").range(start,start+999);
@@ -26,7 +27,6 @@ export async function readCareerTournaments(admin:SupabaseClient,userId:string,o
     scores.push(...(batch.data??[])); if((batch.data??[]).length<1000) break;
     if(start===19000) throw new Error("CAREER_TOURNAMENTS_LIMIT");
   }
-  if((players.data??[]).length>1000) throw new Error("CAREER_TOURNAMENTS_LIMIT");
   const events=allowed.flatMap(t=>{
     // A confirmed exact link is rechecked in the projection; no name-based ownership.
     const event=projectCareerTournament(t,players.data as TournamentPlayerSource[],scores,userId);
