@@ -1,0 +1,469 @@
+{
+  "status": "PENDING_DEVICE_QA",
+  "devUrl": "https://dev.thebackyard.com.mx",
+  "branch": "integration/backyard-current",
+  "baseSha": "f987a54ed4ebd982ca5e3c0a62caf30fde09c336",
+  "codeSha": "019b8c9114d3fbebc3f0cbb055be5695b7db3a2a",
+  "qaUserId": "b182e0a1-d3f5-4e32-a005-29c6d55b6cdf",
+  "baseline": {
+    "completedCount": 20,
+    "originalRows": 22,
+    "unchanged": true,
+    "backyardIndex": 5.5,
+    "validAttests": 11,
+    "pendingAttests": 9,
+    "attestPercent": 55,
+    "completedIds": [
+      {
+        "id": "ad727513-d19e-45f5-9b3b-6cba094f6544",
+        "localId": "oonshxl8",
+        "version": 23,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Blancas"
+      },
+      {
+        "id": "697e4c3f-42cf-4c95-9c3f-7c57ddfcbf58",
+        "localId": "8t9l8dma",
+        "version": 21,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "c250c150-8694-46f8-bba9-07472e1eb7bc",
+        "localId": "gys71iow",
+        "version": 21,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Blancas"
+      },
+      {
+        "id": "19bfd6a6-5808-4d8e-9432-4a8a9911dfa8",
+        "localId": "uud3jzr4",
+        "version": 21,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Blancas"
+      },
+      {
+        "id": "4d004e21-fb27-489d-8081-0e38d6cc2733",
+        "localId": "fz2xs46i",
+        "version": 21,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Blancas"
+      },
+      {
+        "id": "75fcbd06-804a-4508-bc34-ea0f23eb1895",
+        "localId": "k1932hf8",
+        "version": 21,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "570c3a9f-03ca-4238-89fc-46ad039d25ba",
+        "localId": "2r8lnvh2",
+        "version": 20,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Blancas"
+      },
+      {
+        "id": "7d13f9fb-4e93-49b3-b2d7-b20a5427e4ae",
+        "localId": "fzkvtuec",
+        "version": 23,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Blancas"
+      },
+      {
+        "id": "1c5abff5-a02c-4a45-b151-0b2f5ac9bb55",
+        "localId": "5fgb1a39",
+        "version": 20,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "59031561-6934-4cd0-b3cd-0181e5c76aa2",
+        "localId": "vq7oerek",
+        "version": 20,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "19c03579-423d-4521-9eb1-c7e61110e143",
+        "localId": "gboenefn",
+        "version": 19,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "60d444f6-f550-4496-a535-b6a559511954",
+        "localId": "9zonng6p",
+        "version": 19,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "1cc2c7cc-3c0f-4d93-9f25-9698216700ae",
+        "localId": "uk0v5gmp",
+        "version": 19,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "a1bfd195-9fd5-49f3-82ed-2c12e51ca5b0",
+        "localId": "8flnuur6",
+        "version": 19,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "19e2d57c-bd49-4e37-b3f5-bb56d3f72eb0",
+        "localId": "0hul3yua",
+        "version": 20,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "4db8c485-fbd4-4a7b-90d0-816786ec7462",
+        "localId": "1phhh8px",
+        "version": 20,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Blancas"
+      },
+      {
+        "id": "abf43e91-d09d-499e-beaa-ec76f0ca0c7e",
+        "localId": "z36etwrb",
+        "version": 20,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "3c8d6add-5e5d-4002-ac00-164e1ab21257",
+        "localId": "2dsahjll",
+        "version": 19,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "4ede402e-0eca-442a-9335-31f7d9d44ebb",
+        "localId": "p3lna28k",
+        "version": 20,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      },
+      {
+        "id": "4dbafd9d-dccd-4e23-83bf-6a7638e2821e",
+        "localId": "o3iwbjfy",
+        "version": 20,
+        "lifecycle": "completed",
+        "course": "Par 72 — Tarjeta del club — Actual",
+        "tee": "Doradas"
+      }
+    ],
+    "preservedPartialIds": [
+      {
+        "id": "aec5071d-0011-49ff-92df-fbebcf9b5f95",
+        "localId": "s6h4mk2d",
+        "holes": 0,
+        "lifecycle": "live"
+      },
+      {
+        "id": "d1562db7-b37f-4e6b-b3f5-76a511c85fe6",
+        "localId": "408e4png",
+        "holes": 2,
+        "lifecycle": "live"
+      }
+    ]
+  },
+  "baselineIntegrity": {
+    "originalRows": 22,
+    "completed": 20,
+    "ownerHoleScores": 360,
+    "changedHashesOrVersions": 0,
+    "originalAttestsRetained": 11
+  },
+  "newActualRounds": [
+    {
+      "case": "QA21",
+      "purpose": "QA21 active/park/resume/complete/edit/later attest",
+      "id": "24493b70-a2ef-456b-8060-aa5d69bb02ea",
+      "localId": "z082rref",
+      "version": 10,
+      "date": "2026-10-06",
+      "lifecycle": "completed",
+      "course": "PUEBLA",
+      "tee": "DORADAS",
+      "ownerScore": 86,
+      "holes": 18,
+      "h1": {
+        "account:73ef00d0-ab1a-4b37-a02b-4ccc3072d098": 5,
+        "account:b182e0a1-d3f5-4e32-a005-29c6d55b6cdf": 6
+      },
+      "betTypes": [],
+      "ownerBetResult": 0,
+      "attest": "VALID_CURRENT_HASH",
+      "index": {
+        "eligible": false,
+        "reasons": [
+          "MISSING_OFFICIAL_TEE_RATING",
+          "MISSING_PCC_EVIDENCE",
+          "MISSING_COURSE_HANDICAP_FOR_ADJUSTMENT",
+          "MISSING_ADJUSTED_GROSS_SCORE"
+        ],
+        "differential": null
+      }
+    },
+    {
+      "case": "QA22",
+      "purpose": "QA22 confirmed soft cancellation; H1 retained",
+      "id": "8b512844-eee5-4c34-95d1-877470b19361",
+      "localId": "hho9yjs8",
+      "version": 3,
+      "date": "2026-10-06",
+      "lifecycle": "cancelled",
+      "course": "Par 72 — Tarjeta del club — Actual",
+      "tee": "Blancas",
+      "ownerScore": 5,
+      "holes": 1,
+      "h1": {
+        "account:b182e0a1-d3f5-4e32-a005-29c6d55b6cdf": 5
+      },
+      "betTypes": [],
+      "ownerBetResult": 0,
+      "attest": "NOT_ELIGIBLE_INCOMPLETE",
+      "index": null
+    },
+    {
+      "case": "QA23",
+      "purpose": "QA23 group, handicap, Skins Carry and personal DollarStroke",
+      "id": "fee4ab11-9650-4f3b-99b3-8af0bd0eebde",
+      "localId": "a9sro2vv",
+      "version": 21,
+      "date": "2026-10-06",
+      "lifecycle": "completed",
+      "course": "Par 72 — Tarjeta del club — Actual",
+      "tee": "Blancas",
+      "ownerScore": 89,
+      "holes": 18,
+      "h1": {
+        "o78yfyah": 6,
+        "account:b182e0a1-d3f5-4e32-a005-29c6d55b6cdf": 5
+      },
+      "betTypes": [
+        "Skins Carry",
+        "DollarStroke personal"
+      ],
+      "ownerBetResult": 31,
+      "attest": "PENDING",
+      "index": {
+        "eligible": true,
+        "reasons": [],
+        "differential": 16.5
+      }
+    },
+    {
+      "case": "QA24",
+      "purpose": "QA24 final active score-only; H1 saved, resume H2",
+      "id": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
+      "localId": "rrouggse",
+      "version": 3,
+      "date": "2026-10-06",
+      "lifecycle": "live",
+      "course": "Par 72 — Tarjeta del club — Actual",
+      "tee": "Blancas",
+      "ownerScore": 5,
+      "holes": 1,
+      "h1": {
+        "o78yfyah": 6,
+        "account:b182e0a1-d3f5-4e32-a005-29c6d55b6cdf": 5
+      },
+      "betTypes": [],
+      "ownerBetResult": 0,
+      "attest": "NOT_ELIGIBLE_INCOMPLETE",
+      "index": null
+    }
+  ],
+  "activeRoundId": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
+  "activeLocalId": "rrouggse",
+  "resumeHole": 2,
+  "cancelledRoundId": "8b512844-eee5-4c34-95d1-877470b19361",
+  "editedRoundId": "24493b70-a2ef-456b-8060-aa5d69bb02ea",
+  "groupQa": {
+    "id": "40b8867b-c967-41af-b75a-d626a3a1c9b0",
+    "localId": "vj94jnag",
+    "name": "QA Flujo Final",
+    "members": [
+      {
+        "memberId": "member-gvqh3x36",
+        "accountUserId": "b182e0a1-d3f5-4e32-a005-29c6d55b6cdf"
+      },
+      {
+        "memberId": "member-8afd6571-c26b-438d-bbda-14f3609c0139",
+        "accountUserId": "73ef00d0-ab1a-4b37-a02b-4ccc3072d098"
+      },
+      {
+        "memberId": "member-pz2dvjvt",
+        "name": "QA Carry Invitado"
+      }
+    ]
+  },
+  "frequentGuest": {
+    "playedId": "o78yfyah",
+    "cloudPlayerId": "3e8c35f8-ac6a-45bc-afa0-0492ac56ce95",
+    "reusedIn": [
+      "a9sro2vv",
+      "rrouggse"
+    ],
+    "initialTemplateId": "poz7xfkz",
+    "initialTemplateCloudId": "a82f6333-c78b-42bb-8019-daa7c140570a",
+    "initialTemplateUses": 0,
+    "existingDuplicatePreservedForAudit": true
+  },
+  "personalBetId": "f4dcc5e2-128f-4416-9a81-e6bb60e7ccfd",
+  "qa21Attest": {
+    "attesterUserId": "73ef00d0-ab1a-4b37-a02b-4ccc3072d098",
+    "expectedVersion": 10,
+    "expectedHash": "6313a0c9f3c5695cc328738a432e578fff0cd4760cefa2c0585cd0f07e02df87",
+    "activityId": "f73dc2f6-320f-44ea-88fc-bbb885c83e32"
+  },
+  "finalCareer": {
+    "completed": 22,
+    "average": 82.8,
+    "birdies": 18,
+    "best": 71,
+    "achievementsUnlocked": 5,
+    "achievementsAvailable": 7,
+    "tournaments": 0,
+    "index": 5.5,
+    "last20Attested": 11,
+    "attestPercent": 55,
+    "totalAttests": 12
+  },
+  "cleanSessionRelogin": "PASS",
+  "cloudUsage": {
+    "syncGet": 83,
+    "syncPost": 75,
+    "rounds": 71,
+    "scope": "Lower bound: original canonical session plus stale Chrome attempt plus final independently hydrated DEV preview. First 014e preview was uninstrumented; cancel/finalize and social readers not exhaustive. Vercel totals unavailable under current plan.",
+    "fullSyncGets": 11,
+    "unexpectedFullBundles": 0,
+    "retries": 0,
+    "unexpectedRetries": 0,
+    "explainedFailures": 1,
+    "idleCalls": 0,
+    "maxResponseBytes": 528789,
+    "maxUploadBytes": 38388,
+    "requestStorm": false,
+    "polling": false,
+    "usageGuardPaused": true,
+    "totalInstrumentedRequests": 229,
+    "originalSession": {
+      "syncGet": 79,
+      "syncPost": 73,
+      "rounds": 69,
+      "fullSyncGets": 9
+    },
+    "staleChromeAttempt": {
+      "syncGet": 2,
+      "syncPost": 0,
+      "rounds": 0,
+      "fullSyncGets": 1
+    },
+    "finalCleanSession": {
+      "syncGet": 2,
+      "syncPost": 2,
+      "rounds": 2,
+      "roundPuts": 0,
+      "retries": 0,
+      "failures": 0,
+      "fullSyncGets": 1,
+      "maxResponseBytes": 521695,
+      "maxUploadBytes": 26495,
+      "idle": {
+        "idleSeconds": 132,
+        "idleRequests": 0
+      }
+    },
+    "platformMetrics": "BLOCKED_EXTERNAL_OBSERVABILITY_PLUS_402",
+    "unmeasuredPreviewAttempt": true,
+    "coldStartPostOnlyReasonsCaptured": false
+  },
+  "directDbWrites": false,
+  "manualNotificationOrRoundInserts": false,
+  "qaDataDeleted": false,
+  "ghinUsed": false,
+  "productionWritten": false,
+  "mobile": {
+    "browserWidths": [
+      320,
+      375,
+      390,
+      430
+    ],
+    "captureOverflowAfterFix": false,
+    "physicalIphone": "PENDING_DEVICE_QA"
+  },
+  "coldRecovery": {
+    "history": "PASS",
+    "summary": "PASS",
+    "index": "PASS",
+    "attest": "PASS",
+    "cancelledReadonly": "PASS",
+    "active": "PASS",
+    "bug": "bootstrap cursor and missing owner transport revision",
+    "baselineUnchanged": true,
+    "ownerCanonicalAck": "PASS_WITH_EXACT_SNAPSHOT_COMPARISON_NO_PUT",
+    "qa24Version": 3,
+    "roundsUnchangedAfterLogin": 26,
+    "originalAttestsPreserved": 11
+  },
+  "functionalBrowserQa": "PASS",
+  "cleanSession": {
+    "url": "https://golf-bets-1gh9xdq75-saha8.vercel.app",
+    "buildSha": "019b8c9114d3fbebc3f0cbb055be5695b7db3a2a",
+    "newDeploymentOrigin": true,
+    "serverRehydration": "PASS",
+    "baselinePersisted": 20,
+    "completedVisible": 22,
+    "activeHole": 2,
+    "activeH1Owner": 5,
+    "activeH1Guest": 6,
+    "groupVisible": true,
+    "frequentPlayersVisible": true,
+    "careerSubviews": [
+      "Resumen",
+      "Logros",
+      "Rivalidades",
+      "Rondas",
+      "Torneos"
+    ]
+  },
+  "codeDeployment": {
+    "id": "dpl_F9jqmNXobMM6HRXPkLyzxsvz5Hed",
+    "state": "READY",
+    "environment": "preview",
+    "healthHttp": 200,
+    "buildSha": "019b8c9114d3fbebc3f0cbb055be5695b7db3a2a"
+  },
+  "unresolved": [
+    "Physical iPhone keyboard/safe-area/touch QA",
+    "Exhaustive platform request totals require Observability Plus",
+    "Existing duplicate initial frequent guest template preserved; no name-based deletion/merge",
+    "Two finite cloud POSTs during cold-start reconciliation remain observed; not claiming GET-only hydration"
+  ]
+}
