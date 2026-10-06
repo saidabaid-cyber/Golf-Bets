@@ -2503,7 +2503,7 @@ function GolfBetsApp() {
   }
 
   function applyFrequentGroupToDraft(group: FrequentGroup, selectedMemberIds: string[], scoreOnly = false) {
-    const loaded = instantiateGroupGameTemplate(group, makeId, selectedMemberIds);
+    const loaded = instantiateGroupGameTemplate(group, makeId, selectedMemberIds, frequentPlayers);
     setPlayers(loaded.players); setOwnerId(loaded.players.find(player => player.accountUserId === identity.userId)?.id || loaded.ownerId); setStartHole(loaded.startHole); setRoundHoles(loaded.roundHoles); setRoundHandicapBasis(loaded.roundHandicapBasis);
     setBets(scoreOnly ? initialBets([]) : loaded.bets); setSegments(loaded.segments); setPersonalBets(scoreOnly ? [] : loaded.personalBets); setSupplementalBets(scoreOnly ? [] : loaded.supplementalBets); setManualBets(scoreOnly ? [] : loaded.manualBets);
     setRoundTemplateOrigin(loaded.origin);

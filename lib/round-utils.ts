@@ -307,6 +307,7 @@ export function upsertFrequentPlayers(current: FrequentPlayer[], players: Player
       id: previous?.id || player.id,
       name: player.name.trim(),
       handicap: player.handicapIndex ?? player.handicap,
+      ...(previous?.memberId ? { memberId: previous.memberId } : {}),
       ...(player.accountUserId ? { accountUserId: player.accountUserId } : {}),
       uses: (previous?.uses || 0) + 1,
       updatedAt,

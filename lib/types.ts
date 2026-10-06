@@ -853,6 +853,8 @@ export type FrequentPlayer = {
   id: string;
   name: string;
   handicap: number | null;
+  /** Explicit saved-group provenance; never inferred from a display name. */
+  memberId?: string;
   /** Present only for the account owner's principal player template. */
   accountUserId?: string;
   uses: number;

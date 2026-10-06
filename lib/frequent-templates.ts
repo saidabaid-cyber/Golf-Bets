@@ -183,7 +183,10 @@ export function addFrequentPlayerTemplate(
   updatedAt: string,
 ) {
   const cleaned = cleanGroupMember(member);
-  if (!cleaned || templates.some((template) => memberKey(template.name) === memberKey(cleaned.name))) return templates;
+  if (!cleaned || templates.some((template) => cleaned.accountUserId
+    ? template.accountUserId === cleaned.accountUserId
+    : cleaned.memberId ? template.memberId === cleaned.memberId
+      : !template.accountUserId && !template.memberId && memberKey(template.name) === memberKey(cleaned.name))) return templates;
   return [{ id, ...cleaned, uses: 0, updatedAt }, ...templates];
 }
 

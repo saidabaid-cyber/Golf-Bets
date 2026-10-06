@@ -7,6 +7,7 @@ import type {
   BetConfig,
   FrequentGroup,
   FrequentGroupMember,
+  FrequentPlayer,
   FoursomeSegment,
   GroupGameTemplate,
   ManualBet,
@@ -473,15 +474,16 @@ export function createEmptyGroupGameTemplate(group: FrequentGroup): GroupGameTem
   }, Object.fromEntries(players.map((player) => [player.id, player.id])));
 }
 
-function runtimePlayers(group: FrequentGroup, idFactory: () => string, selectedMemberIds?: readonly string[]) {
+function runtimePlayers(group: FrequentGroup, idFactory: () => string, selectedMemberIds?: readonly string[], frequentPlayers: readonly FrequentPlayer[] = []) {
   const selected = selectedMemberIds ? new Set(selectedMemberIds) : null;
   return group.players.flatMap((member, index) => {
     const memberId = stableGroupMemberId(group, member, index);
     if (selected && !selected.has(memberId)) return [];
+    const saved = frequentPlayers.filter(player => !player.accountUserId && player.memberId === memberId && validId(player.id));
     return [{
       memberId,
       player: {
-        id: member.accountUserId ? accountPrimaryPlayerId(member.accountUserId) : idFactory(),
+        id: member.accountUserId ? accountPrimaryPlayerId(member.accountUserId) : saved.length === 1 ? saved[0].id : idFactory(),
         name: member.name,
         handicap: member.handicap,
         ...(member.accountUserId ? { accountUserId: member.accountUserId,
@@ -492,12 +494,12 @@ function runtimePlayers(group: FrequentGroup, idFactory: () => string, selectedM
   });
 }
 
-export function instantiateGroupGameTemplate(group: FrequentGroup, idFactory: () => string, selectedMemberIds?: readonly string[]): GroupTemplateRoundDraft {
+export function instantiateGroupGameTemplate(group: FrequentGroup, idFactory: () => string, selectedMemberIds?: readonly string[], frequentPlayers: readonly FrequentPlayer[] = []): GroupTemplateRoundDraft {
   const stableGroup = withStableGroupMemberIds(group);
   const selection = selectedMemberIds ?? defaultGroupRoundSelection(stableGroup);
   const validation = validateGroupRoundSelection(stableGroup, selection);
   if (!validation.ok) throw new Error(validation.message);
-  const runtime = runtimePlayers(stableGroup, idFactory, validation.selectedMemberIds);
+  const runtime = runtimePlayers(stableGroup, idFactory, validation.selectedMemberIds, frequentPlayers);
   const players = runtime.map(({ player }) => player);
   const roundPlayerIdByMemberId = Object.fromEntries(runtime.map(({ memberId, player }) => [memberId, player.id]));
   const origin = { groupId: stableGroup.id, groupNameSnapshot: stableGroup.name, basedOnUpdatedAt: stableGroup.updatedAt, roundPlayerIdByMemberId };
