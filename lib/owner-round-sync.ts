@@ -36,7 +36,7 @@ export function acknowledgeOwnerRound(storage: StorageLike, key: string, fingerp
  * Waiting callers recheck current(): superseded effects drop out, leaving
  * only the latest capture to follow the active flight. */
 export async function syncOwnerRound(serialized: string, userId: string, accessToken: string,
-  storage: StorageLike, current: () => boolean, request: typeof fetch = fetch, manual = false) {
+  storage: StorageLike, current: () => boolean, request: typeof fetch = fetch, manual = false, pausedBase?: RoundSnapshot) {
   const round = JSON.parse(serialized) as RoundSnapshot;
   const key = `backyard-owner-round-revision:${userId}:${round.id}`;
   const fingerprint = ownerRoundSyncFingerprint(serialized);
@@ -45,7 +45,7 @@ export async function syncOwnerRound(serialized: string, userId: string, accessT
     cloudSyncDiagnostic({ trigger: "local", fingerprint, reason: "owner-in-flight", result: "coalesced" });
     await previous.catch(() => {});
     if (!current()) return null;
-    return syncOwnerRound(serialized, userId, accessToken, storage, current, request, manual);
+    return syncOwnerRound(serialized, userId, accessToken, storage, current, request, manual, pausedBase);
   }
   if (!current()) return null;
   if (ownerRoundAcknowledged(storage, key, fingerprint)) {
@@ -63,9 +63,30 @@ export async function syncOwnerRound(serialized: string, userId: string, accessT
       reason: "owner-revision", result: read.ok ? "success" : "failure" });
     if (!read.ok) throw new Error(existing.error || "No pudimos comprobar la ronda canónica.");
     if (!current()) return null;
-    const remembered = Number(storage.getItem(key));
-    if (existing.data && remembered !== Number(existing.data.version))
-      throw new Error("La versión de nube cambió. Tu borrador sigue seguro; revisa la tarjeta antes de volver a sincronizar.");
+    let remembered = Number(storage.getItem(key));
+    if (existing.data && remembered !== Number(existing.data.version)) {
+      // A parked card can have been committed by history sync after the owner
+      // transport's last ACK. A manual retry may adopt that revision only when
+      // its entire canonical snapshot equals the previously parked base, never
+      // merely because a fresh GET returned a newer version.
+      if (!manual || !pausedBase || pausedBase.id !== round.id || pausedBase.cloudReadOnly
+        || pausedBase.lifecycleState !== "live" || pausedBase.scorekeeping?.organizerAccountUserId !== userId)
+        throw new Error("La versión de nube cambió. Tu borrador sigue seguro; revisa la tarjeta antes de volver a sincronizar.");
+      const canonicalRead = await request(`/api/cloud/rounds?localRoundId=${encodeURIComponent(round.id)}`, { headers, cache: "no-store" });
+      const canonical = await canonicalRead.json();
+      cloudSyncDiagnostic({ trigger: "manual", endpoint: "/api/cloud/rounds", method: "GET", fingerprint,
+        requestBytes: 0, responseBytes: jsonBytes(canonical), reason: "owner-paused-base-check",
+        result: canonicalRead.ok ? "success" : "failure" });
+      if (!canonicalRead.ok) throw new Error(canonical.error || "No pudimos revisar la tarjeta pausada.");
+      if (!current()) return null;
+      const remote = canonical.data?.snapshot as RoundSnapshot | undefined;
+      if (!remote || canonical.data.id !== existing.data.id || remote.lifecycleState !== "live"
+        || ownerRoundTransportPayload(remote) !== ownerRoundTransportPayload(pausedBase))
+        throw new Error("La tarjeta de nube cambió. Conservamos tu captura; revisa ambas tarjetas antes de continuar.");
+      remembered = Number(canonical.data.version);
+      if (!Number.isInteger(remembered) || remembered < 1) throw new Error("Revisión canónica inválida.");
+      storage.setItem(key, String(remembered));
+    }
     const body = { round: { ...round, updatedAt: new Date().toISOString() }, ...(existing.data ? { expectedVersion: remembered } : {}) };
     const method = existing.data ? "PUT" : "POST";
     const writeStarted = Date.now();

@@ -6,14 +6,16 @@ import type { RoundSnapshot } from "../../lib/types";
 
 /** The existing local draft is the offline outbox. Only committed scores enter
  * this owner transport. Participant multiwriter remains explicitly unavailable. */
-export function OwnerRoundSync({ snapshot, accessToken, userId }: { snapshot: RoundSnapshot; accessToken?: string; userId: string }) {
+export function OwnerRoundSync({ snapshot, pausedBase, accessToken, userId }: { snapshot: RoundSnapshot; pausedBase?: RoundSnapshot; accessToken?: string; userId: string }) {
   const [message, setMessage] = useState("Tu captura se conserva primero en este dispositivo.");
   const [retry, setRetry] = useState(0);
   const [pending, setPending] = useState(false);
   const fingerprint = ownerRoundSyncFingerprint(ownerRoundTransportPayload(snapshot));
   const latest = useRef(snapshot);
+  const knownPausedBase = useRef(pausedBase);
   const forceRetry = useRef(false);
   useEffect(() => { latest.current = snapshot; }, [snapshot]);
+  useEffect(() => { knownPausedBase.current = pausedBase; }, [pausedBase]);
   useEffect(() => {
     if (!accessToken || !snapshot.startedAt || snapshot.cloudReadOnly) return;
     let active = true;
@@ -21,7 +23,7 @@ export function OwnerRoundSync({ snapshot, accessToken, userId }: { snapshot: Ro
     async function sync() {
       if (!current()) return;
       const manual = forceRetry.current; forceRetry.current = false;
-      const result = await syncOwnerRound(ownerRoundTransportPayload(latest.current), userId, accessToken!, localStorage, current, fetch, manual);
+      const result = await syncOwnerRound(ownerRoundTransportPayload(latest.current), userId, accessToken!, localStorage, current, fetch, manual, knownPausedBase.current);
       if (!active || !result) return;
       setPending(false);
       setMessage(result.delivery?.notifications === "BLOCKED_EXTERNAL_NOTIFICATION_PERMISSIONS"
