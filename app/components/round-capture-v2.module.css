@@ -218,3 +218,15 @@
 .primaryControl>span,.compactField>span,.clubSelect>span { color:var(--ink);font-size:12px; }
 .primaryControl :global([role=group]) { border-radius:var(--by-radius-sm); }
 .primaryControl :global([role=group]) button { height:52px; }
+
+/* Keep narrow score entry usable without widening the page. */
+@media (max-width: 374px) {
+  .captureTabs { display:flex; overflow-x:auto; scrollbar-width:none; }
+  .captureTabs::-webkit-scrollbar { display:none; }
+  .captureTabs button { flex:0 0 auto; padding-inline:10px; }
+  .primaryControl { grid-template-columns:minmax(0, 1fr); gap:4px; }
+  .primaryControl > span { padding-top:0; }
+  .clubDistanceGrid { grid-template-columns:minmax(0, 1fr); }
+  .clubSelect select { width:100%; min-width:0; }
+  .compactField > span { white-space:normal; }
+}
