@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canResumeActiveRound, normalizeRoundResumeContext, persistRoundResumeContext, readRoundResumeContext } from "../lib/active-round-navigation";
+import { canResumeActiveRound, normalizeRoundResumeContext, persistRoundResumeContext, readRoundResumeContext, recoveredRoundResumeIndex } from "../lib/active-round-navigation";
 
 const active = () => ({ userId: "account-1", workspaceOwnerId: "account-1", hydrated: true, closed: false, draftAvailable: true,
   draft: { roundId: "round-1", startedAt: "2026-09-15T13:00:00Z", courseSelected: true, ownerId: "player-1", players: [{id:"player-1"},{id:"player-2"}], scores: {} }, history: [] as {id:string}[] });
@@ -37,4 +37,16 @@ test("removed player, invalid tab and out-of-bounds cursor recover safely", () =
   assert.deepEqual(normalizeRoundResumeContext({roundId:"round-1",playerId:"removed",stage:"invalid",currentIndex:99},"round-1",["player-1"],"player-1",9),{roundId:"round-1",playerId:"player-1",stage:"score",currentIndex:8});
   assert.deepEqual(normalizeRoundResumeContext({roundId:"old",playerId:"player-2",stage:"summary",currentIndex:8},"round-1",["player-1","player-2"],"player-1",18),{roundId:"round-1",playerId:"player-1",stage:"score",currentIndex:0});
   assert.equal(readRoundResumeContext({getItem:()=>"corrupt"},"account-1","round-1"),null);
+});
+
+test("clean cloud hydration derives the first incomplete hole while keeping explicit local navigation", () => {
+  const order = [10, 11, 12, 13];
+  const draft = { scores: { 10: { a: 4, b: 5 }, 11: { a: 3 } } };
+  assert.equal(recoveredRoundResumeIndex(draft, ["a", "b"], order), 1);
+  assert.equal(recoveredRoundResumeIndex({ ...draft, currentIndex: 0 }, ["a", "b"], order), 0);
+  assert.equal(recoveredRoundResumeIndex({ scores: { 10: { a: 4, b: 5 } } }, ["a", "b"], order), 1);
+  assert.equal(recoveredRoundResumeIndex({ scores: {} }, ["a", "b"], order), 0);
+  assert.equal(recoveredRoundResumeIndex({ scores: Object.fromEntries(order.map(hole => [hole, { a: 4, b: 5 }])) }, ["a", "b"], order), 3);
+  assert.equal(recoveredRoundResumeIndex({ scores: { 10: { a: 4, b: null } } }, ["a", "b"], order), 0);
+  assert.equal(recoveredRoundResumeIndex({ scores: { 10: { a: 4, b: 5 } }, scoreEdits: { 10: { a: 6 } } }, ["a", "b"], order), 0);
 });

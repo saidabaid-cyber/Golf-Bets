@@ -64,3 +64,41 @@ test("live-to-completed-to-correction retains history transport and never reopen
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /ownerLiveTransportAllowed\(roundId, history\) &&[\s\S]*?<OwnerRoundSync/);
 });
+
+test("a clean session verifies identical canonical material before adopting its revision, without PUT or retry", async () => {
+  const clean = { ...base(), id: "clean-match" }; const s = fixture(clean);
+  const key = "backyard-owner-round-revision:qa-owner:clean-match";
+  s.storage.setItem(key, "");
+  const result = await syncOwnerRound(ownerRoundTransportPayload(clean), "qa-owner", "qa-token", s.storage, () => true, s.request);
+  assert.equal(result.unchanged, true);
+  assert.equal(s.calls.length, 2);
+  assert.equal(s.calls.filter(call => call.method).length, 0);
+  assert.equal(s.storage.getItem(key), "3");
+  await syncOwnerRound(ownerRoundTransportPayload(clean), "qa-owner", "qa-token", s.storage, () => true, s.request);
+  assert.equal(s.calls.length, 2, "durable ACK skips unchanged remount");
+  await syncOwnerRound(ownerRoundTransportPayload({ ...clean, scores: { 1: { qa: 5 }, 2: { qa: 4 } } }), "qa-owner", "qa-token", s.storage, () => true, s.request);
+  assert.equal(s.calls.at(-1)?.body.expectedVersion, 3, "next edit still uses CAS");
+});
+
+test("clean recovery never acknowledges changed material, another owner, terminal card or a revision race", async () => {
+  let i = 0;
+  for (const patch of [
+    { scores: { 1: { qa: 6 } } }, { teeName: "Changed tee" }, { lifecycleState: "cancelled" },
+    { scorekeeping: { version: 1, mode: "owner", organizerAccountUserId: "another" } },
+  ]) {
+    const clean = { ...base(), id: `clean-changed-${i++}` }; const s = fixture({ ...clean, ...patch } as RoundSnapshot);
+    const key = `backyard-owner-round-revision:qa-owner:${clean.id}`;
+    s.storage.setItem(key, "");
+    await assert.rejects(syncOwnerRound(ownerRoundTransportPayload(clean), "qa-owner", "qa-token", s.storage, () => true, s.request), /cambió/);
+    assert.equal(s.calls.filter(call => call.method).length, 0);
+    assert.equal(s.storage.getItem(key), "");
+  }
+  const clean = { ...base(), id: "clean-race" }; const s = fixture(clean);
+  s.storage.setItem("backyard-owner-round-revision:qa-owner:clean-race", "");
+  const request: typeof fetch = async (input, init) => {
+    const response = await s.request(input, init);
+    return String(input).includes("metadata=1") ? response : Response.json({ data: { id: "canonical-id", version: 4, snapshot: clean } });
+  };
+  await assert.rejects(syncOwnerRound(ownerRoundTransportPayload(clean), "qa-owner", "qa-token", s.storage, () => true, request), /cambió/);
+  assert.equal(s.calls.filter(call => call.method).length, 0);
+});

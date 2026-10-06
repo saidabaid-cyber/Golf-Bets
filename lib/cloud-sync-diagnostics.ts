@@ -1,4 +1,5 @@
 import type { CloudSyncTrigger } from "./cloud-sync-gate";
+import { cloudDiagnosticHostAllowed } from "./cloud-diagnostic-host";
 
 export type CloudSyncDiagnostic = {
   trigger: CloudSyncTrigger; method?: "GET" | "POST" | "PUT";
@@ -11,9 +12,9 @@ export type CloudSyncDiagnostic = {
   result: "skipped" | "coalesced" | "performed" | "success" | "failure";
 };
 export function cloudSyncDiagnostic(event: CloudSyncDiagnostic) {
-  // Vercel preview runs a production build. Use the canonical DEV hostname,
-  // not NODE_ENV, and never send a telemetry request or log payloads/identities.
-  if (typeof window !== "undefined" && window.location.hostname === "dev.thebackyard.com.mx")
+  // Include this exact DEV deployment so an independent-origin clean login can
+  // be measured too. Production/beta/other preview builds get no extra host.
+  if (typeof window !== "undefined" && cloudDiagnosticHostAllowed(window.location.hostname, process.env.NEXT_PUBLIC_CLOUD_DIAGNOSTIC_PREVIEW_HOST))
     console.info("[backyard-cloud]", JSON.stringify(event));
 }
 export function jsonBytes(value: unknown) { return new TextEncoder().encode(JSON.stringify(value)).byteLength; }

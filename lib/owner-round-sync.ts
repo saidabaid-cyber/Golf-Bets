@@ -72,6 +72,29 @@ export async function syncOwnerRound(serialized: string, userId: string, accessT
     if (!current()) return null;
     let remembered = Number(storage.getItem(key));
     if (existing.data && remembered !== Number(existing.data.version)) {
+      // A clean device has the private draft, but no owner-transport revision.
+      // Verify the complete canonical material before ACKing it. Merely reading
+      // metadata must never authorize overwriting a newer device's scores.
+      const missingRevision = !storage.getItem(key);
+      if (missingRevision && round.scorekeeping?.mode === "owner" && round.scorekeeping.organizerAccountUserId === userId) {
+        const canonicalRead = await request(`/api/cloud/rounds?localRoundId=${encodeURIComponent(round.id)}`, { headers, cache: "no-store" });
+        const canonical = await canonicalRead.json();
+        cloudSyncDiagnostic({ trigger: manual ? "manual" : "local", endpoint: "/api/cloud/rounds", method: "GET", fingerprint,
+          requestBytes: 0, responseBytes: jsonBytes(canonical), reason: "owner-clean-base-check", result: canonicalRead.ok ? "success" : "failure" });
+        if (!canonicalRead.ok) throw new Error(canonical.error || "No pudimos revisar la tarjeta canónica.");
+        if (!current()) return null;
+        const remote = canonical.data?.snapshot as RoundSnapshot | undefined;
+        const revision = Number(canonical.data?.version);
+        if (!remote || canonical.data.id !== existing.data.id || revision !== Number(existing.data.version)
+          || !Number.isInteger(revision) || revision < 1 || remote.id !== round.id || remote.cloudReadOnly
+          || remote.lifecycleState !== "live" || remote.scorekeeping?.mode !== "owner"
+          || remote.scorekeeping?.organizerAccountUserId !== userId
+          || ownerRoundTransportPayload(remote) !== serialized)
+          throw new Error("La tarjeta de nube cambió. Conservamos tu captura; revisa ambas tarjetas antes de continuar.");
+        storage.setItem(key, String(revision));
+        acknowledgeOwnerRound(storage, key, fingerprint); failed.delete(key);
+        return { unchanged: true };
+      }
       // A parked card can have been committed by history sync after the owner
       // transport's last ACK. A manual retry may adopt that revision only when
       // its entire canonical snapshot equals the previously parked base, never

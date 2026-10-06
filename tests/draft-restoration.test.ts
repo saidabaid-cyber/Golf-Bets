@@ -47,7 +47,7 @@ test("draft application wires resolved values through unconditional setters", ()
   assert.match(page, /setOwnerId\(draftCore\.ownerId\)/);
   assert.doesNotMatch(page, /if \(draft\.startHole\) setStartHole/);
   assert.doesNotMatch(page, /if \(draft\.ownerId\) setOwnerId/);
-  assert.match(page, /normalizeRoundResumeContext\(savedContext \|\| \{ roundId: restoredRoundId, currentIndex: draft\.currentIndex \}, restoredRoundId, draftPlayerIds, draftCore\.ownerId, draftRoundHoles\)/);
+  assert.match(page, /normalizeRoundResumeContext\(savedContext \|\| \{ roundId: restoredRoundId, currentIndex: recoveredRoundResumeIndex\(draft, draftPlayerIds, restoredOrder\) \}, restoredRoundId, draftPlayerIds, draftCore\.ownerId, draftRoundHoles\)/);
   assert.match(page, /setCurrentIndex\(restoredContext\.currentIndex\)/);
   assert.match(page, /setCourse\(draft\.course \? withDefaultLaVistaRules\(draft\.course\) : laVista\)/);
   assert.match(page, /setExpenses\(draft\.expenses \? normalizeExpenses\(draft\.expenses\) : emptyExpenses\)/);

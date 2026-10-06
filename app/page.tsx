@@ -117,7 +117,7 @@ import { GroupRoundSelector } from "./components/group-round-selector";
 import { AppBottomNav } from "./components/app-bottom-nav";
 import { ProfileNavigationButton } from "./components/profile-navigation-button";
 import { BottomBackAction } from "./components/bottom-back-action";
-import { canResumeActiveRound, normalizeRoundResumeContext, persistRoundResumeContext, readRoundResumeContext, type RoundResumeContext } from "../lib/active-round-navigation";
+import { canResumeActiveRound, normalizeRoundResumeContext, persistRoundResumeContext, readRoundResumeContext, recoveredRoundResumeIndex, type RoundResumeContext } from "../lib/active-round-navigation";
 import { captureCompletedRoundIndex } from "../lib/backyard-index-auto-capture";
 import { readIndexPreference } from "../lib/backyard-index-preferences";
 import { useBackyardIndexPreference } from "./components/use-backyard-index-preference";
@@ -1065,7 +1065,8 @@ function GolfBetsApp() {
         setRoundDate(typeof draft.roundDate === "string" && draft.roundDate.trim() ? draft.roundDate : localDateMexico());
         if (!options.preserveLocalUi) {
           const savedContext = readRoundResumeContext(localStorage, identity.userId, restoredRoundId);
-          const restoredContext = normalizeRoundResumeContext(savedContext || { roundId: restoredRoundId, currentIndex: draft.currentIndex }, restoredRoundId, draftPlayerIds, draftCore.ownerId, draftRoundHoles);
+          const restoredOrder = playOrderForHoles((draft.course ?? laVista).holes.map((hole: Course["holes"][number]) => hole.number), draftCore.startHole).slice(0, draftRoundHoles);
+          const restoredContext = normalizeRoundResumeContext(savedContext || { roundId: restoredRoundId, currentIndex: recoveredRoundResumeIndex(draft, draftPlayerIds, restoredOrder) }, restoredRoundId, draftPlayerIds, draftCore.ownerId, draftRoundHoles);
           setRoundResumeContext(restoredContext);
           setCurrentIndex(restoredContext.currentIndex);
         }
@@ -1238,7 +1239,11 @@ function GolfBetsApp() {
         preserveDraftConflict(localStorage, local.activeDraft);
         setFeedback("Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.");
       }
-      applyDraft(reconciled.activeDraft, { preserveLocalUi: true });
+      // Preserve device navigation only for the same round. A cold hydration
+      // replaces the bootstrap draft and must derive its first pending hole.
+      const previousDraft = local.activeDraft as { roundId?: string } | null;
+      const nextDraft = reconciled.activeDraft as { roundId?: string } | null;
+      applyDraft(reconciled.activeDraft, { preserveLocalUi: Boolean(nextDraft?.roundId && nextDraft.roundId === previousDraft?.roundId) });
     }
     const mergedCourses = mergeDefaultCourses(reconciled.courses);
     const normalizedHistory = reconciled.history.map(normalizeHistorySnapshot);

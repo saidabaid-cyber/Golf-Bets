@@ -174,7 +174,7 @@ test("un draft reconciliado compatible se aplica a React sin preservar un falso 
   const end = page.indexOf("useEffect(() =>", start);
   const applyBlock = page.slice(start, end);
   assert.match(applyBlock, /const draftPlan = cloudDraftApplyPlan\(local\.activeDraft, reconciled\.activeDraft\)/);
-  assert.match(applyBlock, /if \(draftPlan\.changed\) \{[\s\S]*?if \(draftPlan\.preservePrevious\) \{[\s\S]*?preserveDraftConflict[\s\S]*?\}[\s\S]*?applyDraft\(reconciled\.activeDraft, \{ preserveLocalUi: true \}\)/);
+  assert.match(applyBlock, /if \(draftPlan\.changed\) \{[\s\S]*?if \(draftPlan\.preservePrevious\) \{[\s\S]*?preserveDraftConflict[\s\S]*?\}[\s\S]*?applyDraft\(reconciled\.activeDraft, \{ preserveLocalUi: Boolean\(nextDraft\?\.roundId && nextDraft\.roundId === previousDraft\?\.roundId\) \}\)/);
 });
 
 test("dos dispositivos sin base común no usan el reloj para ocultar un conflicto real", () => {

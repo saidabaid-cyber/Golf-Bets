@@ -21,6 +21,23 @@ export function normalizeRoundResumeContext(value: unknown, roundId: string, pla
   };
 }
 
+/** The cloud deliberately excludes per-device navigation. On a new device,
+ * recover the first uncommitted player/hole; an explicit local cursor still
+ * wins so reviewing a played hole is never mistaken for missing progress. */
+export function recoveredRoundResumeIndex(draft: {
+  currentIndex?: unknown; scores?: Record<number, Record<string, unknown>>;
+  scoreEdits?: Record<number, Record<string, unknown>>;
+}, playerIds: readonly string[], order: readonly number[]) {
+  if (Number.isInteger(draft.currentIndex)) return Math.max(0, Math.min(Math.max(0, order.length - 1), draft.currentIndex as number));
+  const pending = order.findIndex(hole => playerIds.some(id => Object.hasOwn(draft.scoreEdits?.[hole] || {}, id)));
+  if (pending >= 0) return pending;
+  const missing = order.findIndex(hole => playerIds.some(id => {
+    const score = draft.scores?.[hole]?.[id];
+    return typeof score !== "number" || !Number.isFinite(score) || score < 1;
+  }));
+  return missing < 0 ? Math.max(0, order.length - 1) : missing;
+}
+
 export function readRoundResumeContext(storage: Pick<Storage, "getItem">, userId: string, roundId: string): unknown {
   try {
     const value = JSON.parse(storage.getItem(roundResumeStorageKey(userId)) || "null");
