@@ -25,6 +25,9 @@ export type CloudDataBundle = {
   /** Stable installation id used only for conflict/audit metadata. */
   deviceId?: string;
   history: RoundSnapshot[];
+  /** Private server receipts for owned live cards omitted from visible history.
+   * They acknowledge existence/revision without downloading those snapshots. */
+  acknowledgedLiveHistory?: Array<{ id: string; updatedAt: string }>;
   frequentPlayers: FrequentPlayer[];
   frequentGroups: FrequentGroup[];
   rivals: SavedPersonalRival[];
@@ -507,6 +510,9 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
     version: CLOUD_SYNC_VERSION,
     deviceId: local.deviceId || cloud.deviceId,
     history: mergeRoundHistory(local.history, cloud.history).filter((round) => !deleted.has(`round:${round.id}`)),
+    // Receipts are server-owned: never adopt acknowledgments supplied by an
+    // uploading device in place of the current server read.
+    acknowledgedLiveHistory: cloud.acknowledgedLiveHistory,
     frequentPlayers: mergeCloudCollection(local.frequentPlayers, cloud.frequentPlayers, (player) => player.id, (player) => player.updatedAt).filter((player) => !deleted.has(`frequent_player:${player.id}`)),
     frequentGroups: mergeCloudCollection(local.frequentGroups, cloud.frequentGroups, (group) => group.id, (group) => group.updatedAt).filter((group) => !deleted.has(`frequent_group:${group.id}`)),
     rivals: mergeCloudCollection(local.rivals, cloud.rivals, (rival) => rival.id, (rival) => rival.updatedAt).filter((rival) => !deleted.has(`rival:${rival.id}`)),
@@ -724,7 +730,7 @@ export async function withCloudAuthRetry<T>(
 }
 
 async function parseCloudResponse(response: Response) {
-  const payload = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; code?: string; conflicts?: CloudDataConflict[]; data?: CloudDataBundle; fingerprint?: string; canonicalFingerprint?: string; unchanged?: boolean };
+  const payload = await response.json().catch(() => ({})) as { ok?: boolean; error?: string; code?: string; conflicts?: CloudDataConflict[]; data?: CloudDataBundle; fingerprint?: string; canonicalFingerprint?: string; unchanged?: boolean; acknowledgedLiveHistory?: CloudDataBundle["acknowledgedLiveHistory"] };
   if (!response.ok) throw new CloudSyncHttpError(payload.error || "No fue posible sincronizar la nube.", response.status, payload.code || "", Array.isArray(payload.conflicts) ? payload.conflicts : []);
   return payload;
 }
@@ -734,12 +740,22 @@ async function parseCloudResponse(response: Response) {
  * preference revision/base metadata required for three-way reconciliation. */
 export function cloudUploadDelta(bundle: CloudDataBundle, base: CloudDataBundle) {
   const delta = { ...bundle };
+  const liveRevisions = new Map((base.acknowledgedLiveHistory || []).map(row => [row.id, timestamp(row.updatedAt)]));
   for (const key of ["history", "frequentPlayers", "frequentGroups", "rivals", "courses"] as const) {
     const remote = new Map(base[key].map(item => [item.id, item]));
     // These collections are individually keyed, not ordered gameplay arrays.
     (delta[key] as Array<{ id: string }>) = bundle[key].filter(item => {
       const other = remote.get(item.id);
-      if (!other) return true;
+      if (!other) {
+        const live = item as RoundSnapshot;
+        const acknowledged = key === "history" ? liveRevisions.get(item.id) : undefined;
+        // The history read intentionally omits active owner cards. A private
+        // server receipt proves that an unchanged/older recovery copy already
+        // exists. Keep newer offline edits and every completion transition.
+        if (acknowledged !== undefined && live.lifecycleState === "live" && live.scorekeeping?.version === 1
+          && timestamp(live.updatedAt || live.completedAt || live.date) <= acknowledged) return false;
+        return true;
+      }
       if (JSON.stringify(stableValue(other)) === JSON.stringify(stableValue(item))) return false;
       if (bundle.deviceId && bundle.deviceId === base.deviceId) {
         const localRound = item as RoundSnapshot, cloudRound = other as RoundSnapshot;
@@ -813,7 +829,14 @@ export async function downloadCloudData(accessToken: string, known?: CloudDataBu
   const payload = await parseCloudResponse(response);
   trace?.({ method: "GET", requestBytes: 0, responseBytes: new TextEncoder().encode(JSON.stringify(payload)).byteLength,
     durationMs: Date.now() - started, success: true });
-  if (payload.unchanged && known && payload.fingerprint === cloudSyncPayloadFingerprint(known)) return known;
+  if (payload.unchanged && known && payload.fingerprint === cloudSyncPayloadFingerprint(known)) {
+    // Receipt metadata is refreshed independently of canonical golf data. Keep
+    // the existing hash compatible with older clients and avoid downloading
+    // the full bundle when only an omitted live card's revision changed.
+    return Array.isArray(payload.acknowledgedLiveHistory)
+      ? { ...known, acknowledgedLiveHistory: payload.acknowledgedLiveHistory }
+      : known;
+  }
   if (!payload.data) throw new Error("La nube respondió sin datos.");
   return payload.data;
 }

@@ -93,3 +93,23 @@ permissions. Reuse the one partial smoke card for the final observation.
 After this last correction: 29 new tests in total, 210/210 directed PASS;
 4,482 full-suite tests, 4,477 PASS, the same five pre-existing failures,
 zero new failures. Typecheck, whole-repository lint and build PASS.
+
+Safe DEV category diagnostics then identified a remaining history upload.
+The private history read intentionally excludes owned live owner cards; a
+durable local recovery row consequently looked missing on every reload even
+when its canonical card already existed. The real cloud-service regression
+test reproduced that repeated upload before the fix.
+
+Return a small private receipt (owned local id + stored revision) for those
+excluded live cards in the existing bundle read, using the same account-scoped
+query. Omit only an already persisted live recovery row at that revision or
+older. Keep newer offline edits and all completion/cancellation transitions.
+Keep the local recovery copy. Server reads own the receipts. The small private
+unchanged response refreshes their revisions independently of canonical golf
+data, preserving the hash contract for older clients. No extra query, schema,
+grants, RLS or visible history change.
+
+Final receipt regression coverage: 33 new tests in total, 214/214 directed
+PASS. Fresh full suite: 4,486 tests, 4,481 PASS, the same five baseline failures,
+zero new failures. Typecheck, whole-repository lint and build PASS. Final deployment
+and measured DEV verification are recorded separately in the QA artifact.

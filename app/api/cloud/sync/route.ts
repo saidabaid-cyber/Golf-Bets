@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     const data = await readCloudBundle(account.client, account.userId, true);
     const fingerprint = cloudSyncPayloadFingerprint(data);
     if (request.nextUrl.searchParams.get("fingerprint") === fingerprint)
-      return NextResponse.json({ unchanged: true, fingerprint }, { headers: { "cache-control": "private, no-store" } });
+      return NextResponse.json({ unchanged: true, fingerprint, acknowledgedLiveHistory: data.acknowledgedLiveHistory }, { headers: { "cache-control": "private, no-store" } });
     return NextResponse.json({ data }, { headers: { "cache-control": "private, no-store" } });
   } catch (error) {
     logFailure("read", error);

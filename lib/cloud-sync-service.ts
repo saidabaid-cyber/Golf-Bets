@@ -56,14 +56,20 @@ async function readOwnedRows(client: SupabaseClient, table: string, userId: stri
     if (result.error) throw result.error;
     page = result.data || []; rows.push(...page);
   }
-  return { data: rows as unknown as Array<{ snapshot: unknown; entity_type: CloudEntityType; local_id: string; deleted_at: string }>, error: null };
+  return { data: rows as unknown as Array<{ snapshot: unknown; updated_at?: string; entity_type: CloudEntityType; local_id: string; deleted_at: string }>, error: null };
 }
 
 /** Participant RLS already permits these canonical cards. Keep them separate
  * from ownership: a preserved owner-null card must remain visible, but must
  * never become a new owned row when this account's local history syncs. */
-export async function readCloudRoundHistory(client: SupabaseClient, userId: string): Promise<RoundSnapshot[]> {
-  const owned = await readOwnedRows(client, "rounds_cloud", userId, "snapshot");
+export async function readCloudRoundHistory(client: SupabaseClient, userId: string,
+  acknowledgeLive?: (rows: NonNullable<CloudDataBundle["acknowledgedLiveHistory"]>) => void): Promise<RoundSnapshot[]> {
+  const owned = await readOwnedRows(client, "rounds_cloud", userId, acknowledgeLive ? "snapshot,updated_at" : "snapshot");
+  acknowledgeLive?.(owned.data.flatMap(row => {
+    const snapshot = row.snapshot as RoundSnapshot;
+    if (!snapshot || !localId(snapshot) || snapshot.scorekeeping?.version !== 1 || snapshot.lifecycleState !== "live") return [];
+    return [{ id: snapshot.id, updatedAt: row.updated_at || snapshot.updatedAt || snapshot.completedAt || snapshot.date || new Date(0).toISOString() }];
+  }));
   const history = owned.data.flatMap(row => {
     const snapshot = row.snapshot as RoundSnapshot;
     if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot) || !localId(snapshot)) return [];
@@ -228,9 +234,10 @@ async function projectRoundSnapshots(client: SupabaseClient, userId: string, his
 
 
 export async function readCloudBundle(client: SupabaseClient, userId: string, extendedSchema = false): Promise<CloudDataBundle> {
+  let acknowledgedLiveHistory: NonNullable<CloudDataBundle["acknowledgedLiveHistory"]> = [];
   const stateColumns = extendedSchema ? "active_draft,updated_at,updated_by_device" : "active_draft,updated_at";
   const [rounds, players, groups, rivals, courses, preferences, state, deletions] = await Promise.all([
-    readCloudRoundHistory(client, userId).then(data => ({ data, error: null })),
+    readCloudRoundHistory(client, userId, rows => { acknowledgedLiveHistory = rows; }).then(data => ({ data, error: null })),
     readOwnedRows(client, "players", userId, "snapshot"),
     readOwnedRows(client, "frequent_groups_cloud", userId, "snapshot"),
     readOwnedRows(client, "personal_rivals_cloud", userId, "snapshot"),
@@ -245,6 +252,7 @@ export async function readCloudBundle(client: SupabaseClient, userId: string, ex
   const data: CloudDataBundle = {
     version: 1,
     history: rounds.data,
+    acknowledgedLiveHistory,
     frequentPlayers: (players.data || []).map((row) => row.snapshot).filter(Boolean),
     frequentGroups: parseFrequentGroups(JSON.stringify((groups.data || []).map((row) => row.snapshot).filter(Boolean))),
     rivals: (rivals.data || []).map((row) => row.snapshot).filter(Boolean),

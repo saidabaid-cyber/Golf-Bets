@@ -137,6 +137,52 @@ test("real cloud service delta merge keeps canonical history, draft scores and r
   assert.deepEqual(canonical.activeDraft, next.activeDraft);
 });
 
+test("reload acknowledges already persisted live cards without uploading them as new history", async () => {
+  const db = new CloudDb();
+  const live = { ...round("persisted-live"), updatedAt: at, lifecycleState: "live", scorekeeping: { version: 1, mode: "owner" } } as RoundSnapshot;
+  db.rows("rounds_cloud").push({ id: "canonical-live", owner_id: "qa", local_id: live.id, snapshot: live, updated_at: at });
+  const remote = await readCloudBundle(db.client, "qa", true);
+  assert.equal(remote.history.length, 0, "active cards do not become saved history");
+  const local = { ...remote, history: [live] };
+  assert.equal(cloudSyncUploadRequired(mergeLocalAndCloud(local, remote), remote), false,
+    "the canonical row already exists even though visible history omits it");
+  assert.equal(mergeLocalAndCloud(local, remote).history.length, 1, "the durable local recovery copy is preserved");
+  const edited = { ...local, history: [{ ...live, updatedAt: "2026-10-05T12:01:00.000Z", scores: { 1: { p: 5 } } }] };
+  assert.equal(cloudUploadDelta(edited, remote).history.length, 1, "a newer offline capture still uploads");
+  const closed = { ...local, history: [{ ...live, lifecycleState: "completed" as const, completedAt: at }] };
+  assert.equal(cloudUploadDelta(closed, remote).history.length, 1, "equal-clock closeout is never suppressed");
+});
+
+test("live receipts are account-scoped and an uploading device cannot replace them", async () => {
+  const db = new CloudDb();
+  const live = { ...round("own-live"), updatedAt: at, scorekeeping: { version: 1, mode: "owner" } } as RoundSnapshot;
+  db.rows("rounds_cloud").push(
+    { owner_id: "qa", local_id: live.id, snapshot: live, updated_at: at },
+    { owner_id: "other-account", local_id: "private-other-card", snapshot: { ...live, id: "private-other-card" }, updated_at: at });
+  const remote = await readCloudBundle(db.client, "qa", true);
+  assert.deepEqual(remote.acknowledgedLiveHistory, [{ id: live.id, updatedAt: at }]);
+  const spoofed = { ...remote, acknowledgedLiveHistory: [{ id: "private-other-card", updatedAt: "2099-01-01T00:00:00Z" }] };
+  assert.deepEqual(mergeLocalAndCloud(spoofed, remote).acknowledgedLiveHistory, remote.acknowledgedLiveHistory);
+});
+
+test("a conditional read refreshes live receipts without downloading canonical golf data", async () => {
+  const before = bundle({ acknowledgedLiveHistory: [{ id: "live", updatedAt: at }] });
+  const after = { ...before, acknowledgedLiveHistory: [{ id: "live", updatedAt: "2026-10-05T12:01:00.000Z" }] };
+  assert.equal(cloudSyncPayloadFingerprint(before), cloudSyncPayloadFingerprint(after), "receipt metadata preserves older clients' canonical hash");
+  const original = globalThis.fetch;
+  try {
+    globalThis.fetch = async (_input, init) => {
+      assert.equal(init?.cache, "no-store");
+      return Response.json({ unchanged: true, fingerprint: cloudSyncPayloadFingerprint(before), acknowledgedLiveHistory: after.acknowledgedLiveHistory });
+    };
+    const refreshed = await downloadCloudData("qa-token", before);
+    assert.deepEqual(refreshed.acknowledgedLiveHistory, after.acknowledgedLiveHistory);
+    assert.equal(refreshed.history, before.history, "canonical collections remain cached in this account's memory");
+    assert.equal(cloudSyncUploadRequired(mergeLocalAndCloud(before, refreshed), refreshed), false,
+      "a server receipt is hydration, never a client edit");
+  } finally { globalThis.fetch = original; }
+});
+
 test("same-device equal-clock display hydration does not retransmit canonical history", () => {
   const original = { ...round("display-only"), lifecycleState: "completed" as const, updatedAt: at };
   const base = bundle({ history: [original], deviceId: "iphone" });
