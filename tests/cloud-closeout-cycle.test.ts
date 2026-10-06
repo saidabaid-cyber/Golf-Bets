@@ -10,6 +10,8 @@ import { CLOUD_LOCAL_META_KEY, collectLocalCloudData, trackLocalCloudCheckpoint,
 import { saveRoundHistoryLocalFirst } from "../lib/round-history-save";
 import { clearActiveRoundStorage, readStoredJson, STORAGE_KEYS } from "../lib/round-utils";
 import type { RoundSnapshot } from "../lib/types";
+import { readCloudBundle } from "../lib/cloud-sync-service";
+import { CloudDb } from "./helpers/cloud-db";
 
 const at = "2026-10-05T12:00:00.000Z";
 function deferred<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r; }); return { promise, resolve }; }
@@ -179,4 +181,21 @@ test("closeout does not recreate the cloud effect and diagnostics contain no arb
   const dependencies = page.slice(start, page.indexOf("function resolveCloudConflict", start)).split("}, [").at(-1)!;
   for (const localState of ["roundClosed", "history", "roundId", "currentIndex", "tab"]) assert.equal(new RegExp(`\\b${localState}\\b`).test(dependencies), false);
   assert.deepEqual(cloudCycleErrorFields({ name: "user@example.invalid", code: "secret token", status: 409 }), { errorName: "Error", httpStatus: 409 });
+});
+
+test("a separate canonical owner finalization legitimately invalidates a previously confirmed live receipt", async () => {
+  const db = new CloudDb();
+  const closed = { ...closingRound(), scorekeeping: { version: 1, mode: "owner" } } as RoundSnapshot;
+  const row = { id: "canonical-closeout", owner_id: "qa", local_id: closed.id,
+    snapshot: { ...closed, lifecycleState: "live" }, updated_at: at };
+  db.rows("rounds_cloud").push(row);
+  const receiptBeforeFinalize = await readCloudBundle(db.client, "qa", true);
+  assert.equal(receiptBeforeFinalize.history.length, 0);
+  // OwnerRoundFinalizeSync is a distinct CAS writer. A later completed row is
+  // a real server change, not evidence that an earlier POST/receipt failed.
+  row.snapshot = { ...closed, lifecycleState: "completed" };
+  const afterFinalize = await readCloudBundle(db.client, "qa", true);
+  assert.notEqual(cloudSyncPayloadFingerprint(receiptBeforeFinalize), cloudSyncPayloadFingerprint(afterFinalize));
+  assert.equal(afterFinalize.history[0].id, closed.id);
+  assert.equal(afterFinalize.history[0].scores?.[1]?.p, 4);
 });
