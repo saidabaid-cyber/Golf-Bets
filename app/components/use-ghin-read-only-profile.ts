@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { NormalizedGhinScore } from "../../lib/ghin/core";
+import type { GhinCourseLookupInput, GhinCourseLookupResponse } from "../../lib/ghin/course-lookup";
 import type { GhinImportedScoresController } from "./use-ghin-imported-scores";
 import { parseGhinProfileResponse, type GhinProfileProjection, type GhinScoresResponse } from "../../lib/ghin/profile";
 
@@ -16,6 +17,7 @@ export type GhinAuthorizationCandidate = {
 };
 
 export type GhinReadOnlyProfileController = {
+  lookupCourse?: (input: GhinCourseLookupInput) => Promise<GhinCourseLookupResponse>;
   imports?: GhinImportedScoresController;
   enabled: boolean;
   ready: boolean;
@@ -271,7 +273,27 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
     }
   }, [accessToken, post, state.featureEnabled]);
 
+  const lookupCourse = useCallback(async (input: GhinCourseLookupInput) => {
+    if (!accessToken || !state.featureEnabled) throw new Error("Inicia sesión para continuar.");
+    const response = await fetch("/api/profile/ghin/courses", {
+      method: "POST", headers: { ...bearer(accessToken), "content-type": "application/json" },
+      body: JSON.stringify(input), cache: "no-store", redirect: "error", signal: AbortSignal.timeout(30_000),
+    });
+    const text = await response.text();
+    console.info("backyard_ghin_course_lookup_response", JSON.stringify({ operation: input.operation, httpStatus: response.status,
+      requestBytes: new TextEncoder().encode(JSON.stringify(input)).length, responseBytes: new TextEncoder().encode(text).length }));
+    const body: unknown = JSON.parse(text);
+    if (!response.ok) {
+      const failure = apiFailure(body, "No se pudo consultar el campo GHIN.");
+      if (failure.code === "REAUTH_REQUIRED") setState(current => ({ ...current, reauthorizationRequired: true }));
+      throw failure;
+    }
+    if (!body || typeof body !== "object" || !("readOnly" in body) || body.readOnly !== true) throw new Error("Respuesta GHIN no válida.");
+    return body as GhinCourseLookupResponse;
+  }, [accessToken, state.featureEnabled]);
+
   return {
+    lookupCourse,
     enabled: state.featureEnabled && Boolean(accessToken),
     ready: state.ready,
     refreshing: state.refreshing,

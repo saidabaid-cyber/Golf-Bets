@@ -19,6 +19,8 @@
 .authForm h2, .authForm p, .confirmIdentity h2, .confirmIdentity p { margin: 0; }
 .authForm label { display: grid; gap: .35rem; font-weight: 750; }
 .authForm input { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; min-height: 2.75rem; }
+.evidence { max-width: 100%; max-height: 24rem; overflow: auto; font-size: .7rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.scores summary { cursor: pointer; padding: .6rem 0; font-weight: 750; }
 
 @media (max-width: 430px) {
   .details div { grid-template-columns: minmax(0, 1fr); gap: .2rem; }
