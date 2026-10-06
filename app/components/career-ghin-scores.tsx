@@ -4,8 +4,9 @@ import { useEffect, useRef } from "react";
 import type { CareerHubProps } from "./career-hub";
 import { careerDate, careerNumber } from "../../lib/career-statistics";
 import styles from "./career-index-panel.module.css";
+import { GhinImportHistory } from "./ghin-import-history";
 
-/** Provider summaries have no Backyard material hash or attest evidence. Never import them. */
+/** Provider summaries retain their own provenance and never become attest cards. */
 export function CareerGhinScores({ control, userId, expanded, onOpen, onReauthorize }: {
   control: CareerHubProps["ghin"]; userId: string; expanded: boolean;
   onOpen: () => void; onReauthorize?: () => void;
@@ -14,13 +15,15 @@ export function CareerGhinScores({ control, userId, expanded, onOpen, onReauthor
   const linked = control?.enabled && control.ready !== false && control.profile?.associationStatus === "VERIFIED";
   const requestKey = `${userId}:${control?.profile?.lastSyncedAt ?? ""}`;
   const { scores, scoresLoading, reauthorizationRequired, error, loadScores } = control ?? {};
+  const persisted=!!control?.imports?.data?.total;
   useEffect(() => {
-    if (!expanded || !linked || !loadScores || scores || scoresLoading
+    if (persisted || !expanded || !linked || !loadScores || scores || scoresLoading
       || reauthorizationRequired || error || attempted.current === requestKey) return;
     attempted.current = requestKey;
     void loadScores();
-  }, [expanded, linked, requestKey, loadScores, scores, scoresLoading, reauthorizationRequired, error]);
+  }, [persisted, expanded, linked, requestKey, loadScores, scores, scoresLoading, reauthorizationRequired, error]);
   if (!linked) return null;
+  if(persisted)return expanded?<GhinImportHistory control={control?.imports} backyard={[]} title="Tarjetas GHIN guardadas"/>:<section className={styles.ghinRecords}><h3>Tarjetas GHIN guardadas</h3><p>Registro oficial de sólo lectura. No forma parte del Atest Backyard.</p><button type="button" className={styles.ghinAction} onClick={onOpen}>VER TARJETAS GHIN</button></section>;
   const items = scores?.items.slice(0, 20) ?? [];
   return <section className={styles.ghinRecords} aria-label="Últimas tarjetas GHIN">
     <header><h3>Últimas tarjetas GHIN</h3><span className={styles.ghinBadge}>GHIN · SOLO LECTURA</span></header>

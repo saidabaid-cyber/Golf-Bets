@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { NormalizedGhinScore } from "../../lib/ghin/core";
+import type { GhinImportedScoresController } from "./use-ghin-imported-scores";
 import { parseGhinProfileResponse, type GhinProfileProjection, type GhinScoresResponse } from "../../lib/ghin/profile";
 
 export type GhinAuthorizationCandidate = {
@@ -15,6 +16,7 @@ export type GhinAuthorizationCandidate = {
 };
 
 export type GhinReadOnlyProfileController = {
+  imports?: GhinImportedScoresController;
   enabled: boolean;
   ready: boolean;
   refreshing: boolean;

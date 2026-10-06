@@ -8,6 +8,7 @@ import { readCareerAttestSummary } from "../lib/career-attest-client";
 import { careerAttestSummary } from "../lib/career-index-presentation";
 import * as presentation from "../lib/career-index-presentation";
 import { buildGolfInsights } from "../lib/golf-insights";
+import { calculateBackyardIndex } from "../lib/backyard-index";
 import { socialUI, uiText, uiFind, uiNodes, settleUI } from "./helpers/social-ui";
 
 const score = {id:"provider-score",playedOn:"2026-09-23",courseId:null,courseName:"Campo sintético de prueba",teeId:null,teeName:"Blancas",grossScore:null,adjustedGrossScore:84,differential:15.7,courseRating:67.5,slopeRating:119,holes:18,scoreType:"H",postingMethod:"M"};
@@ -62,15 +63,16 @@ test("0 eligible Backyard cards plus GHIN scores keeps zero percent and the fixe
   const empty=careerAttestSummary([],[],"owner"),before=structuredClone(empty),ghin=control();
   ghin.scores={items:Array.from({length:20},(_,i)=>({...score,id:String(i)})),count:503,truncated:true,fetchedAt:"2026-10-05"};
   const props={userId:"owner",accessToken:"own",index:{source:"GHIN",value:7.9},rounds:[],history:[],insights:buildGolfInsights([]),ghin};
-  const h=socialUI("app/components/career-index-panel.tsx",{"career-attest-client":{readCareerAttestSummary:async()=>empty},"career-index-presentation":presentation,"career-statistics":{careerNumber:(n:any)=>n??"—"}});
+  const h=socialUI("app/components/career-index-panel.tsx",{"career-attest-client":{readCareerAttestSummary:async()=>empty},"career-index-presentation":presentation,"career-statistics":{careerNumber:(n:any)=>n??"—"},"backyard-index":{calculateBackyardIndex}});
   const render=()=>h.render("CareerIndexPanel",{props,detail:"attest",onDetail(){}});
   render();await settleUI();const tree=render();assert.match(uiText(tree),/Atest de tarjetas Backyard 0%/);assert.match(uiText(tree),/Sin tarjetas Backyard elegibles · 0\/20/);
   assert.equal(uiNodes(tree).filter(n=>n.type==="i").length,20);assert.deepEqual(empty,before);
   assert.equal(uiNodes(tree).filter(n=>n.props.className==="row").length,0);
 });
-test("GHIN summaries are presentation only, with no posting, import or Backyard metric writes",()=>{
+test("GHIN summaries remain read-only and Backyard Index reads only Backyard history",()=>{
   const code=readFileSync("app/components/career-ghin-scores.tsx","utf8")+readFileSync("app/components/career-index-panel.tsx","utf8");
-  assert.doesNotMatch(code,/rounds_cloud|RoundSnapshot|localStorage|score-posting|submitScore|postScore|calculateBackyardIndex|careerAttestSummary\(/);
+  assert.doesNotMatch(code,/rounds_cloud|RoundSnapshot|localStorage|score-posting|submitScore|postScore|careerAttestSummary\(/);
+  assert.match(code,/calculateBackyardIndex\(props.history\?\?props.rounds,props.userId\)/);
   const hook=readFileSync("app/components/use-ghin-read-only-profile.ts","utf8");
   assert.match(hook,/post\(\{ operation: "scores" \}\)/);assert.doesNotMatch(hook,/\/api\/profile\/ghin\/scores|postScore|submitScore|score-posting/);
   const endpoint=readFileSync("app/api/profile/ghin/route.ts","utf8");

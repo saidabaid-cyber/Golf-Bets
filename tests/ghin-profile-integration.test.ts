@@ -141,8 +141,8 @@ test("onboarding, Profile, Edit Profile and Settings share the live multiuser GH
   const placeholder = readFileSync("app/components/ghin-placeholder.tsx", "utf8");
 
   assert.match(page, /const ghinControl = useGhinReadOnlyProfile\(/);
-  assert.match(page, /view="profile"[\s\S]*?ghinControl=\{ghinControl\}/);
-  assert.match(page, /view="account"[\s\S]*?ghinControl=\{ghinControl\}/);
+  assert.match(page, /view="profile"[\s\S]*?ghinControl=\{unifiedGhinControl\}/);
+  assert.match(page, /view="account"[\s\S]*?ghinControl=\{unifiedGhinControl\}/);
   assert.match(onboarding, /const ghinControl = useGhinReadOnlyProfile\(accessToken\)/);
   assert.match(onboarding, /<HandicapSourceChoices[\s\S]*?ghinControl=\{ghinControl\}/);
   assert.doesNotMatch(profilePanel, /id="profile-edit-handicap"/);

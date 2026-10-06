@@ -21,7 +21,7 @@ const CareerTournaments = dynamic(() => import("./career-tournaments").then(m =>
 export type CareerHubProps = {
   displayName: string; avatarUrl?: string | null; userId: string; index: SelectedHandicapIndex;
   username?: string | null; club?: string | null; city?: string | null; accessToken?: string | null;
-  ghin?: Pick<GhinReadOnlyProfileController,"profile"|"enabled"> & Partial<Pick<GhinReadOnlyProfileController,"ready"|"error"|"scores"|"scoresLoading"|"reauthorizationRequired"|"loadScores">>;
+  ghin?: Pick<GhinReadOnlyProfileController,"profile"|"enabled"> & Partial<Pick<GhinReadOnlyProfileController,"ready"|"error"|"scores"|"scoresLoading"|"reauthorizationRequired"|"loadScores"|"imports">>;
   insights: GolfInsights; rounds: RoundSnapshot[]; history?: RoundSnapshot[]; ready: boolean; error?: boolean;
   view: CareerView; onView: (view: CareerView) => void;
   detail: CareerIndexDetail; onDetail: (detail: CareerIndexDetail) => void;
