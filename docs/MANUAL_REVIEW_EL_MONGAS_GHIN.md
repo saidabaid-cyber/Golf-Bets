@@ -4,10 +4,10 @@ Usar exclusivamente **https://dev.thebackyard.com.mx** e iniciar sesión como **
 
 ## Checkpoint real actual
 
-**BLOCKED_EXTERNAL, no DONE:** el fix de hidratación está probado localmente y publicado en DEV (`a3a6e12`). Falta certificar el login en una sesión limpia antes de importar/publicar GHIN. La nueva pestaña normal de Chrome reutilizó storage previo y mostró 14 conflictos; no se eligió ni sobrescribió una copia. Se observó un GET inicial, cero POST y cero retries, pero esa sesión no acredita el smoke limpio. Abrir una sesión independiente; no limpiar ni descartar los conflictos de la sesión anterior a ciegas.
+**USER_REAUTH_REQUIRED, no DONE:** el usuario certificó físicamente el smoke limpio en Safari privado sobre DEV: sesión recuperada, sin conflictos, sync/409/retries/runtime errors = 0, un profile read por navegación explícita. **CLEAN_HYDRATION_SMOKE = PASS (evidencia externa del usuario).** No es necesario repetir ese diagnóstico. El 6 de octubre a las 21:56:25Z se intentó una sola consulta real de scoring record; DEV respondió REAUTH_REQUIRED antes de llamar al provider. Está abierto «Reautorizar GHIN» en Perfil para entrada manual de credenciales. No compartirlas en chat ni limpiar las sesiones anteriores.
 
 - GHIN pertenece al vínculo VERIFIED de el_mongas; número enmascarado `****3351`.
-- Último Handicap Index persistido: **30.8**, VERIFIED, sync exitoso `2026-10-06T19:40:10.015Z`. La sesión upstream no se volvió a consultar en esta continuación; reautorizar sólo si responde REAUTH_REQUIRED.
+- Último Handicap Index persistido/visible: **30.8**, VERIFIED, sync exitoso `2026-10-06T19:40:10.015Z`. La lectura nueva quedó bloqueada por falta de sesión GHIN válida en esta pestaña; no se perdió ni rehízo el vínculo.
 - Backyard Index: **5.5**, separado del provider y conservado.
 - 22 rondas Backyard completadas, QA22 cancelada, QA24 activa y dos parciales antiguas conservadas.
 - Atest últimas 20: **11/20, 55%**. GHIN-only no modifica este porcentaje.
@@ -37,7 +37,7 @@ Usar exclusivamente **https://dev.thebackyard.com.mx** e iniciar sesión como **
 
 ## Pendientes reales
 
-- Certificar el smoke real de hidratación tras el fix: sesión limpia, login manual/OTP directo en DEV, dos minutos sin acciones, cero POST/409/retries/idle calls. La reproducción y los 16 tests locales nuevos pasan; no reemplazan esta certificación. No repetir emails/OTP ni compartirlos en chat.
+- Reautorizar GHIN manualmente en Perfil → Renovar autorización → CONTINUAR; avisar al agente al terminar. El smoke físico de hydration ya es PASS y no se vuelve a investigar sin nueva evidencia.
 - Scoring record real, primera y segunda importación, QA visual con los datos oficiales y relogin limpio posterior.
 - Candidato con mappings confirmados antes de habilitar cualquier transport de posting.
 - Post → verificación provider → reimport → dedupe → segundo intento bloqueado: **no ejecutado**.

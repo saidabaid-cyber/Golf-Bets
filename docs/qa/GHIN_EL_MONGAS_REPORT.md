@@ -1,4 +1,37 @@
-# GHIN Full Cycle — continuación de hidratación DEV
+# GHIN Full Cycle — scoring record intentado tras smoke físico
+
+Estado actual: **USER_REAUTH_REQUIRED. No DONE.**
+
+| Bloque solicitado | Evidencia / resultado |
+|---|---|
+| CLEAN_HYDRATION_SMOKE | **PASS externo**, certificado por el usuario en Safari privado DEV: sesión limpia recupera el_mongas, GHIN 30.8, Backyard 5.5, Atest 55%, Carrera/histórico/QA24; sin conflictos; Vercel sync/409/retries/runtime errors = 0 y 1 profile read explícito. No se repite la investigación cloud. |
+| SCORING_RECORD | **USER_REAUTH_REQUIRED**. Un click real en Ver scoring record. Traza DEV `2026-10-06T21:56:25.555Z`: operation=scores, stage=scores, code=reauth_required, retryable=false, durationMs=0. La ruta responde 409 antes de llamar `/scores.json` porque no encuentra una sesión GHIN válida para este owner/vínculo. Count/IDs upstream desconocidos; no usar 0 como sustituto. |
+| IMPORT_1 | No ejecutado; USER_REAUTH_REQUIRED. DB privada contiene 0 provider scores, confirmado read-only. |
+| IMPORT_2 | No ejecutado; idempotencia real pendiente. Cobertura local pasa. |
+| RECONCILIATION | No se obtuvo todavía el scoring record. Las 22 completadas permanecen Backyard-only; GHIN_ONLY/BACKYARD_PLUS_GHIN/MATCH_REVIEW_REQUIRED reales pendientes. |
+| MAPPINGS | POSTING_BLOCKED_MAPPING; no se inventaron IDs ni equivalencias por nombre. Falta la evidencia provider. |
+| POST_CANDIDATE | Ninguno aprobado; dry run nuevo no ejecutado. QA24 está excluida. |
+| POST_RESULT | 0 publicaciones. Transport/flag read-only/apagado conservados. |
+| PROVIDER_VERIFY | No ejecutado: no existe POST real que verificar. |
+| ROUND_TRIP | No ejecutado contra provider; pendiente de import/mapping/post verificado. |
+| IDEMPOTENCE | 135 tests dirigidos GHIN PASS, incluida cobertura local import/identidad/guards. Segunda importación y segundo intento de posting reales no ejecutados. |
+| CAREER | Datos Backyard preservados; UI provider real pendiente. Usuario certificó recuperación limpia de Carrera/histórico. |
+| ATEST | **11/20 = 55%**, confirmado físicamente por el usuario. No importaciones ni atestaciones nuevas. |
+| BACKYARD_INDEX | **5.5**, confirmado físicamente, separado y preservado. |
+| GHIN_INDEX | **30.8** visible y persistido, VERIFIED; última actualización `2026-10-06T19:40:10.015Z`. No refresh upstream nuevo. |
+| QA24 | **PASS integridad**: UUID `16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d`, versión 4, live H2, H1 5/6. No se cerró/canceló/editó/publicó. |
+| BASELINE | **26/26 hashes/versiones/scores sin cambios** frente al checkpoint anterior: 22 completed, 1 cancelled, 3 live. QA21/22/23/24 intactas. |
+| REQUEST_BUDGET | Una acción POST `/api/profile/ghin` operation=scores confirmada por traza DEV; 0 llamadas upstream de scores en ese intento; 0 imports; 0 posting. Retry del intento = 0. Bytes de esa respuesta y conteo exhaustivo de requests de la pestaña no disponibles: null, no cero. Los ceros Vercel de Safari pertenecen a la certificación externa, no a un contador del agente. Sin loops ni polling añadidos. |
+| CLEAN_SESSION | Smoke inicial PASS externo del usuario. Relogin final posterior a import/posting aún no ejecutado. |
+| TESTS | **135/135 PASS** dirigidos GHIN ejecutados en esta continuación. Código sin cambios desde el fix validado: previamente dirigidos 1,139 PASS + scripts 117 PASS; suite 4,576 PASS y 5 baseline, 0 nuevos; typecheck/lint/build PASS. No se presenta la suite anterior como una ejecución nueva. |
+| GIT | SHA inicial `7e16dcc0db73480b23c0c65678bac4d387068603`; cambios actuales sólo documentos QA. Sin schema/RLS/code changes. |
+| DEPLOYMENT | Al iniciar: DEV health HTTP 200, preview, buildSha `7e16dcc0db73480b23c0c65678bac4d387068603`, remote HEAD igual y worktree limpio. Push sólo integration/backyard-current al guardar el reporte. |
+| MANUAL_REVIEW | `docs/MANUAL_REVIEW_EL_MONGAS_GHIN.md`; `docs/qa/GHIN_EL_MONGAS_FINAL.json`. Pantalla Reautorizar GHIN abierta en DEV; credenciales sólo allí, ingresadas por el usuario. |
+| UNRESOLVED | Reautorizar manualmente; después scoring record, import 1/2, reconciliación/UI, mappings confirmados, dry run/post/provider verify/round-trip/segundo intento y clean relogin final. No cleanup. main/beta/Production/app.thebackyard y ramas ajenas intactos. |
+
+---
+
+# Checkpoint anterior de hidratación — sustituido por el estado arriba
 
 Checkpoint actual: **BLOCKED_EXTERNAL. No DONE.** El fix local está publicado;
 falta una sesión limpia para certificar el smoke y desbloquear GHIN. No se
