@@ -3,6 +3,16 @@ import test from "node:test";
 import { deriveCareerRivalries, rivalryTotals, rivalryCompetitionEvidence } from "../lib/career-rivalries";
 import { careerRound } from "./helpers/career-round";
 import { renderCareer } from "./helpers/render-career";
+
+test("same-day rivalry streaks and most recent match follow completion time, not random IDs", () => {
+  const rounds=[careerRound("z-first",1,3,4),careerRound("a-middle",1,5,4),careerRound("y-last",1,3,4)];
+  rounds.forEach((round,i)=>{round.completedAt=`2026-01-01T${12+i}:00:00Z`;});
+  const rivalry=deriveCareerRivalries(rounds,"owner")[0];
+  assert.deepEqual(rivalry.matches.map(m=>m.roundId),["y-last","a-middle","z-first"]);
+  assert.deepEqual(rivalry.currentStreak,{result:"win",count:1});
+  assert.equal(rivalry.bestWinStreak,1);
+  assert.deepEqual([rivalry.wins,rivalry.losses,rivalry.ties],[2,1,0]);
+});
 test("G-P-E, rate, first/last match and streaks use sports scores regardless of money", () => {
   const rounds=[careerRound("one",1,5,4),careerRound("two",2,4,4),careerRound("three",3,4,5),careerRound("four",4,3,4),careerRound("five",5,3,4)];
   rounds.forEach(r=>{r.betResult=-999;r.personalOpponentResults=[{betId:"bet",mode:"dollar_stroke",modeLabel:"QA",opponentId:"rival-player",opponentName:"QA",amount:999}];});

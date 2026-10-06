@@ -1,4 +1,4 @@
-import { ownCareerHistory } from "./career-statistics";
+import { ownCareerHistory, careerNewestFirst } from "./career-statistics";
 import { careerScorecardEvidence, type CareerCompetitionEvidence } from "./round-achievements";
 import type { RoundSnapshot } from "./types";
 export type CareerMatch = { roundId: string; date: string; courseName: string; format: "Stroke Play"; holes: 9 | 18; ownScore: number; rivalScore: number; result: "win" | "loss" | "tie" };
@@ -11,9 +11,11 @@ export type CareerRivalry = {
 /** Sports-only read model. Financial snapshot fields never enter this projection. */
 export function deriveCareerRivalries(rounds: readonly RoundSnapshot[], userId: string): CareerRivalry[] {
   const rows = new Map<string,{name:string;matches:CareerMatch[]}>();
+  const closedAt = new Map<string,string|undefined>();
   for (const round of ownCareerHistory(rounds,userId)) {
     const card = careerScorecardEvidence(round,userId);
     if (!card) continue;
+    closedAt.set(round.id,round.completedAt);
     for (const rival of round.players ?? []) {
       if (rival.id === card.player.id || rival.accountUserId === userId) continue;
       const groupMember = round.groupOrigin?.selectedMembers.find(m => m.roundPlayerId === rival.id);
@@ -32,7 +34,9 @@ export function deriveCareerRivalries(rounds: readonly RoundSnapshot[], userId: 
     }
   }
   return [...rows].map(([key,item]) => {
-    const matches = item.matches.sort((a,b) => a.date.localeCompare(b.date) || a.roundId.localeCompare(b.roundId));
+    const matches = item.matches.sort((a,b) => careerNewestFirst(
+      {id:b.roundId,date:b.date,completedAt:closedAt.get(b.roundId)},
+      {id:a.roundId,date:a.date,completedAt:closedAt.get(a.roundId)}));
     let run = 0, best = 0, bestStreakAt: string | undefined, bestStreakRoundId: string | undefined;
     for (const match of matches) { run = match.result === "win" ? run+1 : 0; if (run > best) {best=run;bestStreakAt=match.date;bestStreakRoundId=match.roundId;} }
     const last = matches[matches.length-1];
