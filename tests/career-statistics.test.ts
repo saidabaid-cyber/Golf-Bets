@@ -1,10 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { careerTrend, careerSeason, careerDistribution, careerPrecision, ownCareerHistory } from "../lib/career-statistics";
+import { careerTrend, careerSeason, careerDistribution, careerPrecision, ownCareerHistory, careerScoreSamples, careerNewestFirst } from "../lib/career-statistics";
 import { buildGolfInsights, type ScoredRoundInsight } from "../lib/golf-insights";
 import type { RoundSnapshot } from "../lib/types";
 import { renderCareer } from "./helpers/render-career";
 const row = (id: number, gross: number, holes: 9 | 18 = 18) => ({ id: String(id), date: `2026-01-${String(id).padStart(2, "0")}`, holeCount: holes, gross } as ScoredRoundInsight);
+test("career same-day recency and trend follow played time rather than random round identifiers", () => {
+  const rows=[90,86,80,78].map((gross,i)=>({...row(i+1,gross),id:["z-oldest","y-old","b-new","a-newest"][i],date:"2026-10-05",occurredAt:`2026-10-05T${12+i}:00:00Z`}));
+  const samples=careerScoreSamples([],{...buildGolfInsights([]),recentRounds:rows},"owner");
+  assert.deepEqual(samples.map(r=>r.id),["a-newest","b-new","y-old","z-oldest"]);
+  assert.equal(careerTrend(samples),-9);
+  const snapshots=rows.map(r=>({id:r.id,date:r.date,completedAt:r.occurredAt,updatedAt:r.id==="z-oldest"?"2026-10-06T20:00:00Z":r.occurredAt}));
+  assert.deepEqual(snapshots.sort(careerNewestFirst).map(r=>r.id),samples.map(r=>r.id));
+  assert.equal(careerNewestFirst({id:"a",date:"2026-10-05",completedAt:"invalid"},{id:"z",date:"2026-10-05"}),1);
+});
 test("career averages, seasonal comparison and trend separate 9 and 18 holes", () => {
   const rows = [row(1, 90), row(2, 86), row(3, 80), row(4, 78), row(5, 39, 9)];
   assert.equal(careerTrend(rows.slice(0, 4)), -9);

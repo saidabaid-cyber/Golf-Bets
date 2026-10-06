@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { buildGolfInsights } from "../../lib/golf-insights";
 import { buildHistoricalRoundRecap } from "../../lib/historical-round-recap";
-import { careerNumber, careerDate, careerTrend, careerDistribution, careerPrecision, careerScoreSamples, ownCareerHistory, scoreToPar, type CareerScoreSample } from "../../lib/career-statistics";
+import { careerNumber, careerDate, careerTrend, careerDistribution, careerPrecision, careerScoreSamples, ownCareerHistory, careerNewestFirst, scoreToPar, type CareerScoreSample } from "../../lib/career-statistics";
 import type { RoundSnapshot } from "../../lib/types";
 import type { CareerHubProps } from "./career-hub";
 import { CareerPanel, CareerStatCard, CareerEmptyState, CareerCta } from "./career-shared";
@@ -10,7 +10,7 @@ import styles from "./career-hub.module.css";
 import { PendingRoundRecoveryPanel } from "./pending-round-recovery";
 
 export function RoundTrendChart({ rows }: {rows:readonly CareerScoreSample[]}) {
-  const ordered=[...rows].sort((a,b)=>a.date.localeCompare(b.date));
+  const ordered=[...rows].sort((a,b)=>careerNewestFirst(b,a));
   if(!ordered.length) return <p className={styles.caption}>Sin datos suficientes para mostrar la evolución.</p>;
   const points=ordered.length>40 ? [...new Set(ordered.map(r=>r.date.slice(0,7)))].map(month=>{const sample=ordered.filter(r=>r.date.startsWith(month));return {date:`${month}-15`,gross:sample.reduce((s,r)=>s+r.gross,0)/sample.length};}) : ordered;
   const min=Math.floor(Math.min(...points.map(r=>r.gross))-4),max=Math.ceil(Math.max(...points.map(r=>r.gross))+4);
@@ -38,7 +38,7 @@ export function RoundScorecardPreview({ round,row,onOpen }: {round:RoundSnapshot
 }
 export function CareerRounds(props:CareerHubProps) {
   const [year,setYear]=useState("all"),[course,setCourse]=useState("all"),[holes,setHoles]=useState<9|18>(props.insights.scoreScopeHoles??18),[limit,setLimit]=useState(10);
-  const history=useMemo(()=>ownCareerHistory(props.history??props.rounds,props.userId).sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id)),[props.history,props.rounds,props.userId]);
+  const history=useMemo(()=>ownCareerHistory(props.history??props.rounds,props.userId).sort(careerNewestFirst),[props.history,props.rounds,props.userId]);
   const matches=(r:RoundSnapshot)=> (year==="all"||r.date.startsWith(year))&&(course==="all"||r.courseName===course)&&(r.roundHoles??r.order?.length)===holes;
   const filtered=history.filter(matches);
   const sports=useMemo(()=>props.rounds.filter(r=>(year==="all"||r.date.startsWith(year))&&(course==="all"||r.courseName===course)&&(r.roundHoles??r.order?.length)===holes),[props.rounds,year,course,holes]);

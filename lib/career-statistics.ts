@@ -4,16 +4,25 @@ import type { GolfInsights, ScoredRoundInsight } from "./golf-insights";
 import type { RoundSnapshot } from "./types";
 import { validTotalOnly } from "./total-score-round";
 
-export type CareerScoreSample = Pick<ScoredRoundInsight,"id" | "date" | "holeCount" | "gross" | "courseName" | "teeName"> & { relativeToPar?: number; source?: "card" | "declared" };
+export type CareerScoreSample = Pick<ScoredRoundInsight,"id" | "date" | "holeCount" | "gross" | "courseName" | "teeName"> & { occurredAt?: string; relativeToPar?: number; source?: "card" | "declared" };
+type CareerDatedRound = { id: string; date: string; occurredAt?: string; completedAt?: string; startedAt?: string };
+/** Same-day rounds use their played/closed time; later corrections do not reorder history. */
+export function careerNewestFirst(a: CareerDatedRound, b: CareerDatedRound) {
+  const instant = (row: CareerDatedRound) => {
+    const value = row.occurredAt || row.completedAt || row.startedAt;
+    return value && Number.isFinite(Date.parse(value)) ? Date.parse(value) : 0;
+  };
+  return b.date.localeCompare(a.date) || instant(b) - instant(a) || b.id.localeCompare(a.id);
+}
 export function careerScoreSamples(rounds: readonly RoundSnapshot[], insights: GolfInsights, userId: string): CareerScoreSample[] {
   const rows: CareerScoreSample[] = insights.recentRounds.map(r => ({ ...r, source:"card" }));
   const seen = new Set(rows.map(r => r.id));
   for (const round of ownCareerHistory(rounds,userId)) {
     if (seen.has(round.id) || !validTotalOnly(round,userId) || !/^\d{4}-\d{2}-\d{2}$/.test(round.date)
       || !Number.isFinite(Date.parse(round.date)) || new Date(round.date).toISOString().slice(0,10) !== round.date) continue;
-    rows.push({id:round.id,date:round.date,holeCount:round.roundHoles!,gross:round.totalScoreCapture!.grossTotal,courseName:round.courseName,teeName:round.teeName,source:"declared"});
+    rows.push({id:round.id,date:round.date,occurredAt:round.completedAt,holeCount:round.roundHoles!,gross:round.totalScoreCapture!.grossTotal,courseName:round.courseName,teeName:round.teeName,source:"declared"});
   }
-  return rows.sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  return rows.sort(careerNewestFirst);
 }
 
 export const careerNumber = (value: number | null | undefined, digits = 0) => value == null || !Number.isFinite(value) ? "—" : value.toLocaleString("es-MX", { maximumFractionDigits: digits, minimumFractionDigits: digits });
@@ -34,7 +43,7 @@ export function ownCareerHistory(rounds: readonly RoundSnapshot[], userId: strin
 const mean = (rows: readonly CareerScoreSample[]) => rows.length ? rows.reduce((sum, row) => sum + row.gross, 0) / rows.length : undefined;
 /** Recent five versus the preceding five; never mixes 9 and 18 holes. */
 export function careerTrend(rows: readonly CareerScoreSample[]) {
-  const sorted = [...rows].sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+  const sorted = [...rows].sort(careerNewestFirst);
   if (sorted.length < 4 || new Set(sorted.map(r => r.holeCount)).size !== 1) return undefined;
   const size = Math.min(5, Math.floor(sorted.length / 2));
   return mean(sorted.slice(0, size))! - mean(sorted.slice(size, size * 2))!;
