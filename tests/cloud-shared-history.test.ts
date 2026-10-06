@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { CloudDb } from "./helpers/cloud-db";
 import { readCloudBundle, readCloudRoundHistory, writeCloudBundle } from "../lib/cloud-sync-service";
+import { readPendingOwnerRounds } from "../lib/pending-round-recovery";
 import { findAmbiguousCloudConflicts, mergeLocalAndCloud, type CloudDataBundle } from "../lib/cloud-sync";
 import { buildGolfInsights } from "../lib/golf-insights";
 import { buildBalanceLedger } from "../lib/balance-ledger";
@@ -211,6 +212,7 @@ test("published rounds route uses participant-aware reader and refuses shared re
     if (name.endsWith("/social-publication.server")) return { scheduleSocialPublication: () => {} };
     if (name.endsWith("/social-publication-policy")) return { hasCompletedRoundPublicationCandidate: () => false };
     if (name.endsWith("/cloud-sync-service")) return { readCloudRoundHistory };
+    if (name.endsWith("/pending-round-recovery")) return { readPendingOwnerRounds };
     if (name.endsWith("/shared-round-participants.server")) return { syncSharedRoundParticipants: async () => {} };
     if (name.endsWith("/shared-round-participants")) return { linkedRoundPlayers: () => [] };
     throw new Error(name);

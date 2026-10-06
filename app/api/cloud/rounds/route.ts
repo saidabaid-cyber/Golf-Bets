@@ -7,6 +7,7 @@ import { hasCompletedRoundPublicationCandidate } from "../../../../lib/social-pu
 import { syncSharedRoundParticipants } from "../../../../lib/shared-round-participants.server";
 import { linkedRoundPlayers } from "../../../../lib/shared-round-participants";
 import type { RoundSnapshot } from "../../../../lib/types";
+import { readPendingOwnerRounds } from "../../../../lib/pending-round-recovery";
 
 async function account(request: NextRequest) {
   const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
@@ -25,6 +26,14 @@ export async function GET(request: NextRequest) {
   const authenticated = await account(request);
   if ("error" in authenticated) return NextResponse.json({ error: authenticated.error, code: authenticated.code || "AUTH_REQUIRED" }, { status: authenticated.status });
   try {
+    const params = new URL(request.url).searchParams;
+    if (params.get("pending") === "1") {
+      const offset = Number(params.get("offset") || "0");
+      if (!Number.isInteger(offset) || offset < 0 || offset > 10_000)
+        return NextResponse.json({ error: "Página inválida." }, { status: 400, headers: { "cache-control": "private, no-store" } });
+      return NextResponse.json(await readPendingOwnerRounds(authenticated.supabase, authenticated.userId, offset),
+        { headers: { "cache-control": "private, no-store" } });
+    }
     const localId = new URL(request.url).searchParams.get("localRoundId");
     if (localId) {
       const columns = new URL(request.url).searchParams.get("metadata") === "1" ? "id,version" : "id,version,snapshot";

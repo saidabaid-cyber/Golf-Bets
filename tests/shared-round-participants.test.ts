@@ -210,6 +210,7 @@ function ownerRoute(db: CloudDb, userId = A) {
     if (name.endsWith("/social-publication.server")) return { scheduleSocialPublication: () => {} };
     if (name.endsWith("/social-publication-policy")) return { hasCompletedRoundPublicationCandidate: () => false };
     if (name.endsWith("/cloud-sync-service")) return {};
+    if (name.endsWith("/pending-round-recovery")) return {};
     if (name.endsWith("/shared-round-participants.server")) return { syncSharedRoundParticipants: async () => {} };
     if (name.endsWith("/shared-round-participants")) return { linkedRoundPlayers };
     throw new Error(name);

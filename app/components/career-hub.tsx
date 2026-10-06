@@ -9,6 +9,7 @@ import type { SelectedHandicapIndex } from "../../lib/handicap-source";
 import { CAREER_TABS, type CareerView } from "../../lib/career-navigation";
 import type { GhinReadOnlyProfileController } from "./use-ghin-read-only-profile";
 import type { CareerCompetitionEvidence } from "../../lib/round-achievements";
+import type { PendingRoundRecovery } from "../../lib/pending-round-recovery";
 import { CareerTabs, CareerSkeleton, CareerErrorState } from "./career-shared";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import styles from "./career-hub.module.css";
@@ -28,6 +29,7 @@ export type CareerHubProps = {
   onCreateRound: () => void; onFindRival: () => void; onRetry?: () => void;
   onOpenProfile?: () => void; onExploreTournaments?: () => void;
   competitionEvidence?: CareerCompetitionEvidence;
+  activeRoundId?: string; onResumeRound?: (row: PendingRoundRecovery) => void;
 };
 export function CareerHub(props: CareerHubProps) {
   const root=useRef<HTMLElement>(null);

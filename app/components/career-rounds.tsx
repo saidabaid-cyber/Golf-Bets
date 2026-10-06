@@ -7,6 +7,7 @@ import type { RoundSnapshot } from "../../lib/types";
 import type { CareerHubProps } from "./career-hub";
 import { CareerPanel, CareerStatCard, CareerEmptyState, CareerCta } from "./career-shared";
 import styles from "./career-hub.module.css";
+import { PendingRoundRecoveryPanel } from "./pending-round-recovery";
 
 export function RoundTrendChart({ rows }: {rows:readonly CareerScoreSample[]}) {
   const ordered=[...rows].sort((a,b)=>a.date.localeCompare(b.date));
@@ -53,6 +54,7 @@ export function CareerRounds(props:CareerHubProps) {
     <CareerPanel title="Precisión registrada"><div className={styles.metrics}>{precision.fairways!==undefined&&<CareerStatCard label="Fairways" value={`${careerNumber(precision.fairways)}%`} hint={`${precision.fairwayAttempts} capturas`}/>} {precision.gir!==undefined&&<CareerStatCard label="Greens en regulación" value={`${careerNumber(precision.gir)}%`} hint={`${precision.greenAttempts} capturas`}/>} {precision.putts!==undefined&&<CareerStatCard label="Putts por hoyo" value={careerNumber(precision.putts,1)} hint={`${precision.puttHoles} hoyos`}/>} {precision.distance!==undefined&&<CareerStatCard label="Distancia de salida" value={careerNumber(precision.distance)} hint={`${precision.distanceHoles} capturas · yardas`}/>}</div>{precision.gir===undefined&&precision.putts===undefined&&precision.fairways===undefined&&precision.distance===undefined&&<p className={styles.caption}>Sin datos suficientes. Captura precisión y putts durante tus rondas para conocer esta parte de tu juego.</p>}</CareerPanel>
     <CareerPanel title="Distribución de scores"><RoundDistribution rows={sample} holes={holes}/></CareerPanel>
     <CareerPanel title="Histórico de rondas">{filtered.slice(0,limit).map(r=><RoundHistoryRow key={r.id} round={r} row={fullScores.get(r.id)} onOpen={props.onOpenRound}/>)}{filtered.length>limit&&<button type="button" className={styles.goldButton} onClick={()=>setLimit(v=>v+10)}>Cargar más rondas</button>}<p className={styles.caption}>El histórico conserva todas tus tarjetas. Un reinicio de estadísticas sólo afecta a la analítica. Los totales declarados no aportan precisión ni logros por hoyo.</p></CareerPanel>
+    {props.onResumeRound&&<PendingRoundRecoveryPanel key={props.userId} userId={props.userId} accessToken={props.accessToken} activeRoundId={props.activeRoundId} onResume={props.onResumeRound}/>}
     {filtered[0]&&<RoundScorecardPreview round={filtered[0]} row={fullScores.get(filtered[0].id)} onOpen={props.onOpenRound}/>}
     <CareerCta title="Cada ronda cuenta." label="Registrar nueva ronda" onAction={props.onCreateRound}/></>;
 }
