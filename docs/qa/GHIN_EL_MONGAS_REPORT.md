@@ -1,3 +1,250 @@
+# GHIN Full Cycle — importación real de el_mongas
+
+Estado actual: **POSTING_BLOCKED_MAPPING. No DONE del ciclo completo.**
+Continuación desde `b1030d00b27f9a6a259c32c5200eea4063636bb1`,
+exclusivamente `integration/backyard-current` y **https://dev.thebackyard.com.mx**.
+El smoke limpio de hydration permanece **PASS externo**, certificado por el
+usuario en Safari privado. No se reinvestigó ni modificó cloud sync.
+
+## SCORING_RECORD
+
+**PASS real.** Tras la reautorización manual del usuario, una acción “Ver scoring
+record” consultó el GHIN ya vinculado. Traza DEV `2026-10-06T22:13:54.980Z`:
+`/scores.json`, HTTP **200**, 97 ms, retryable=false. **6 tarjetas** recuperadas.
+El vínculo y los seis external_player_id persistidos corresponden al mismo owner
+y provider profile de el_mongas; verificación SQL booleana, sin publicar esa identidad.
+
+GHIN VERIFIED **30.8**, último sync exitoso `2026-10-06T22:13:02.411Z`.
+Las seis tarjetas tienen 18 hoyos, rating 71, slope 137. El provider devuelve
+**adjusted gross**, pero **gross, course ID y tee ID son null**.
+No se inventa gross, par, hole scores ni estadísticas.
+
+| Provider score ID | Fecha | Tee | Ajustado | Diferencial | Tipo |
+|---|---|---|---:|---:|---|
+| 902029046 | 2023-06-07 | Red / Red | 112 | 33.8 | C |
+| 899647834 | 2023-06-01 | Red | 107 | 29.7 | H |
+| 888298526 | 2023-05-01 | Red / Red | 116 | 37.1 | C |
+| 853907291 | 2022-10-06 | Red / Red | 122 | 42.1 | C |
+| 819244193 | 2022-06-21 | Red / Red | 129 | 47.8 | C |
+| 816066271 | 2022-06-12 | Red | 126 | 45.4 | H |
+
+Nombre recibido para Red: “La Vista Country Club | La Vista”. Para Red / Red:
+“La Vista Country Club | La Vista / La Vista Country Club | La Vista”.
+Se conserva el texto del provider; no se infiere una identidad de campo desde él.
+
+## IMPORT_1
+
+**PASS real.** Un click en “Sincronizar tarjetas GHIN” ejecutó el endpoint normal,
+con sesión legítima, normalización y RPC privada existente. HTTP **200**.
+FETCHED **6**, IMPORTED_NEW **6**, MATCHED_EXISTING **0**, AMBIGUOUS **0**,
+SKIPPED_INVALID **0**. Se persistieron seis IDs únicos; import timestamp
+`2026-10-06T22:14:35.725626Z`. No SQL manual de inserción ni fixtures como evidencia final.
+
+## IMPORT_2
+
+**PASS real / idempotente.** Segunda acción idéntica: HTTP **200**,
+IMPORTED_NEW **0**, total persistido **6**, duplicates **0**, matched **0**,
+ambiguous **0**. `imported_at` permanece intacto; la sincronización explícita
+actualiza el clock `updated_at` del provider, según la RPC existente.
+No cambia identidad ni valores oficiales y no modifica rondas Backyard.
+
+## RECONCILIATION
+
+**PASS sobre datos reales disponibles.** GHIN_ONLY **6**, BACKYARD_ONLY
+**22 completadas**, BACKYARD_PLUS_GHIN **0**, MATCH_REVIEW_REQUIRED **0**.
+Las fechas oficiales 2022–2023 no corresponden a las rondas Backyard QA de 2026.
+No hay match por nombre, fusión ambigua, sustitución de scores o pérdida de datos ricos.
+
+## MAPPINGS
+
+**POSTING_BLOCKED_MAPPING.** Ninguna de las 22 completadas tiene ambos mappings
+CONFIRMED para sus IDs congelados. Auditoría read-only de las tres combinaciones:
+
+| Campo/ID Backyard congelado | Tee/ID congelado | Completadas | Curso y tee GHIN CONFIRMED |
+|---|---|---:|---|
+| course-campestre-puebla | ghin:23232:tee:468e7646a10f | 1 | No |
+| course-la-vista-club-current | tee-la-vista-club-current-gold | 12 | No |
+| course-la-vista-club-current | tee-la-vista-club-current-white | 9 | No |
+
+El scoring record real devuelve IDs de campo/tee **null**, tees **Red / Red** o
+**Red**, rating 71/slope 137, sin par. No confirma Blancas/Doradas ni el curso
+congelado. Un prefijo en un ID local o una semejanza de nombre no basta.
+
+## POST_CANDIDATE
+
+**POSTING_BLOCKED_MAPPING**, elegibles **0**. No se ejecutó un dry run nuevo
+sin los mappings. QA24 y canceladas/incompletas permanecen excluidas.
+
+## POST_RESULT
+
+**No ejecutado**, posts upstream **0**. Transport read-only y flag privado
+apagado conservados. No se habilitó posting con guards incompletos.
+
+## PROVIDER_VERIFY
+
+No ejecutado; no hay una tarjeta nueva publicada que confirmar.
+La lectura exitosa del scoring record no se presenta como verificación de posting.
+
+## ROUND_TRIP
+
+No ejecutado upstream. Falta mapping → candidato → post → confirmación provider.
+No se declara PASS mediante tests locales.
+
+## IDEMPOTENCE
+
+Importación real **PASS**: segunda sincronización 0 nuevas y constraint único
+mantiene seis registros. Segundo intento de posting **no ejecutado**:
+no existe un primer post válido. No se realizó un segundo POST upstream.
+
+## CAREER
+
+**PASS de lectura real tras importación**: Resumen, Logros, Rivalidades, Rondas,
+Torneos y Atest. Carrera mantiene sus cinco subvistas y navegación inferior activa.
+Resumen conserva **22 completadas**, gross promedio **82.8**, mejor **71**,
+**18 birdies**. Logros conserva **5/7**, incluyendo Birdie Club 18/10.
+Rivalidades muestra **25 enfrentamientos**, exclusivamente de tarjetas Backyard.
+Torneos conserva estado vacío **0**, sin inventar competiciones.
+
+Rondas muestra las tarjetas oficiales en historial unificado, ordenadas por fecha
+real, badge GHIN, sólo lectura y score etiquetado Ajustado. Se abrió el detalle de
+`902029046`: 112 ajustado, 18 hoyos, diff 33.8, rating 71, slope 137.
+Las seis ajustado-only quedan excluidas del gross promedio/best; no producen
+birdies, putts, GIR, rivalidades, bets ni Atest.
+
+Se detectó y corrigió un defecto de presentación en
+`app/components/ghin-import-history.module.css`: la columna score fija de 40 px
+y “Ajustado” inline se encimaban con el badge. La tarjeta importada ahora usa
+columna score intrínseca y etiqueta en otra línea. Alcance únicamente CSS de
+GhinProviderCard, usado en Perfil/Carrera/Histórico; sin cambios de contratos.
+
+**PASS visual en DEV** del ajuste: las seis tarjetas tienen score/etiqueta
+separados del badge, 0 intersecciones y 0 overflow de tarjeta, con ancho DOM
+efectivo **573 px**. Se pidió 390 px mediante la capacidad documentada, pero
+no cambió el ancho real; no se declara QA 390 px ni iPhone físico desde esa
+observación. Evidencia local: `.qa-artifacts/ghin-import-fixed-dev.jpg`.
+Tras una recarga controlada del nuevo build, el GET privado recuperó las
+seis tarjetas persistidas (200, **3,372 B**) sin otra llamada upstream GHIN.
+
+## ATEST
+
+**PASS**, **11/20 = 55%** visible después de las importaciones.
+Las seis GHIN-only se muestran aparte como sólo lectura; no entran al Atest.
+
+## BACKYARD_INDEX
+
+**PASS**, **5.5** preservado, separado del provider. Ninguna GHIN-only se
+añadió al cálculo interno ni se alteraron scores/matemática.
+
+## GHIN_INDEX
+
+**PASS real**, VERIFIED **30.8**, fuente primaria según prioridad actual de
+HandicapProvider. No se promedia con Backyard Index ni cambia el freeze de QA24.
+
+## QA24
+
+**PASS integridad**, ID `16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d`,
+local `rrouggse`, versión **4**, live en **H2**, H1 **5/6**.
+Inicio muestra “Continuar ronda · Hoyo 2 de 18”. No se abrió score capture,
+editó, cerró, canceló ni publicó. Hashes y scores coinciden con el pre-import.
+
+## BASELINE
+
+**PASS**: **26/26 snapshots/versiones/scores sin cambios** después de ambos
+imports y navegación. **22 completed, 1 cancelled, 3 live**.
+Las 20 originales, QA21 versión 11, QA22 cancelada, QA23 y QA24 se preservan.
+No se revirtió el clock histórico de QA21, ni se repitieron las rondas.
+
+## REQUEST_BUDGET
+
+Ventana de acciones observadas: `22:13:52.458–22:24:53.727Z`.
+
+| Medición | Resultado y alcance |
+|---|---|
+| /api/profile/ghin scoring | 1 acción explícita, upstream /scores.json 200 confirmado |
+| GHIN scoring reads | 1 traza confirmada; 3 lecturas esperadas por flujo ejecutado (vista + 2 imports) |
+| GHIN import POST | 2, ambos HTTP 200 |
+| Import request bytes | 20 por POST |
+| Import response bytes | 3,401 por respuesta |
+| Provider score posting | 0 |
+| Cloud sync GET / POST / rounds | 0 / 0 / 0 observados en diagnostics de pestaña |
+| Full bundles / retries / failures | 0 / 0 / 0 observados en esa ventana |
+| Reposo | 136.778 s, cloud 0, GHIN 0 nuevos eventos |
+| Storm / polling / usage guard | No observado / no observado / no activado |
+
+La medición no es un conteo global exhaustivo de Vercel. Bytes del endpoint
+de scoring view no capturados: **null**, no cero. Respuesta máxima **medida
+de import** 3,401 B; no se afirma que sea el máximo absoluto de todos los endpoints.
+Tráfico de deployment/rehidratación posterior se reporta separado.
+
+**Total observado incluyendo carga del build CSS:** cloud sync GET **1**,
+POST **0**, cloudRounds **0**; import GET persistido **1**, import POST **2**.
+Full bundles **1 legítimo**, **0 inesperados**; retries **0**, failures **0**.
+Máxima respuesta cloud medida **521,587 B**; máximo upload medido **20 B**.
+El único full GET fue mount con knownCloud=false durante la recarga deliberada
+del deployment: apply/gate success, sin POST, conflicto ni recovery.
+Desde cycle success `22:29:45.767Z` hasta `22:32:10.784Z` (**145 s**),
+no hubo más eventos cloud pese a las lecturas/navegación. Esto es distinto del
+reposo puro de 136.778 s ya certificado en la tabla.
+
+## CLEAN_SESSION
+
+Smoke inicial **PASS externo del usuario** en Safari privado.
+Relogin limpio **posterior a estas importaciones pendiente de confirmación**
+del usuario. Se solicitó nueva sesión privada con seis tarjetas, ambos índices,
+Atest y QA24. La pestaña actual del agente no se usa como prueba de contexto vacío.
+
+## TESTS
+
+Ejecutados después del cambio CSS:
+- Dirigidos GHIN/import/RLS/identidad/session/guards: **69/69 PASS**.
+- Suite completa: **4,581**, **4,576 PASS**, **5 baseline**, **0 nuevos FAIL**.
+- Los mismos cinco: equipment-owner-review; equipment-ui-contract;
+  final-brand-ghin-closeout Equipment; iphone-capture Rules;
+  nightly-catalog-quality equipment-gaps.
+- Typecheck **PASS**, lint **PASS**, build **PASS**.
+- Compilación TS validada existente, sin cambios TS/JS en esta continuación;
+  tests que renderizan/inspeccionan componentes leen el source actual.
+- El checkpoint previo ya ejecutó 135 GHIN, 1,139 dirigidos cloud/domain y 117 scripts.
+  Esas cifras se conservan con su fecha/alcance; no se cuentan como nuevas ejecuciones.
+
+## GIT
+
+SHA inicial `b1030d00b27f9a6a259c32c5200eea4063636bb1`.
+Commit CSS `f3de6341e78f3127ce5b6b6dab6c2b7846ad8d08`:
+`fix(ghin): keep adjusted score labels clear of provenance badges`.
+Documentos: guía, manifest y reporte actualizados con importación real.
+Sin cambios cloud, betting engine, GHIN transport, schema/RLS ni otras áreas.
+Main/beta/Production/app.thebackyard.com.mx/rama de campos intactos.
+
+## DEPLOYMENT
+
+Target exclusivo: `origin/integration/backyard-current` →
+**https://dev.thebackyard.com.mx**. Código verificado **READY**,
+`dpl_3qdXMPYTYeWURxmVH3hcfEV186Rg`, alias DEV confirmado.
+Health HTTP **200**, environment **preview**, buildSha
+`f3de6341e78f3127ce5b6b6dab6c2b7846ad8d08`.
+El commit documental posterior no cambia el código verificado.
+Su SHA final y health/READY se entregan después del push del reporte.
+
+## MANUAL_REVIEW
+
+[Guía](../MANUAL_REVIEW_EL_MONGAS_GHIN.md),
+[manifest](GHIN_EL_MONGAS_FINAL.json). Se dejan las seis tarjetas persistidas
+y todas las rondas/evidencias anteriores. Sin cleanup.
+
+## UNRESOLVED
+
+1. Course + tee CONFIRMED para un candidato existente elegible.
+2. Posting/dry run/provider verify/round-trip/segundo post bloqueado reales,
+   detenidos antes de upstream por ese guard.
+3. Relogin privado posterior a import, pendiente de confirmación externa.
+4. Viewport 390 px no aplicado por la capacidad del navegador; prueba visual
+   realizada a 573 px. Verificación física posterior pendiente del usuario.
+
+---
+
+# Checkpoints históricos — sustituidos por el reporte actual anterior
+
 # GHIN Full Cycle — scoring record intentado tras smoke físico
 
 Estado actual: **USER_REAUTH_REQUIRED. No DONE.**
