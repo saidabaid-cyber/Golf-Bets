@@ -1,3 +1,16 @@
+.providerCard {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+.providerCard > strong {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  text-align: right;
+}
+.providerCard > strong > small {
+  display: block;
+  white-space: nowrap;
+}
 .providerCard > details,
 .providerCard > p,
 .providerCard > button {
