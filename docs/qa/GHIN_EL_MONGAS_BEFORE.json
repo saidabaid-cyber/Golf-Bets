@@ -1,0 +1,289 @@
+{
+  "environment": "DEV",
+  "project": "bymeopxkxapfizeeqeyb",
+  "branch": "integration/backyard-current",
+  "baseSha": "8422256d795ed51e35ba99ac37eccdba349bdab3",
+  "capturedAt": "2026-10-06T18:42:37.383Z",
+  "backyard": {
+    "completed": 22,
+    "cancelled": 1,
+    "live": 3,
+    "backyardIndex": 5.5,
+    "attestLast20": {
+      "attested": 11,
+      "pending": 9,
+      "percent": 55
+    },
+    "qa24": {
+      "id": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
+      "local_id": "rrouggse",
+      "version": 4,
+      "snapshot_hash": "16c685ee0777efdeeb9a7795e313446a",
+      "scores_hash": "66e1869c4a4a09292175d295235e2762",
+      "lifecycle": "live",
+      "holes": 1,
+      "resumeHole": 2,
+      "ownerH1": 5,
+      "guestH1": 6
+    },
+    "career": {
+      "rounds": 22,
+      "averageScore": 82.8,
+      "birdies": 18,
+      "bestScore": 71
+    },
+    "integrity": [
+      {
+        "id": "aec5071d-0011-49ff-92df-fbebcf9b5f95",
+        "local_id": "s6h4mk2d",
+        "version": 1,
+        "snapshot_hash": "213d74817c4f342a5e927a42b2caed34",
+        "scores_hash": "99914b932bd37a50b983c5e7c90ae93b",
+        "lifecycle": "live",
+        "holes": 0
+      },
+      {
+        "id": "ad727513-d19e-45f5-9b3b-6cba094f6544",
+        "local_id": "oonshxl8",
+        "version": 23,
+        "snapshot_hash": "b8fd155f9a7cdd50d65e5fd4461cc9cd",
+        "scores_hash": "ffbd5e044d39f73202877ce58b200bcf",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "697e4c3f-42cf-4c95-9c3f-7c57ddfcbf58",
+        "local_id": "8t9l8dma",
+        "version": 21,
+        "snapshot_hash": "990f2ac738342d5df411210132aa8b31",
+        "scores_hash": "c803f597f7dad6949922c780c910c1f1",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "c250c150-8694-46f8-bba9-07472e1eb7bc",
+        "local_id": "gys71iow",
+        "version": 21,
+        "snapshot_hash": "c220ef36073417f54c8c6537199747e1",
+        "scores_hash": "ebc8605d10baa9ebb8923a6f90f85a06",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "19bfd6a6-5808-4d8e-9432-4a8a9911dfa8",
+        "local_id": "uud3jzr4",
+        "version": 21,
+        "snapshot_hash": "e7b5e66b4d198f172baca8ee4fa8fc75",
+        "scores_hash": "4369eea0fdcb0afae5bb7e952e36fd43",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "4d004e21-fb27-489d-8081-0e38d6cc2733",
+        "local_id": "fz2xs46i",
+        "version": 21,
+        "snapshot_hash": "3a4a5935c4dd62565b9a189d4c3c48aa",
+        "scores_hash": "8e26517a2e6067a1ab5b270e9c79bfa8",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "75fcbd06-804a-4508-bc34-ea0f23eb1895",
+        "local_id": "k1932hf8",
+        "version": 21,
+        "snapshot_hash": "711cb72037ab20c9e0ca4cce1346572b",
+        "scores_hash": "7d1301aacf25f3196a9d4da01431a942",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "570c3a9f-03ca-4238-89fc-46ad039d25ba",
+        "local_id": "2r8lnvh2",
+        "version": 20,
+        "snapshot_hash": "09be3a19b0aa6875f859bd50aa070ecb",
+        "scores_hash": "21e23680c3714db00b12ec6f1af006d2",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "7d13f9fb-4e93-49b3-b2d7-b20a5427e4ae",
+        "local_id": "fzkvtuec",
+        "version": 23,
+        "snapshot_hash": "4713940b382971525ec488f9df418817",
+        "scores_hash": "564fe5c4c261027300c63cb158c2c8e9",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "d1562db7-b37f-4e6b-b3f5-76a511c85fe6",
+        "local_id": "408e4png",
+        "version": 5,
+        "snapshot_hash": "08cbae4a42db49653777c0d5a36974a7",
+        "scores_hash": "87157cc4d3a77613c9eacef88229f768",
+        "lifecycle": "live",
+        "holes": 2
+      },
+      {
+        "id": "1c5abff5-a02c-4a45-b151-0b2f5ac9bb55",
+        "local_id": "5fgb1a39",
+        "version": 20,
+        "snapshot_hash": "b945e73aa10b72f9e2a5d5ba97d6f4a9",
+        "scores_hash": "0b63a683d1b96e988c45b0331870ca22",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "59031561-6934-4cd0-b3cd-0181e5c76aa2",
+        "local_id": "vq7oerek",
+        "version": 20,
+        "snapshot_hash": "fdc4fa66971aab315bc9379d9847c86a",
+        "scores_hash": "6b13276e010a9d6a95d9bb73998fb3d7",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "19c03579-423d-4521-9eb1-c7e61110e143",
+        "local_id": "gboenefn",
+        "version": 19,
+        "snapshot_hash": "89e5c2576bcbd8384dea88cb5252756b",
+        "scores_hash": "ec60d4b2e6e8e712b0599521706cc168",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "60d444f6-f550-4496-a535-b6a559511954",
+        "local_id": "9zonng6p",
+        "version": 19,
+        "snapshot_hash": "10efb3c2dab43e0f9da04cfdc763068e",
+        "scores_hash": "b2a31226f39501c5414d51afd2130f7a",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "1cc2c7cc-3c0f-4d93-9f25-9698216700ae",
+        "local_id": "uk0v5gmp",
+        "version": 19,
+        "snapshot_hash": "b694ce3c605412f7067af38d73b00dca",
+        "scores_hash": "443566bdafb05687e07521346386b086",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "a1bfd195-9fd5-49f3-82ed-2c12e51ca5b0",
+        "local_id": "8flnuur6",
+        "version": 19,
+        "snapshot_hash": "4a1ecdcfbaf69548716b6c5e21f275d3",
+        "scores_hash": "152443c54fd07f14e4841f764e3b31da",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "19e2d57c-bd49-4e37-b3f5-bb56d3f72eb0",
+        "local_id": "0hul3yua",
+        "version": 20,
+        "snapshot_hash": "3d8da2ba0943fd8bcb6b5a7b80c65eca",
+        "scores_hash": "b8182d45c5a8472421c7901e39b246d9",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "4db8c485-fbd4-4a7b-90d0-816786ec7462",
+        "local_id": "1phhh8px",
+        "version": 20,
+        "snapshot_hash": "91b1a2e60c5e5209e3c368a54df0a9c3",
+        "scores_hash": "a748ce9e58bff2b6f97c7277553c8dac",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "abf43e91-d09d-499e-beaa-ec76f0ca0c7e",
+        "local_id": "z36etwrb",
+        "version": 20,
+        "snapshot_hash": "eaa3c02044b7751992d63aa6f57a86a5",
+        "scores_hash": "165572bcd7bfd32adfd6ddbc83474559",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "3c8d6add-5e5d-4002-ac00-164e1ab21257",
+        "local_id": "2dsahjll",
+        "version": 19,
+        "snapshot_hash": "59119da235bc2e0f71bf1fc60f0de111",
+        "scores_hash": "d63ca6265700e57081e9191e85b6a8bf",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "4ede402e-0eca-442a-9335-31f7d9d44ebb",
+        "local_id": "p3lna28k",
+        "version": 20,
+        "snapshot_hash": "a0503cf9821678279f02f23089697326",
+        "scores_hash": "9efe0a5b70ec6ea00701d5b9c6f79786",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "4dbafd9d-dccd-4e23-83bf-6a7638e2821e",
+        "local_id": "o3iwbjfy",
+        "version": 20,
+        "snapshot_hash": "6236ed1a4348feabea15e57592499e17",
+        "scores_hash": "201d1ba96137f677a3fd3232113cde1d",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "24493b70-a2ef-456b-8060-aa5d69bb02ea",
+        "local_id": "z082rref",
+        "version": 10,
+        "snapshot_hash": "df069e4dd75d2acf42306540828671a2",
+        "scores_hash": "2960e5c76ebf5fe5b2888aeebc699cf5",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "8b512844-eee5-4c34-95d1-877470b19361",
+        "local_id": "hho9yjs8",
+        "version": 3,
+        "snapshot_hash": "83168e5eda848fad550650f538abaed0",
+        "scores_hash": "da0be7cc59306a53fc422ff7be71509e",
+        "lifecycle": "cancelled",
+        "holes": 1
+      },
+      {
+        "id": "fee4ab11-9650-4f3b-99b3-8af0bd0eebde",
+        "local_id": "a9sro2vv",
+        "version": 21,
+        "snapshot_hash": "d03201080ccb438347b2bca305108443",
+        "scores_hash": "d6480f8441ec31c9f994f47097f42062",
+        "lifecycle": "completed",
+        "holes": 18
+      },
+      {
+        "id": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
+        "local_id": "rrouggse",
+        "version": 4,
+        "snapshot_hash": "16c685ee0777efdeeb9a7795e313446a",
+        "scores_hash": "66e1869c4a4a09292175d295235e2762",
+        "lifecycle": "live",
+        "holes": 1
+      }
+    ],
+    "discrepancies": [
+      "QA24 version 4 versus prior QA version 3; scores hash identical. No overwrite."
+    ]
+  },
+  "ghin": {
+    "owner_id": "b182e0a1-d3f5-4e32-a005-29c6d55b6cdf",
+    "provider": "GHIN",
+    "association_status": "VERIFIED",
+    "external_player_suffix": "3351",
+    "handicap_index": "30.8",
+    "provider_home_club_name": "LA Vista Country Club",
+    "last_successful_sync_at": "2026-10-06 18:19:44.856+00",
+    "last_attempt_status": "SUCCESS",
+    "linkState": "GHIN_LINKED",
+    "scoringRecordCount": null,
+    "scoringRecordStatus": "USER_REAUTH_REQUIRED",
+    "providerScores": []
+  }
+}

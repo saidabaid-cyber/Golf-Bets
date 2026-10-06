@@ -1,0 +1,27 @@
+.providerCard > details,
+.providerCard > p,
+.providerCard > button {
+  grid-column: 1 / -1;
+}
+.providerCard > details {
+  min-width: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.providerCard summary {
+  cursor: pointer;
+  padding: 10px 0;
+}
+.providerCard > span {
+  white-space: normal;
+  text-align: center;
+  max-width: 108px;
+}
+.backyardEntry {
+  padding-block: 12px;
+  border-top: 1px solid #e5e8df;
+}
+.backyardEntry > details {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
