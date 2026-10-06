@@ -4,11 +4,13 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { RoundSnapshot } from "../types";
 import type { NormalizedGhinScore } from "./core";
 import { reconcileGhinScores, type ProviderScoreRecord, type ReconciliationRound, type GhinImportPage, type GhinImportSummary } from "./score-reconciliation";
+import { resolveGhinCatalogAlias, type AliasCourse, type AliasTee, type AliasCourseLink, type AliasTeeLink } from "./catalog-alias";
 
 type RoundRow = { id: string; local_id: string; snapshot: RoundSnapshot };
 type CourseLink = { course_id: string; external_course_id: string; sync_status: string };
 type TeeLink = { course_id: string; tee_id: string; external_tee_set_id: string; sync_status: string };
-export function reconciliationRound(row: RoundRow, golferId: string, courses: readonly CourseLink[], tees: readonly TeeLink[]): ReconciliationRound | null {
+export function reconciliationRound(row: RoundRow, golferId: string, courses: readonly CourseLink[], tees: readonly TeeLink[],
+  aliases?: { courses: AliasCourse[]; tees: AliasTee[] }): ReconciliationRound | null {
   const s = row.snapshot, playerId = s.ownerId;
   if (!playerId || s.cloudReadOnly || s.lifecycleState !== "completed") return null;
   const assignment = s.playerTeeAssignments?.find(t => t.playerId === playerId);
@@ -18,14 +20,17 @@ export function reconciliationRound(row: RoundRow, golferId: string, courses: re
   const tee = tees.find(t => t.course_id === courseId && t.tee_id === teeId && t.sync_status === "CONFIRMED");
   const holes = s.roundHoles ?? s.order?.length;
   if (holes !== 9 && holes !== 18) return null;
+  const alias = assignment && aliases ? resolveGhinCatalogAlias({assignment,holes,
+    frozenHoles:assignment.holes ?? s.courseSnapshot?.playerHoleCards?.[playerId] ?? s.courseSnapshot?.holes ?? [],courses:aliases.courses,tees:aliases.tees,
+    courseLinks:courses as AliasCourseLink[],teeLinks:tees as AliasTeeLink[]}) : null;
   const values = s.order?.map(h => s.scores?.[h]?.[playerId]);
   const complete = values?.length === holes && values.every(n => typeof n === "number" && Number.isInteger(n) && n > 0);
   const gross = complete ? values!.reduce<number>((sum, n) => sum + n!, 0) : s.totalScoreCapture?.grossTotal;
   if (typeof gross !== "number" || !Number.isInteger(gross) || gross <= 0) return null;
   const index = s.backyardIndexSnapshots?.find(r => r.playerId === playerId);
   return { id: row.id, localId: row.local_id, golferId, playedOn: s.date,
-    courseId: course?.external_course_id ?? null, courseName: s.courseSnapshot?.clubName ?? s.courseName,
-    teeId: tee?.external_tee_set_id ?? null, teeName: assignment?.teeName ?? s.teeName,
+    courseId: course?.external_course_id ?? alias?.providerCourseId ?? null, courseName: s.courseSnapshot?.clubName ?? s.courseName,
+    teeId: tee?.external_tee_set_id ?? alias?.providerTeeSetId ?? null, teeName: assignment?.teeName ?? s.teeName,
     holes, gross, adjustedGross: index?.adjustedGrossScore ?? null,
     materialScoreHash: createHash("sha256").update(JSON.stringify([s.order,values,s.totalScoreCapture])).digest("hex") };
 }
@@ -45,13 +50,25 @@ export async function readImportState(client: SupabaseClient, ownerId: string, g
   const [provider, rounds, courses, tees, posts] = await Promise.all([
     client.from("handicap_provider_scores").select(PROVIDER_COLUMNS).eq("owner_id",ownerId).eq("provider","GHIN").eq("external_player_id",golferId).order("played_on",{ascending:false}).order("external_score_id").limit(1000),
     client.from("rounds_cloud").select("id,local_id,snapshot").eq("owner_id",ownerId).eq("snapshot->>lifecycleState","completed"),
-    client.from("golf_course_provider_links").select("course_id,external_course_id,sync_status").eq("provider","GHIN").eq("sync_status","CONFIRMED"),
-    client.from("golf_tee_provider_links").select("course_id,tee_id,external_tee_set_id,sync_status").eq("provider","GHIN").eq("sync_status","CONFIRMED"),
+    client.from("golf_course_provider_links").select("id,course_id,external_course_id,external_facility_id,sync_status").eq("provider","GHIN").eq("sync_status","CONFIRMED"),
+    client.from("golf_tee_provider_links").select("id,course_id,tee_id,external_tee_set_id,course_provider_link_id,sync_status").eq("provider","GHIN").eq("sync_status","CONFIRMED"),
     client.from("ghin_score_post_receipts").select("round_id,provider_score_id,fingerprint,status").eq("owner_id",ownerId).eq("golfer_id",golferId).eq("status","SUCCEEDED"),
   ]);
   if ([provider,rounds,courses,tees,posts].some(r => r.error)) throw new Error("GHIN_IMPORT_READ_FAILED");
+  // Two bounded catalog reads for the owner's frozen assignments, not an N+1
+  // lookup per card. Public catalog evidence contains no player/private data.
+  const sourceCourseIds = [...new Set((rounds.data as RoundRow[]).flatMap(r=>r.snapshot.playerTeeAssignments?.filter(a=>a.playerId===r.snapshot.ownerId).map(a=>a.courseId) ?? []))];
+  let aliases: {courses:AliasCourse[];tees:AliasTee[]} | undefined;
+  if (sourceCourseIds.length) {
+    const [aliasCourses,aliasTees] = await Promise.all([
+      client.from("golf_courses").select("id,club_id,origin,is_provisional,holes,total_par,catalog_metadata").in("id",sourceCourseIds),
+      client.from("golf_course_tees").select("id,course_id,catalog_metadata").in("course_id",sourceCourseIds),
+    ]);
+    if (aliasCourses.error || aliasTees.error) throw new Error("GHIN_ALIAS_READ_FAILED");
+    aliases={courses:aliasCourses.data as AliasCourse[],tees:aliasTees.data as AliasTee[]};
+  }
   const candidates = (rounds.data as RoundRow[]).flatMap(r => {
-    const normalized = reconciliationRound(r,golferId,courses.data as CourseLink[],tees.data as TeeLink[]);
+    const normalized = reconciliationRound(r,golferId,courses.data as CourseLink[],tees.data as TeeLink[],aliases);
     return normalized ? [normalized] : [];
   });
   const records: ProviderScoreRecord[] = (provider.data as ProviderRow[]).map(p => {
