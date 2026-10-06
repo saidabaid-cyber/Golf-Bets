@@ -5,6 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { HistoricalRoundDetail } from "../app/components/historical-round-detail";
+import { initialBets } from "../lib/new-round-bets";
 import type { Course, Player, RoundSnapshot } from "../lib/types";
 
 const expenses = { caddie: 0, food: 0, drinks: 0, greenFee: 0, cartRental: 0, other: 0 };
@@ -46,6 +47,16 @@ function completeRound(): RoundSnapshot {
     personalOpponentResults: [{ betId: "personal-ui", mode: "nassau_individual", modeLabel: "Nassau individual", opponentId: "ana", opponentName: "Ana", amount: 250, status: "final" }],
   };
 }
+
+test("paused and cancelled owner details offer resume while completed rounds keep correction", () => {
+  for (const lifecycleState of ["live", "cancelled", "completed"] as const) {
+    const round = { ...completeRound(), lifecycleState, betConfig: initialBets(players.map(player => player.id)),
+      ...(lifecycleState === "completed" ? {} : { scores: { 1: { said: 5, ana: 5 } } }) };
+    const markup = renderToStaticMarkup(createElement(HistoricalRoundDetail, { round, onEdit() {}, onPhoto() {} }));
+    assert.match(markup, lifecycleState === "completed" ? /Corregir ronda guardada/ : /Reanudar ronda/);
+    if (lifecycleState !== "completed") assert.doesNotMatch(markup, /Corregir ronda guardada/);
+  }
+});
 
 test("el detalle histórico presenta golf, economía y liquidación persistida sin confundir netos", () => {
   const markup = renderToStaticMarkup(createElement(HistoricalRoundDetail, {

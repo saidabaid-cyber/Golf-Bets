@@ -158,7 +158,7 @@ import { FullScorecard } from "./components/full-scorecard";
 import { RoundCaptureV2 } from "./components/round-capture-v2";
 import { GolfLeaderboard } from "./components/golf-leaderboard";
 import { LiveRoundQuestion } from "./components/live-round-question";
-import { restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
+import { canEditSnapshot, restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
 import { abandonedPressurePlayersWithMissingScores, firstIncompleteRoundCapture, incompleteCoreBetSettlements, incompleteExternalPersonalBets, requiredRoundCaptureFactErrors, unsettledSupplementalBetResults } from "../lib/round-completion";
 import { migrateSupplementalNassau } from "../lib/nassau-migration";
 import { roundSaveNotice, saveRoundHistoryLocalFirst } from "../lib/round-history-save";
@@ -2422,6 +2422,12 @@ function GolfBetsApp() {
   });
 
   function editHistoricalRound(snapshot: RoundSnapshot) {
+    if (snapshot.lifecycleState === 'live' || snapshot.lifecycleState === 'cancelled') {
+      if (!canEditSnapshot(snapshot)) return;
+      if (snapshot.id === roundId && !roundClosed) continueActiveRound();
+      else requestNewRoundIntent({ kind: 'resume', snapshot });
+      return;
+    }
     const restored = restoreRoundSnapshot(snapshot);
     if (!restored) return;
     const restoredRoundHoles: 9 | 18 = restored.roundHoles || (restored.order!.length === 9 ? 9 : 18);

@@ -264,7 +264,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
 
     <section className="card historicalActions" aria-label="Acciones de la ronda guardada">
       {round.photoId && <button type="button" className="secondary" onClick={onPhoto}>Ver tarjeta original</button>}
-      {safelyEditable ? <button type="button" className="primary" onClick={onEdit}>Corregir ronda guardada</button> : <p className="notice">Registro de solo lectura: faltan datos suficientes para corregirlo sin inventar su configuración original.</p>}
+      {safelyEditable ? <button type="button" className="primary" onClick={onEdit}>{round.lifecycleState === "live" || round.lifecycleState === "cancelled" ? "Reanudar ronda" : "Corregir ronda guardada"}</button> : <p className="notice">Registro de solo lectura: faltan datos suficientes para corregirlo sin inventar su configuración original.</p>}
     </section>
   </div>;
 }

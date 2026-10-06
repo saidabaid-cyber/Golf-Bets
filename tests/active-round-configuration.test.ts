@@ -29,6 +29,27 @@ function execute(name: string, dependencies: Record<string, any>) {
   return exported.action;
 }
 
+test("paused detail resumes the same snapshot through active-round preservation, without completed editing", () => {
+  for (const lifecycleState of ["live", "cancelled"]) {
+    const snapshot = { id: "paused", lifecycleState, resumeCurrentIndex: 1, scores: { 1: { qa: 5 } } };
+    let intent: any;
+    execute("editHistoricalRound", { canEditSnapshot: () => true, roundId: "other", roundClosed: false,
+      requestNewRoundIntent: (value: any) => { intent = value; },
+      restoreRoundSnapshot: () => { throw new Error("must not reset a paused round as completed editing"); } })(snapshot);
+    assert.equal(intent.kind, "resume"); assert.equal(intent.snapshot, snapshot);
+    assert.equal(intent.snapshot.resumeCurrentIndex, 1); assert.equal(intent.snapshot.scores[1].qa, 5);
+  }
+});
+
+test("current paused detail continues directly and shared read-only snapshots cannot resume", () => {
+  let continued = 0;
+  const action = execute("editHistoricalRound", { canEditSnapshot: (round: any) => !round.cloudReadOnly,
+    roundId: "current", roundClosed: false, continueActiveRound: () => { continued++; },
+    requestNewRoundIntent: () => { throw new Error("must not replace current active round"); } });
+  action({ id: "current", lifecycleState: "live" }); assert.equal(continued, 1);
+  action({ id: "shared", lifecycleState: "live", cloudReadOnly: true }); assert.equal(continued, 1);
+});
+
 test("reusing a saved guest preserves its stable ID and blocks only that same individual", () => {
   let added: any[] = [], feedback = "";
   const deps = { players: [], MAX_ROUND_PLAYERS: 5, ROUND_PLAYER_LIMIT_MESSAGE: "limit", makeId: () => "fresh-runtime",
