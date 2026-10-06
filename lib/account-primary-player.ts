@@ -23,6 +23,23 @@ export function accountPrimaryRoundPlayer(profile: BackyardProfile, index: Selec
   };
 }
 
+/** A saved group contains an Index reference, not an already computed playing
+ * handicap. Bind only this account to its canonical current Index before play;
+ * preserve other members, guest HCP, runtime IDs and every started snapshot. */
+export function syncAccountRoundIndex(players: Player[], userId: string, index: SelectedHandicapIndex, locked = false) {
+  if (locked || !userId || userId === "guest") return players;
+  const source = index.source === "GHIN" ? "GHIN_OFFICIAL_FUTURE" as const : index.source === "BACKYARD" ? "BACKYARD_INDEX" as const : undefined;
+  let changed = false;
+  const next = players.map(player => {
+    if (player.accountUserId !== userId && player.id !== accountPrimaryPlayerId(userId)) return player;
+    if (player.handicapSource === "profile_index" && player.handicapIndex === index.value && player.handicapIndexSource === source) return player;
+    changed = true;
+    return { ...player, handicap: index.value, handicapIndex: index.value,
+      handicapSource: "profile_index" as const, handicapIndexSource: source, courseHandicapSnapshot: undefined };
+  });
+  return changed ? next : players;
+}
+
 /** Create or update exactly one account-owned frequent-player template.
  * Name changes never create a duplicate because identity, not display text,
  * is the durable key. Existing usage history is retained. */

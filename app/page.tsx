@@ -189,7 +189,7 @@ import type { CompletionSection } from "../lib/profile-completion";
 import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, cloudDraftApplyPlan, cloudSyncPayloadFingerprint, cloudSyncUploadReasons, cloudSyncUploadRequired, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, hasLocalCloudPreferenceState, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudCheckpoint, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
-import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
+import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName, syncAccountRoundIndex } from "../lib/account-primary-player";
 import { cloudCycleErrorFields, runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { CloudCanonicalSession } from "../lib/cloud-canonical-session";
 import { CloudConflictResolutionBuffer } from "../lib/cloud-conflict-resolution";
@@ -932,8 +932,9 @@ function GolfBetsApp() {
   useEffect(() => {
     if (!courseSelected) return;
     if (!roundStartedAt && !roundReviewPending) setCourse(current => withPlayerCourseCards(current, playerTeeAssignments));
-    setPlayers((current) => applyRoundCourseHandicaps(current, playerTeeAssignments, course, new Date().toISOString(), Boolean(roundStartedAt || roundReviewPending)));
-  }, [course, courseSelected, playerTeeAssignments, roundReviewPending, roundStartedAt]);
+    const locked = Boolean(roundStartedAt || roundReviewPending);
+    setPlayers((current) => applyRoundCourseHandicaps(syncAccountRoundIndex(current, identity.userId, accountIndex, locked), playerTeeAssignments, course, new Date().toISOString(), locked));
+  }, [course, courseSelected, playerTeeAssignments, roundReviewPending, roundStartedAt, identity.userId, accountIndex]);
   useEffect(() => {
     setNavigationGuard((next) => {
       const safeDestination = activeBetSafeDestination(next, draftAvailable && !roundClosed && betConfigurationIssues.length > 0);
