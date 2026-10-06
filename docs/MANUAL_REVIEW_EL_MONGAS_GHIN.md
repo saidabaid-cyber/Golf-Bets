@@ -4,10 +4,10 @@ Usar exclusivamente **https://dev.thebackyard.com.mx** e iniciar sesión como **
 
 ## Checkpoint real actual
 
-**STOPPED_USAGE_GUARD:** el acceso de El Mongas a DEV ya se confirmó. Se detuvo QA antes de importar/publicar por escrituras de hidratación y un conflicto cloud 409 con reintento y bundle completo. Evitar reloads repetidos. La página de la prueba se llevó a `about:blank` para detener actividad; no se borró storage ni se cerró la cuenta.
+**BLOCKED_EXTERNAL, no DONE:** el fix de hidratación está probado localmente y publicado en DEV (`a3a6e12`). Falta certificar el login en una sesión limpia antes de importar/publicar GHIN. La nueva pestaña normal de Chrome reutilizó storage previo y mostró 14 conflictos; no se eligió ni sobrescribió una copia. Se observó un GET inicial, cero POST y cero retries, pero esa sesión no acredita el smoke limpio. Abrir una sesión independiente; no limpiar ni descartar los conflictos de la sesión anterior a ciegas.
 
 - GHIN pertenece al vínculo VERIFIED de el_mongas; número enmascarado `****3351`.
-- Último Handicap Index persistido: **30.8**. La actualización real requiere reautorización; el valor posterior aún no está comprobado.
+- Último Handicap Index persistido: **30.8**, VERIFIED, sync exitoso `2026-10-06T19:40:10.015Z`. La sesión upstream no se volvió a consultar en esta continuación; reautorizar sólo si responde REAUTH_REQUIRED.
 - Backyard Index: **5.5**, separado del provider y conservado.
 - 22 rondas Backyard completadas, QA22 cancelada, QA24 activa y dos parciales antiguas conservadas.
 - Atest últimas 20: **11/20, 55%**. GHIN-only no modifica este porcentaje.
@@ -37,7 +37,7 @@ Usar exclusivamente **https://dev.thebackyard.com.mx** e iniciar sesión como **
 
 ## Pendientes reales
 
-- Resolver la actividad cloud de hidratación antes de reanudar el QA real. El acceso manual a DEV está completado; sesión GHIN viva todavía no reconsultada, la consulta anterior devolvió REAUTH_REQUIRED.
+- Certificar el smoke real de hidratación tras el fix: sesión limpia, login manual/OTP directo en DEV, dos minutos sin acciones, cero POST/409/retries/idle calls. La reproducción y los 16 tests locales nuevos pasan; no reemplazan esta certificación. No repetir emails/OTP ni compartirlos en chat.
 - Scoring record real, primera y segunda importación, QA visual con los datos oficiales y relogin limpio posterior.
 - Candidato con mappings confirmados antes de habilitar cualquier transport de posting.
 - Post → verificación provider → reimport → dedupe → segundo intento bloqueado: **no ejecutado**.

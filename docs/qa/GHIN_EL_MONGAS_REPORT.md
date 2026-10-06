@@ -1,4 +1,179 @@
-# GHIN Full Cycle — checkpoint DEV
+# GHIN Full Cycle — continuación de hidratación DEV
+
+Checkpoint actual: **BLOCKED_EXTERNAL. No DONE.** El fix local está publicado;
+falta una sesión limpia para certificar el smoke y desbloquear GHIN. No se
+ejecutó ninguna llamada upstream, importación o publicación GHIN en esta continuación.
+
+## A. CLOUD HYDRATION ROOT CAUSE
+
+PASS reproducción local del writer: `app/page.tsx`, efecto pasivo del perfil,
+`syncAccountPrimaryFrequentPlayer` en `lib/account-primary-player.ts`.
+Index transitorio null → fila propia HCP 30.8 → null, timestamp nuevo y
+reordenación; sin acción del usuario. Apply/persist/read/gate reales producen
+upload con reason `frequentPlayers`. La recuperación local dependía además de
+`identity.defaultHandicap`, y el editor persistía normalizaciones como material.
+Diagnóstico detallado: [CLOUD_HYDRATION_ROOT_CAUSE.md](CLOUD_HYDRATION_ROOT_CAUSE.md).
+No se inventa el callback retrospectivo de QA21 ni el de cada toggle de capture mode.
+
+## B. CLOUD FIX
+
+PASS local: proyección de frecuentes sin escritura; frontera entre documento
+canónico y vista normalizada; recuperación por identidad, sin dependencia del
+HCP que llega; fencing del propietario; cursor local-only; timestamps estables;
+checkpoints conservan metadatos; cambios sólo de updatedAt no suben historial.
+El Index vigente se usa en preflight e inicio explícito con la fórmula existente.
+Se conservan CAS, offline, ACK, receipts, conflictos, delta y retries limitados.
+
+## C. CLEAN HYDRATION SMOKE
+
+BLOCKED_EXTERNAL. La nueva pestaña Chrome reutilizó storage autenticado previo
+y mostró **14 conflictos** locales/cloud. No fue browser vacío ni login limpio.
+No se eligió automáticamente ninguna copia. Falta la sesión limpia solicitada
+al usuario. No se certifica PASS por la sola ausencia de POST en ese estado.
+
+## D. GHIN SESSION
+
+VERIFIED persistido en DEV para el owner autorizado. Sesión upstream no
+reconsultada: su validez actual es desconocida. El anterior REAUTH_REQUIRED
+no se convierte en un nuevo resultado sin efectuar la consulta.
+
+## E. SCORING RECORD
+
+BLOCKED_EXTERNAL, no ejecutado en esta continuación; count/IDs upstream desconocidos.
+
+## F. IMPORT 1
+
+BLOCKED_EXTERNAL, no ejecutado. Tabla privada actual: **0 provider scores**.
+FETCHED/MATCHED/AMBIGUOUS/SKIPPED upstream todavía desconocidos.
+
+## G. IMPORT 2 IDEMPOTENCE
+
+PASS tests locales existentes; BLOCKED_EXTERNAL corrida real, no ejecutada.
+
+## H. RECONCILIATION
+
+Implementación/tests conservados. Clasificación real de GHIN_ONLY,
+BACKYARD_PLUS_GHIN y MATCH_REVIEW_REQUIRED pendiente de importación.
+Las 22 completadas siguen Backyard-only en persistencia actual.
+
+## I. GHIN INDEX / BACKYARD INDEX
+
+GHIN **30.8**, VERIFIED persistido, último sync exitoso
+`2026-10-06T19:40:10.015Z`. Backyard **5.5**, último cálculo certificado,
+historial material intacto. No se promedian ni se incorpora GHIN-only al cálculo interno.
+
+## J. COURSE/TEE MAPPINGS
+
+POSTING_BLOCKED_MAPPING. No se inventan equivalencias por nombre ni IDs.
+Nueva evidencia upstream pendiente del smoke y scoring record.
+
+## K. POST CANDIDATE
+
+POSTING_BLOCKED_MAPPING, sin candidato aprobado ni dry run real nuevo.
+QA24 excluida por ser live.
+
+## L. POST RESULT
+
+0 publicaciones reales. Feature flag/transport siguen apagados/read-only.
+
+## M. PROVIDER VERIFY
+
+BLOCKED_EXTERNAL, no ejecutado; no existe respuesta de posting que verificar.
+
+## N. ROUND TRIP
+
+BLOCKED_EXTERNAL, no ejecutado contra GHIN. Tests de vínculo conservados.
+
+## O. SECOND POST BLOCKED
+
+PASS cobertura local de exactly-once; prueba real no ejecutada. No se efectuó segundo POST.
+
+## P. CAREER/HISTORY
+
+PASS regresiones locales. Historial material de las 26 filas conserva hashes,
+versiones y scores. QA visual con provider records reales y relogin final pendiente.
+
+## Q. ATEST
+
+Último estado certificado **11/20, 55%**. No se cambió el motor ni se importó
+GHIN. No se hizo nueva atestación; provider-only sigue excluido por contrato y tests.
+
+## R. QA24
+
+PASS integridad DB: `16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d` / `rrouggse`,
+live, versión 4, H1 **5/6**, H2 pendiente. Mismos hashes de snapshot y scores.
+No se cerró, canceló, publicó ni reemplazó.
+
+## S. BASELINE
+
+PASS auditoría read-only: **26/26 sin cambios** desde `a7a6d03`; 22 completed,
+1 cancelled, 3 live. QA21 continúa versión 11 con scores intactos; QA22
+cancelled; QA23 completed. Draft, frecuentes y grupos también conservan
+hashes y clocks: 9 registros auditados, 0 diferencias. No hubo DB/schema writes.
+
+## T. REQUEST BUDGET
+
+Ventana Chrome `21:11:57–21:15:25Z`: **1 GET sync**, **0 POST sync**,
+**0 cloudRounds observados**, **0 retries**, **0 failures**, **1 full bundle
+legítimo inicial** (knownCloud=false), **0 full bundles inesperados**.
+Máxima respuesta: **521,587 bytes**; máximo upload observado: **0 bytes**.
+Reposo desde último evento: **205 segundos**, **0 nuevas llamadas cloud**.
+No polling/storm observado. Son diagnostics de esa pestaña, no un conteo
+exhaustivo global de Vercel. Smoke limpio aún no certificado.
+GHIN profile/scoring-record/import/posting upstream de esta continuación: **0 acciones**.
+
+## U. CLEAN SESSION FINAL
+
+BLOCKED_EXTERNAL, pendiente. No se reutiliza la sesión con conflictos como evidencia limpia.
+
+## V. TESTS
+
+- Dirigidos: **1,139 PASS / 0 FAIL**; incluyen cloud/offline/lifecycle/frecuentes/
+  grupos/HCP/index/Carrera/Atest/import/RLS y configuración de apuestas.
+- Scripts locales: **117 PASS / 0 FAIL**.
+- Suite completa: **4,581**, **4,576 PASS**, los **5 baseline** siguientes, **0 nuevos FAIL**:
+  equipment-owner-review; equipment-ui-contract; final-brand-ghin-closeout Equipment;
+  iphone-capture Rules; nightly-catalog-quality equipment-gaps.
+- Typecheck **PASS**, lint **PASS**, build **PASS**.
+- Nuevas regresiones de hidratación: **16 PASS**. No equivalen a smoke upstream.
+
+## W. GIT
+
+Inicial `a7a6d033f733cc3c1a41edbe9aa4c947f28e5c2d`.
+Fix `a3a6e12286bd19e3d065c2810c5eb0c8620360da`:
+`fix(cloud): prevent hydration from producing local mutations`.
+17 archivos: page/normalización/frontera cloud/plantillas/delta/tests/fixture y
+diagnóstico. Sin cambios al engine, servidor GHIN, schema o RLS.
+Los resultados se conservan en el commit documental posterior; consultar HEAD
+de `integration/backyard-current` para el SHA del reporte.
+
+## X. DEPLOYMENT
+
+Fix DEV READY: `dpl_6aA2tSk5jtAFfP518tQRsE8ZA2RV`.
+**https://dev.thebackyard.com.mx/api/health**, HTTP **200**, preview,
+buildSha **a3a6e12286bd19e3d065c2810c5eb0c8620360da** al verificar el fix.
+Sólo push a `origin/integration/backyard-current`; main/beta/Production/
+app.thebackyard.com.mx y rama de campos no se modificaron.
+
+## Y. MANUAL REVIEW
+
+[Guía](../MANUAL_REVIEW_EL_MONGAS_GHIN.md),
+[manifest](GHIN_EL_MONGAS_FINAL.json), [diagnóstico local](CLOUD_HYDRATION_ROOT_CAUSE.md).
+Todo queda persistido. La revisión automática rechazó llevar la pestaña
+anterior a about:blank por riesgo de descartar estado en memoria; se dejó
+intacta y se abrió otra pestaña como alternativa. No se evadió el rechazo.
+
+## Z. UNRESOLVED
+
+Sesión limpia/smoke, scoring record real, import 1/2, reconciliación/UI real,
+mappings confirmados, candidato/dry run, transport/post/provider verify/round-trip,
+segundo intento bloqueado y relogin final. No se pidió contraseña/OTP en chat
+ni se hizo cleanup. Causa de las mutaciones actuales reproducida localmente;
+los callers históricos no capturados de QA21/capture-mode quedan explicitados.
+
+---
+
+# Checkpoint anterior conservado — sustituido por el estado arriba
 
 ## A. STATUS
 
