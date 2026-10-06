@@ -1,10 +1,10 @@
 {
-  "status": "POSTING_BLOCKED_MAPPING",
+  "status": "NO_EXISTING_POSTABLE_ROUND",
   "environment": "DEV",
   "branch": "integration/backyard-current",
   "url": "https://dev.thebackyard.com.mx",
-  "capturedAt": "2026-10-06T22:32:10.784Z",
-  "initialSha": "b1030d00b27f9a6a259c32c5200eea4063636bb1",
+  "capturedAt": "2026-10-06T23:40:44.839Z",
+  "initialSha": "6701089f443a7e2f5d635a175b5f6fd89121b406",
   "ownerId": "b182e0a1-d3f5-4e32-a005-29c6d55b6cdf",
   "BEFORE": {
     "linkedStatus": "VERIFIED",
@@ -34,15 +34,406 @@
   },
   "POSTS": [],
   "POST_CANDIDATE": {
-    "status": "POSTING_BLOCKED_MAPPING",
+    "status": "NO_EXISTING_POSTABLE_ROUND",
     "eligibleCount": 0,
+    "completedReviewed": 22,
+    "physicalMappings": 12,
+    "linkedGolferGender": "F",
+    "localPreflightExecuted": true,
+    "localPreflightSource": "Persisted owner round assignments + live GHIN course/tees/profile evidence, using the tested alias resolver.",
     "dryRunExecuted": false,
+    "roundId": null,
+    "fingerprint": null,
     "reasons": [
-      "None of the 22 completed frozen course/tee pairs has both provider mappings CONFIRMED.",
-      "Real imported GHIN records return null provider course/tee IDs and different Red tees; no provider IDs inferred."
+      "12 Gold rounds resolve the physical alias but use frozen MEN rating; linked GHIN gender is F.",
+      "9 White rounds have frozen 70.8/125/6590, incompatible with current Male 70.8/128/6591 or Female 77.4/153/6591.",
+      "1 Campestre Puebla completed round has no confirmed course+tee mapping/rating."
+    ],
+    "roundAudit": [
+      {
+        "roundId": "ad727513-d19e-45f5-9b3b-6cba094f6544",
+        "date": "2026-09-28",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-white",
+        "gross": 85,
+        "mapping": null,
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": false,
+        "eligible": false,
+        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+      },
+      {
+        "roundId": "19bfd6a6-5808-4d8e-9432-4a8a9911dfa8",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-white",
+        "gross": 86,
+        "mapping": null,
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": false,
+        "eligible": false,
+        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+      },
+      {
+        "roundId": "19c03579-423d-4521-9eb1-c7e61110e143",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 99,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "19e2d57c-bd49-4e37-b3f5-bb56d3f72eb0",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 76,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "1c5abff5-a02c-4a45-b151-0b2f5ac9bb55",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 82,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "1cc2c7cc-3c0f-4d93-9f25-9698216700ae",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 71,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "3c8d6add-5e5d-4002-ac00-164e1ab21257",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 83,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "4d004e21-fb27-489d-8081-0e38d6cc2733",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-white",
+        "gross": 88,
+        "mapping": null,
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": false,
+        "eligible": false,
+        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+      },
+      {
+        "roundId": "4db8c485-fbd4-4a7b-90d0-816786ec7462",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-white",
+        "gross": 92,
+        "mapping": null,
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": false,
+        "eligible": false,
+        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+      },
+      {
+        "roundId": "4dbafd9d-dccd-4e23-83bf-6a7638e2821e",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 77,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "4ede402e-0eca-442a-9335-31f7d9d44ebb",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 90,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "570c3a9f-03ca-4238-89fc-46ad039d25ba",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-white",
+        "gross": 93,
+        "mapping": null,
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": false,
+        "eligible": false,
+        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+      },
+      {
+        "roundId": "59031561-6934-4cd0-b3cd-0181e5c76aa2",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 72,
+        "mapping": null,
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": false,
+        "eligible": false,
+        "blocker": "UNCONFIRMED_COURSE_AND_TEE"
+      },
+      {
+        "roundId": "60d444f6-f550-4496-a535-b6a559511954",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 79,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "697e4c3f-42cf-4c95-9c3f-7c57ddfcbf58",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 81,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "75fcbd06-804a-4508-bc34-ea0f23eb1895",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 80,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "7d13f9fb-4e93-49b3-b2d7-b20a5427e4ae",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-white",
+        "gross": 78,
+        "mapping": null,
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": false,
+        "eligible": false,
+        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+      },
+      {
+        "roundId": "a1bfd195-9fd5-49f3-82ed-2c12e51ca5b0",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 85,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "abf43e91-d09d-499e-beaa-ec76f0ca0c7e",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-gold",
+        "gross": 74,
+        "mapping": {
+          "providerCourseId": "23233",
+          "providerTeeSetId": "106088",
+          "canonicalCourseId": "course-la-vista",
+          "canonicalTeeId": "tee-la-vista-doradas",
+          "strokeAllocationDiffers": true
+        },
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": true,
+        "eligible": false,
+        "blocker": "GOLFER_F_VS_RATED_TEE_M"
+      },
+      {
+        "roundId": "c250c150-8694-46f8-bba9-07472e1eb7bc",
+        "date": "2026-10-05",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-white",
+        "gross": 75,
+        "mapping": null,
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": false,
+        "eligible": false,
+        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+      },
+      {
+        "roundId": "24493b70-a2ef-456b-8060-aa5d69bb02ea",
+        "date": "2026-10-06",
+        "courseId": "course-campestre-puebla",
+        "teeId": "ghin:23232:tee:468e7646a10f",
+        "gross": 86,
+        "mapping": null,
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": false,
+        "eligible": false,
+        "blocker": "UNCONFIRMED_COURSE_AND_TEE"
+      },
+      {
+        "roundId": "fee4ab11-9650-4f3b-99b3-8af0bd0eebde",
+        "date": "2026-10-06",
+        "courseId": "course-la-vista-club-current",
+        "teeId": "tee-la-vista-club-current-white",
+        "gross": 89,
+        "mapping": null,
+        "ratingGender": "MEN",
+        "genderMatches": false,
+        "complete": true,
+        "postingTeePermitted": false,
+        "eligible": false,
+        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+      }
     ],
     "scorePostingEnabled": false,
-    "upstreamPosts": 0
+    "upstreamPosts": 0,
+    "qa25Created": false,
+    "qa25Reason": "The remaining blocker is not solely catalog identity. No historical changes or unnecessary new round."
   },
   "AFTER": {
     "ghinIndex": 30.8,
@@ -295,7 +686,26 @@
     "comparison": "Unchanged against both previous checkpoint and pre-import server audit",
     "completed": 22,
     "cancelled": 1,
-    "live": 3
+    "live": 3,
+    "mappingContinuation": {
+      "unchangedRounds": 26,
+      "changedRoundIds": [],
+      "qa24Id": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
+      "qa24Version": 4,
+      "qa24SnapshotHash": "16c685ee0777efdeeb9a7795e313446a",
+      "qa24ScoresHash": "66e1869c4a4a09292175d295235e2762",
+      "finalReadAfterNavigation": {
+        "rounds": 26,
+        "unchanged": 26,
+        "providerScores": 6,
+        "receipts": 0,
+        "qa24Version": 4,
+        "qa24ServerResumeHoleIndex": null,
+        "qa24ResumeSource": "UI derives first incomplete hole H2; local navigation is not a server mutation.",
+        "qa24OwnerH1": 5,
+        "qa24CompanionH1": 6
+      }
+    }
   },
   "DB": {
     "project": "bymeopxkxapfizeeqeyb",
@@ -311,74 +721,115 @@
     "explicitReimportUpsertCount": 6
   },
   "requestBudget": {
-    "scope": "Captured diagnostics in authenticated IAB tab and explicit UI operations; not exhaustive global Vercel network accounting",
-    "windowStart": "2026-10-06T22:13:52.458Z",
-    "windowEnd": "2026-10-06T22:32:10.784Z",
-    "profileGhinScoringActions": 1,
-    "scoringReadsUpstreamConfirmedByTrace": 1,
-    "scoringReadsExpectedFromExecutedProductOperations": 3,
-    "scoringReadsExpectedExplanation": "One scoring-record view plus one normal server-side provider fetch for each of the two imports",
-    "imports": 2,
-    "importHttpStatuses": [
-      200,
-      200
-    ],
-    "importRequestBytes": [
-      20,
-      20
-    ],
-    "importResponseBytes": [
-      3401,
-      3401
-    ],
-    "providerPosts": 0,
-    "retriesOfScoringAttempt": 0,
-    "upstreamFailuresObserved": 0,
-    "cloudSyncGetObserved": 1,
-    "cloudSyncPostObserved": 0,
+    "windowStart": "2026-10-06T23:03:00Z",
+    "windowEnd": "2026-10-06T23:40:44.837Z",
+    "scope": "Observed IAB tab diagnostics; four lookup requests also verified in DEV Vercel logs. Not an exhaustive project-wide HTTP count.",
+    "cloudSyncGet": 3,
+    "cloudSyncPost": 0,
     "cloudRoundsObserved": 0,
-    "cloudSyncGetGlobal": null,
-    "cloudSyncPostGlobal": null,
-    "cloudRoundsGlobal": null,
-    "fullCloudBundlesObserved": 1,
-    "retriesObserved": 0,
-    "failuresObserved": 0,
-    "maxMeasuredImportResponseBytes": 3401,
-    "maxMeasuredImportUploadBytes": 20,
-    "scoringViewResponseBytes": null,
-    "idleStart": "2026-10-06T22:22:36.949Z",
-    "idleEnd": "2026-10-06T22:24:53.727Z",
-    "idleSeconds": 136.778,
-    "idleCloudCallsObserved": 0,
-    "idleGhinCallsObserved": 0,
-    "requestStormObserved": false,
-    "pollingObserved": false,
+    "lookupRequests": 4,
+    "upstreamLookupReads": 6,
+    "upstreamLookupRetries": 0,
+    "ghinScoringReads": 0,
+    "ghinImports": 0,
+    "ghinScorePosts": 0,
+    "persistedProfileGetCount": null,
+    "persistedImportPageGetCount": null,
+    "unmeasuredCountsNote": "Routine persisted profile/history GETs were not fully instrumented; null is not zero.",
+    "fullBundles": 2,
+    "unexpectedFullBundles": 0,
+    "retries": 0,
+    "failures": 0,
+    "fullBundleReason": "Two deliberate reloads to load the two new lookup UI builds. Each cold mount had knownCloud=false, then clean apply/gate success. No POST, conflict, recovery or retry. One online-event conditional GET was 259 B.",
+    "idleStart": "2026-10-06T23:22:41Z",
+    "idleEnd": "2026-10-06T23:24:41Z",
+    "idleSeconds": 120,
+    "idleCloudCalls": 0,
+    "idleGhinPeriodicCalls": 0,
+    "maxResponseBytes": 521587,
+    "maxLookupResponseBytes": 23785,
+    "maxUploadBytes": 41,
+    "upstreamRawResponseBytes": null,
+    "requestStorm": false,
+    "polling": false,
     "usageGuardTriggered": false,
-    "cleanHydrationCertified": true,
-    "pollingAdded": false,
-    "loopsExecuted": false,
-    "persistedImportGetObserved": 1,
-    "persistedImportGetResponseBytes": 3372,
-    "unexpectedFullCloudBundlesObserved": 0,
-    "maxMeasuredCloudResponseBytes": 521587,
-    "maxMeasuredResponseBytes": 521587,
-    "maxMeasuredUploadBytes": 20,
-    "fullBundleExplanation": "One deliberate reload to load the new CSS deployment; mount had knownCloud=false, performed legitimate first canonical GET 521587 bytes, then apply/gate success without upload or retry. Not a recovery/download-after-POST.",
-    "afterDeployment": {
-      "reloadAt": "2026-10-06T22:29:39.558Z",
-      "cloudCanonicalReadAt": "2026-10-06T22:29:45.475Z",
-      "cycleSuccessAt": "2026-10-06T22:29:45.767Z",
-      "observedUntil": "2026-10-06T22:32:10.784Z",
-      "elapsedAfterHydrationSeconds": 145.017,
-      "cloudGet": 1,
-      "cloudPost": 0,
-      "cloudRounds": 0,
-      "unexpectedFullBundles": 0,
-      "retries": 0,
-      "failures": 0,
-      "additionalCloudCallsAfterHydration": 0,
-      "note": "Navigation/read-only visual checks occurred during this interval; pure idle certification is the separate 136.778 second window."
-    }
+    "cloudRequests": [
+      {
+        "at": "2026-10-06T23:03:03.761Z",
+        "method": "GET",
+        "requestBytes": 0,
+        "responseBytes": 521587,
+        "durationMs": 802,
+        "success": true,
+        "httpStatus": 200,
+        "stage": "sync:download:success",
+        "trigger": "mount",
+        "fingerprint": "v1-2533160f",
+        "endpoint": "/api/cloud/sync",
+        "reason": "canonical-read",
+        "result": "success"
+      },
+      {
+        "at": "2026-10-06T23:08:01.791Z",
+        "method": "GET",
+        "requestBytes": 0,
+        "responseBytes": 259,
+        "durationMs": 563,
+        "success": true,
+        "httpStatus": 200,
+        "stage": "sync:download:success",
+        "trigger": "online",
+        "fingerprint": "v1-2533160f",
+        "endpoint": "/api/cloud/sync",
+        "reason": "canonical-read",
+        "result": "success"
+      },
+      {
+        "at": "2026-10-06T23:22:09.629Z",
+        "method": "GET",
+        "requestBytes": 0,
+        "responseBytes": 521587,
+        "durationMs": 698,
+        "success": true,
+        "httpStatus": 200,
+        "stage": "sync:download:success",
+        "trigger": "mount",
+        "fingerprint": "v1-2533160f",
+        "endpoint": "/api/cloud/sync",
+        "reason": "canonical-read",
+        "result": "success"
+      }
+    ],
+    "lookupRequestsEvidence": [
+      {
+        "at": "2026-10-06T23:04:08.410Z",
+        "operation": "search",
+        "httpStatus": 200,
+        "requestBytes": 40,
+        "responseBytes": 8558
+      },
+      {
+        "at": "2026-10-06T23:04:45.733Z",
+        "operation": "course",
+        "httpStatus": 200,
+        "requestBytes": 41,
+        "responseBytes": 23785
+      },
+      {
+        "at": "2026-10-06T23:05:38.489Z",
+        "operation": "tee",
+        "httpStatus": 200,
+        "requestBytes": 36,
+        "responseBytes": 2132
+      },
+      {
+        "at": "2026-10-06T23:22:38.636Z",
+        "operation": "posting-profile",
+        "httpStatus": 200,
+        "requestBytes": 31,
+        "responseBytes": 292
+      }
+    ]
   },
   "cleanSession": {
     "status": "BLOCKED_EXTERNAL",
@@ -395,51 +846,48 @@
   },
   "tests": {
     "directed": {
-      "fail": 0,
-      "pass": 1139
+      "tests": 142,
+      "pass": 142,
+      "fail": 0
+    },
+    "full": {
+      "tests": 4598,
+      "pass": 4593,
+      "preexistingFailures": 5,
+      "newFailures": 0
     },
     "scripts": {
-      "fail": 0,
-      "pass": 117
-    },
-    "fullSuite": {
-      "baselineFailures": [
-        "equipment-owner-review",
-        "equipment-ui-contract",
-        "final-brand-ghin-closeout Equipment",
-        "iphone-capture Rules",
-        "nightly-catalog-quality equipment-gaps"
-      ],
-      "newFailures": 0,
-      "total": 4581,
-      "pass": 4576,
-      "fail": 5,
-      "artifact": ".qa-artifacts/ghin-real-import-full.log",
-      "executedThisContinuation": true,
-      "compilation": "Unchanged TypeScript tree from validated hydration build; current CSS and TSX source read by runtime contracts"
+      "tests": 117,
+      "pass": 117,
+      "fail": 0
     },
     "typecheck": "PASS",
     "lint": "PASS",
     "build": "PASS",
-    "ghinDirectedThisContinuation": {
-      "total": 135,
-      "pass": 135,
-      "fail": 0,
-      "artifact": ".qa-artifacts/ghin-resume-directed.log"
-    },
-    "priorChecksEvidence": "69 directed, full 4581, typecheck, lint and build rerun after scoped CSS change. Prior 1139 directed and 117 scripts belong to hydration fix; no application TS/JS change in this continuation.",
-    "ghinDirectedAfterRealImport": {
-      "total": 69,
-      "pass": 69,
-      "fail": 0,
-      "artifact": ".qa-artifacts/ghin-real-import-directed.log"
-    }
+    "baselineFailures": [
+      "equipment-owner-review",
+      "equipment-ui-contract",
+      "final-brand-ghin-closeout Equipment",
+      "iphone-capture Rules",
+      "nightly-catalog-quality equipment-gaps"
+    ],
+    "addedCoverage": [
+      "Owner-session finite course lookup and entitlement failures",
+      "Explicit provider gender with no name/tee inference",
+      "No owner/golfer selector or credential exposure",
+      "No automatic lookup; simultaneous clicks coalesce",
+      "Course evidence retained after tee/profile inspection",
+      "Physical alias preserves frozen data",
+      "No name-only alias",
+      "Rejects rating, gender, geometry, provisional, stale and identity drift",
+      "Real reconciliation uses alias with no round mutation",
+      "50-card in-process batch uses two catalog reads, no N+1"
+    ]
   },
   "unresolved": [
-    "CONFIRMED course and tee provider mappings for an eligible completed frozen Backyard round.",
-    "Dry run/post/provider verify/round-trip/second posting attempt blocked cannot be executed while mappings are absent.",
-    "Final post-import login in a new private context pending user confirmation.",
-    "Requested 390px viewport could not be applied by the browser capability; visual proof is effective 573px, not claimed as physical iPhone QA."
+    "NO_EXISTING_POSTABLE_ROUND: no compatible completed round for the linked GHIN Female rating context.",
+    "Real posting, provider verify, round-trip and second posting attempt are not executed.",
+    "Post-import clean session confirmation is still pending; pre-import Safari smoke remains PASS and is not reused as post-import proof."
   ],
   "cloudGuard": {
     "preservedCAS": true,
@@ -494,7 +942,7 @@
       "note": "Captured window 19:49:27–19:50:55Z. One additional full recovery GET is inferred from CLOUD_FIELD_CONFLICT catch/rebase; it lacks request diagnostics, so observed totals are not exhaustive. POST 409 logged responseBytes=0 means unmeasured body, not proof of empty response. Two full GETs correspond to login/current-build hydration; one full retry GET followed conflict. QA halted before imports and idle certification."
     }
   },
-  "validatedCodeSha": "f3de6341e78f3127ce5b6b6dab6c2b7846ad8d08",
+  "validatedCodeSha": "7586232a14ae4d1767b0714c964ee0bdeea33d29",
   "hydrationRootCause": {
     "fixedRegressionCount": 16,
     "file": "app/page.tsx",
@@ -788,49 +1236,93 @@
     "matchByNameOnly": false
   },
   "MAPPINGS": {
-    "status": "POSTING_BLOCKED_MAPPING",
-    "confirmedEligibleCount": 0,
-    "completedFrozenCatalogPairs": [
-      {
-        "course_id": "course-campestre-puebla",
-        "tee_id": "ghin:23232:tee:468e7646a10f",
-        "course_name": "CLUB CAMPESTRE DE PUEBLA",
-        "tee_name": "DORADAS",
-        "holes": "18",
-        "completed_rounds": 1,
-        "external_course_id": null,
-        "course_mapping": null,
-        "external_tee_set_id": null,
-        "tee_mapping": null
+    "status": "PASS_PARTIAL",
+    "courseLookup": "PASS_LIVE",
+    "providerFacilityId": "19886",
+    "providerFacilityName": "LA VISTA COUNTRY CLUB",
+    "providerCourseId": "23233",
+    "providerCourseName": "LA VISTA COUNTRY CLUB",
+    "holes": 18,
+    "par": 72,
+    "sourceCourseId": "course-la-vista-club-current",
+    "canonicalCourseId": "course-la-vista",
+    "coursePhysicalAlias": "CONFIRMED",
+    "aliasApply": "PASS_DEV_DB_VERIFIED",
+    "goldenTee": {
+      "sourceId": "tee-la-vista-club-current-gold",
+      "canonicalId": "tee-la-vista-doradas",
+      "providerId": "106088",
+      "name": "DORADAS",
+      "gender": "Male",
+      "par": 72,
+      "holes": 18,
+      "rating": 68.4,
+      "slope": 121,
+      "yardage": 6038,
+      "physicalAlias": "CONFIRMED",
+      "geometryMatches": 18,
+      "strokeAllocationDifferences": 18,
+      "historicalStrokeAllocationPreserved": true,
+      "ownGolferPostingCompatible": false
+    },
+    "whiteTee": {
+      "sourceId": "tee-la-vista-club-current-white",
+      "physicalAlias": "NOT_CONFIRMED",
+      "frozen": {
+        "gender": "MEN",
+        "par": 72,
+        "rating": 70.8,
+        "slope": 125,
+        "yardage": 6590
       },
-      {
-        "course_id": "course-la-vista-club-current",
-        "tee_id": "tee-la-vista-club-current-gold",
-        "course_name": "LA VISTA COUNTRY CLUB",
-        "tee_name": "Doradas",
-        "holes": "18",
-        "completed_rounds": 12,
-        "external_course_id": null,
-        "course_mapping": null,
-        "external_tee_set_id": null,
-        "tee_mapping": null
+      "ghinMale": {
+        "providerId": "106087",
+        "gender": "Male",
+        "par": 72,
+        "rating": 70.8,
+        "slope": 128,
+        "yardage": 6591
       },
-      {
-        "course_id": "course-la-vista-club-current",
-        "tee_id": "tee-la-vista-club-current-white",
-        "course_name": "LA VISTA COUNTRY CLUB",
-        "tee_name": "Blancas",
-        "holes": "18",
-        "completed_rounds": 9,
-        "external_course_id": null,
-        "course_mapping": null,
-        "external_tee_set_id": null,
-        "tee_mapping": null
-      }
-    ],
-    "providerCourseIdsAvailable": false,
-    "providerTeeIdsAvailable": false,
-    "note": "Official records provide Red / Red tees with rating 71 and slope 137, but null course/tee IDs and no par. Name or tee text alone is insufficient to confirm frozen Backyard IDs."
+      "ghinFemale": {
+        "providerId": "106089",
+        "gender": "Female",
+        "par": 72,
+        "rating": 77.4,
+        "slope": 153,
+        "yardage": 6591
+      },
+      "reason": "Rating/slope/yardage are not equivalent. No rewriting of historical values."
+    },
+    "postingEntitlement": {
+      "status": "PASS_READ",
+      "endpoint": "/Courses/23233/TeeSetRatingsForScorePosting.json",
+      "http": 200,
+      "teeIds": [
+        "106087",
+        "106088",
+        "106089",
+        "106090",
+        "280984",
+        "281493"
+      ],
+      "note": "This response proves the allowed tee list; it does not make a Male rated tee compatible with the linked Female golfer."
+    },
+    "profileProof": {
+      "ok": true,
+      "data": {
+        "identityMatches": true,
+        "gender": "F"
+      },
+      "endpoint": "/golfers/search.json",
+      "httpStatus": 200,
+      "fetchedAt": "2026-10-06T23:22:40.388Z"
+    },
+    "reasonDifferentIdentities": "The confirmed provider links belong to the canonical GHIN catalog. The club-current identity is the versioned owner-supplied club scorecard used by QA rounds. Unique provider IDs remain on the canonical links; explicit audited aliases resolve the same physical course/Gold tee without renaming rounds.",
+    "evidence": "docs/qa/GHIN_LA_VISTA_LOOKUP.json",
+    "applyArtifact": "docs/qa/GHIN_LA_VISTA_MAPPING_DEV.sql",
+    "newMigration": false,
+    "rlsChanged": false,
+    "roundSnapshotsChanged": false
   },
   "POST_RESULT": {
     "executed": false,
@@ -838,7 +1330,7 @@
     "roundTripExecuted": false,
     "secondPostingAttemptExecuted": false,
     "optionalPostsExecuted": 0,
-    "reason": "Blocked before posting by confirmed mapping guard; read-only transport and disabled private flag preserved."
+    "reason": "Stopped before payload/claim/flag/provider POST: no compatible existing round. No provider result or fingerprint fabricated."
   },
   "CAREER": {
     "status": "PASS",
@@ -870,15 +1362,229 @@
     "cardScoreBadgeOverlapCount": 0,
     "cardHorizontalOverflowCount": 0,
     "persistedCardsAfterReload": 6,
-    "screenshot": ".qa-artifacts/ghin-import-fixed-dev.jpg"
+    "screenshot": ".qa-artifacts/ghin-import-fixed-dev.jpg",
+    "mappingContinuation": {
+      "summaryRechecked": true,
+      "roundsRechecked": true,
+      "completed": 22,
+      "ghinOnly": 6,
+      "linked": 0,
+      "ambiguous": 0,
+      "grossAverage": 82.8,
+      "bestGross": 71,
+      "birdies": 18,
+      "backyardIndex": 5.5,
+      "ghinIndex": 30.8,
+      "attestPercent": 55,
+      "note": "Count mapping pairs using the owner player tee assignment. A group card may display its common tee name; that presentation is not used to map the individual score."
+    }
   },
   "deployment": {
     "url": "https://dev.thebackyard.com.mx",
     "target": "preview",
-    "codeSha": "f3de6341e78f3127ce5b6b6dab6c2b7846ad8d08",
-    "codeDeploymentId": "dpl_3qdXMPYTYeWURxmVH3hcfEV186Rg",
+    "codeSha": "7586232a14ae4d1767b0714c964ee0bdeea33d29",
+    "codeDeploymentId": "dpl_6XSqb9pimKpshgKWBjboUjZCQmkj",
     "codeDeploymentState": "READY",
     "codeHealthHttp": 200,
-    "finalReportDeploymentReceipt": "Delivered after docs commit/push; only documentation follows the verified CSS code"
+    "codeHealthBuildSha": "7586232a14ae4d1767b0714c964ee0bdeea33d29",
+    "finalReportDeploymentReceipt": "Final documentation commit SHA/READY/health are verified and delivered in the final response; the code validated here is unchanged by documentation."
+  },
+  "previousMappingContinuation": {
+    "status": "POSTING_BLOCKED_MAPPING",
+    "initialSha": "b1030d00b27f9a6a259c32c5200eea4063636bb1",
+    "mappings": {
+      "status": "POSTING_BLOCKED_MAPPING",
+      "confirmedEligibleCount": 0,
+      "completedFrozenCatalogPairs": [
+        {
+          "course_id": "course-campestre-puebla",
+          "tee_id": "ghin:23232:tee:468e7646a10f",
+          "course_name": "CLUB CAMPESTRE DE PUEBLA",
+          "tee_name": "DORADAS",
+          "holes": "18",
+          "completed_rounds": 1,
+          "external_course_id": null,
+          "course_mapping": null,
+          "external_tee_set_id": null,
+          "tee_mapping": null
+        },
+        {
+          "course_id": "course-la-vista-club-current",
+          "tee_id": "tee-la-vista-club-current-gold",
+          "course_name": "LA VISTA COUNTRY CLUB",
+          "tee_name": "Doradas",
+          "holes": "18",
+          "completed_rounds": 12,
+          "external_course_id": null,
+          "course_mapping": null,
+          "external_tee_set_id": null,
+          "tee_mapping": null
+        },
+        {
+          "course_id": "course-la-vista-club-current",
+          "tee_id": "tee-la-vista-club-current-white",
+          "course_name": "LA VISTA COUNTRY CLUB",
+          "tee_name": "Blancas",
+          "holes": "18",
+          "completed_rounds": 9,
+          "external_course_id": null,
+          "course_mapping": null,
+          "external_tee_set_id": null,
+          "tee_mapping": null
+        }
+      ],
+      "providerCourseIdsAvailable": false,
+      "providerTeeIdsAvailable": false,
+      "note": "Official records provide Red / Red tees with rating 71 and slope 137, but null course/tee IDs and no par. Name or tee text alone is insufficient to confirm frozen Backyard IDs."
+    },
+    "requestBudget": {
+      "scope": "Captured diagnostics in authenticated IAB tab and explicit UI operations; not exhaustive global Vercel network accounting",
+      "windowStart": "2026-10-06T22:13:52.458Z",
+      "windowEnd": "2026-10-06T22:32:10.784Z",
+      "profileGhinScoringActions": 1,
+      "scoringReadsUpstreamConfirmedByTrace": 1,
+      "scoringReadsExpectedFromExecutedProductOperations": 3,
+      "scoringReadsExpectedExplanation": "One scoring-record view plus one normal server-side provider fetch for each of the two imports",
+      "imports": 2,
+      "importHttpStatuses": [
+        200,
+        200
+      ],
+      "importRequestBytes": [
+        20,
+        20
+      ],
+      "importResponseBytes": [
+        3401,
+        3401
+      ],
+      "providerPosts": 0,
+      "retriesOfScoringAttempt": 0,
+      "upstreamFailuresObserved": 0,
+      "cloudSyncGetObserved": 1,
+      "cloudSyncPostObserved": 0,
+      "cloudRoundsObserved": 0,
+      "cloudSyncGetGlobal": null,
+      "cloudSyncPostGlobal": null,
+      "cloudRoundsGlobal": null,
+      "fullCloudBundlesObserved": 1,
+      "retriesObserved": 0,
+      "failuresObserved": 0,
+      "maxMeasuredImportResponseBytes": 3401,
+      "maxMeasuredImportUploadBytes": 20,
+      "scoringViewResponseBytes": null,
+      "idleStart": "2026-10-06T22:22:36.949Z",
+      "idleEnd": "2026-10-06T22:24:53.727Z",
+      "idleSeconds": 136.778,
+      "idleCloudCallsObserved": 0,
+      "idleGhinCallsObserved": 0,
+      "requestStormObserved": false,
+      "pollingObserved": false,
+      "usageGuardTriggered": false,
+      "cleanHydrationCertified": true,
+      "pollingAdded": false,
+      "loopsExecuted": false,
+      "persistedImportGetObserved": 1,
+      "persistedImportGetResponseBytes": 3372,
+      "unexpectedFullCloudBundlesObserved": 0,
+      "maxMeasuredCloudResponseBytes": 521587,
+      "maxMeasuredResponseBytes": 521587,
+      "maxMeasuredUploadBytes": 20,
+      "fullBundleExplanation": "One deliberate reload to load the new CSS deployment; mount had knownCloud=false, performed legitimate first canonical GET 521587 bytes, then apply/gate success without upload or retry. Not a recovery/download-after-POST.",
+      "afterDeployment": {
+        "reloadAt": "2026-10-06T22:29:39.558Z",
+        "cloudCanonicalReadAt": "2026-10-06T22:29:45.475Z",
+        "cycleSuccessAt": "2026-10-06T22:29:45.767Z",
+        "observedUntil": "2026-10-06T22:32:10.784Z",
+        "elapsedAfterHydrationSeconds": 145.017,
+        "cloudGet": 1,
+        "cloudPost": 0,
+        "cloudRounds": 0,
+        "unexpectedFullBundles": 0,
+        "retries": 0,
+        "failures": 0,
+        "additionalCloudCallsAfterHydration": 0,
+        "note": "Navigation/read-only visual checks occurred during this interval; pure idle certification is the separate 136.778 second window."
+      }
+    },
+    "tests": {
+      "directed": {
+        "fail": 0,
+        "pass": 1139
+      },
+      "scripts": {
+        "fail": 0,
+        "pass": 117
+      },
+      "fullSuite": {
+        "baselineFailures": [
+          "equipment-owner-review",
+          "equipment-ui-contract",
+          "final-brand-ghin-closeout Equipment",
+          "iphone-capture Rules",
+          "nightly-catalog-quality equipment-gaps"
+        ],
+        "newFailures": 0,
+        "total": 4581,
+        "pass": 4576,
+        "fail": 5,
+        "artifact": ".qa-artifacts/ghin-real-import-full.log",
+        "executedThisContinuation": true,
+        "compilation": "Unchanged TypeScript tree from validated hydration build; current CSS and TSX source read by runtime contracts"
+      },
+      "typecheck": "PASS",
+      "lint": "PASS",
+      "build": "PASS",
+      "ghinDirectedThisContinuation": {
+        "total": 135,
+        "pass": 135,
+        "fail": 0,
+        "artifact": ".qa-artifacts/ghin-resume-directed.log"
+      },
+      "priorChecksEvidence": "69 directed, full 4581, typecheck, lint and build rerun after scoped CSS change. Prior 1139 directed and 117 scripts belong to hydration fix; no application TS/JS change in this continuation.",
+      "ghinDirectedAfterRealImport": {
+        "total": 69,
+        "pass": 69,
+        "fail": 0,
+        "artifact": ".qa-artifacts/ghin-real-import-directed.log"
+      }
+    },
+    "deployment": {
+      "url": "https://dev.thebackyard.com.mx",
+      "target": "preview",
+      "codeSha": "f3de6341e78f3127ce5b6b6dab6c2b7846ad8d08",
+      "codeDeploymentId": "dpl_3qdXMPYTYeWURxmVH3hcfEV186Rg",
+      "codeDeploymentState": "READY",
+      "codeHealthHttp": 200,
+      "finalReportDeploymentReceipt": "Delivered after docs commit/push; only documentation follows the verified CSS code"
+    }
+  },
+  "GIT": {
+    "initialSha": "6701089f443a7e2f5d635a175b5f6fd89121b406",
+    "commits": [
+      {
+        "sha": "c2a550358daf4f7bf76e6fa61b658c3385864c6b",
+        "purpose": "Owner-session course lookup and explicit-only UI"
+      },
+      {
+        "sha": "52c99d673767e7b8782bac0e4a6907eecbeb3c73",
+        "purpose": "Explicit linked-golfer gender and preserved lookup evidence"
+      },
+      {
+        "sha": "7586232a14ae4d1767b0714c964ee0bdeea33d29",
+        "purpose": "Audited physical aliases without frozen-round rewriting"
+      }
+    ],
+    "finalDocumentationCommit": "See final response / git HEAD containing this audit."
+  },
+  "MAPPING_CONTINUATION_BEFORE": {
+    "completedBackyard": 22,
+    "ghinOnly": 6,
+    "backyardPlusGhin": 0,
+    "ambiguous": 0,
+    "backyardIndex": 5.5,
+    "ghinIndex": 30.8,
+    "attestPercent": 55,
+    "qa24": "live; UI resumes H2 from persisted H1 5/6"
   }
 }

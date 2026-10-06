@@ -6,7 +6,7 @@ No borrar rondas/importaciones, cerrar QA24 ni publicar tarjetas para superar un
 
 ## Resultado real actual
 
-**Importación PASS; ciclo completo POSTING_BLOCKED_MAPPING, no DONE.**
+**Importación PASS; estado actual NO_EXISTING_POSTABLE_ROUND, no DONE.**
 El usuario renovó GHIN manualmente. Se consultaron seis tarjetas oficiales y
 se importaron mediante el flujo normal. La segunda importación agregó **0**.
 Hay **6 GHIN-only**, **22 completadas Backyard-only**, **0 vinculadas** y
@@ -59,10 +59,14 @@ Hay **6 GHIN-only**, **22 completadas Backyard-only**, **0 vinculadas** y
    si se accede desde las tarjetas/acciones existentes.
 10. No existe una ronda publicada en este checkpoint. **BACKYARD + GHIN = 0**
     es el resultado real; no buscar un provider ID de posting inexistente.
-11. Posting permanece apagado: ninguna completada tiene course + tee
-    CONFIRMED para sus IDs congelados. Las seis oficiales no proporcionan
-    IDs suficientes y sus tees Red no confirman Blancas/Doradas.
-    No intentar publicar otra ronda a ciegas.
+11. Posting permanece apagado. La consulta oficial confirmó course23233/facility19886.
+    Doradas106088 tiene68.4/121,6038yd y un alias físico para el ID histórico.
+    El GHIN vinculado declara géneroF; esas12 rondas usan ratingMEN.
+    Blancas congeló70.8/125,6590yd; GHIN Male usa70.8/128,6591yd y
+    Female77.4/153. No hay completed compatible y no se modificó historial.
+    Perfil → Consultar campo GHIN permite consultas explícitas; no hace falta
+    repetirlas: la prueba está en docs/qa/GHIN_LA_VISTA_LOOKUP.json y el manifest.
+    “Verificar perfil para posting” devuelve sólo identidad vinculada y género.
 12. Dedupe de import: cada uno de los seis IDs debe aparecer una sola vez
     por vista. No confundir su aparición en Perfil y Carrera con una duplicación
     de registros. No se fusionaron por nombre con las 22 de 2026.
@@ -85,15 +89,25 @@ Hay **6 GHIN-only**, **22 completadas Backyard-only**, **0 vinculadas** y
 
 - Confirmación posterior a import en sesión privada nueva, sin reutilizar
   el storage de la sesión del agente.
-- Campo y tee GHIN **CONFIRMED** de un candidato completed elegible.
+- Una tarjeta completed con rating/género compatible. Course y Doradas física
+  sí quedaron CONFIRMED mediante alias; esto no cambia el rating de la ronda.
 - Dry run → post real → verify provider → reimport same round → segundo
   intento bloqueado. Ninguna de esas etapas upstream se ejecutó por falta
-  de mappings; los tests locales no sustituyen esa prueba.
+  de un candidato compatible; los tests locales no sustituyen esa prueba.
 - CSS corregido verificado en DEV, build
-  `f3de6341e78f3127ce5b6b6dab6c2b7846ad8d08`, READY/health 200.
+  `7586232a14ae4d1767b0714c964ee0bdeea33d29`, READY/health 200 del código actual.
   Ancho efectivo del navegador 573 px: no se afirma prueba física de iPhone.
   Confirmar durante la revisión privada que “Ajustado” no se encima con GHIN.
 
 Las seis provider cards viven en servidor privado y quedan guardadas.
 No hubo cleanup, cambios de scores ni nuevas rondas.
 No se declara PASS del ciclo GHIN completo.
+
+## Evidencia de esta continuación
+
+- docs/qa/GHIN_LA_VISTA_LOOKUP.json: detalles oficiales,tees postables y geometrías.
+- docs/qa/GHIN_LA_VISTA_MAPPING_DEV.sql: escritura aditiva de dos claves, sin snapshots.
+- docs/qa/GHIN_EL_MONGAS_FINAL.json: auditoría de las22 completed y blockers.
+- docs/qa/GHIN_POSTING_PROFILE_DEV.png: resultado real géneroF sin secretos.
+- Se preservó la asignación de golpes histórica, diferente de la GHIN actual.
+- No QA25,ninguna publicación,ninguna ronda cerrada/cancelada/reescrita.

@@ -1,0 +1,2412 @@
+{
+  "observedAt": "2026-10-06T23:04:47.443Z",
+  "environment": "DEV",
+  "session": "linked owner session only",
+  "course": {
+    "ok": true,
+    "data": {
+      "id": "23233",
+      "facilityId": "19886",
+      "name": "LA VISTA COUNTRY CLUB",
+      "facilityName": "LA VISTA COUNTRY CLUB",
+      "city": null,
+      "state": null,
+      "country": null,
+      "address1": "BOULEVARD ATLIXCAYOTL Km. 4, Cholula, PUE, 72840, MEX",
+      "address2": null,
+      "postalCode": null,
+      "latitude": 19.00829696655273,
+      "longitude": -98.25463104248047,
+      "associationId": "86",
+      "courseNumber": "4151",
+      "season": {
+        "name": "All Year Round",
+        "startsOn": "01/01",
+        "endsOn": "12/31",
+        "isAllYear": true
+      },
+      "holes": 18,
+      "par": 72,
+      "status": "active",
+      "rawStatus": "Active",
+      "isActive": true,
+      "updatedAt": null,
+      "tees": [
+        {
+          "id": "106087",
+          "name": "BLANCAS",
+          "displayName": null,
+          "gender": "Male",
+          "status": "unknown",
+          "rawStatus": null,
+          "holes": 18,
+          "par": 72,
+          "courseRating": 70.8,
+          "slopeRating": 128,
+          "bogeyRating": 94.6,
+          "totalYards": 6591,
+          "totalMeters": 6027,
+          "frontRating": 34.9,
+          "frontSlope": 126,
+          "frontBogeyRating": 46.6,
+          "backRating": 35.9,
+          "backSlope": 130,
+          "backBogeyRating": 48,
+          "isShorter": null,
+          "strokeAllocation": true,
+          "eligibleSides": [],
+          "ratings": [
+            {
+              "type": "total",
+              "rawType": "Total",
+              "courseRating": 70.8,
+              "slopeRating": 128,
+              "bogeyRating": 94.6
+            },
+            {
+              "type": "front",
+              "rawType": "Front",
+              "courseRating": 34.9,
+              "slopeRating": 126,
+              "bogeyRating": 46.6
+            },
+            {
+              "type": "back",
+              "rawType": "Back",
+              "courseRating": 35.9,
+              "slopeRating": 130,
+              "bogeyRating": 48
+            }
+          ],
+          "holeData": [
+            {
+              "id": "350143",
+              "number": 1,
+              "par": 4,
+              "yardage": 392,
+              "strokeIndex": 10
+            },
+            {
+              "id": "350144",
+              "number": 2,
+              "par": 3,
+              "yardage": 165,
+              "strokeIndex": 16
+            },
+            {
+              "id": "350145",
+              "number": 3,
+              "par": 4,
+              "yardage": 398,
+              "strokeIndex": 4
+            },
+            {
+              "id": "350146",
+              "number": 4,
+              "par": 5,
+              "yardage": 483,
+              "strokeIndex": 2
+            },
+            {
+              "id": "350147",
+              "number": 5,
+              "par": 4,
+              "yardage": 389,
+              "strokeIndex": 14
+            },
+            {
+              "id": "350148",
+              "number": 6,
+              "par": 4,
+              "yardage": 343,
+              "strokeIndex": 18
+            },
+            {
+              "id": "350149",
+              "number": 7,
+              "par": 3,
+              "yardage": 158,
+              "strokeIndex": 8
+            },
+            {
+              "id": "350150",
+              "number": 8,
+              "par": 4,
+              "yardage": 374,
+              "strokeIndex": 12
+            },
+            {
+              "id": "350151",
+              "number": 9,
+              "par": 5,
+              "yardage": 488,
+              "strokeIndex": 6
+            },
+            {
+              "id": "350152",
+              "number": 10,
+              "par": 5,
+              "yardage": 529,
+              "strokeIndex": 13
+            },
+            {
+              "id": "350153",
+              "number": 11,
+              "par": 4,
+              "yardage": 358,
+              "strokeIndex": 11
+            },
+            {
+              "id": "350154",
+              "number": 12,
+              "par": 3,
+              "yardage": 138,
+              "strokeIndex": 9
+            },
+            {
+              "id": "350155",
+              "number": 13,
+              "par": 4,
+              "yardage": 368,
+              "strokeIndex": 7
+            },
+            {
+              "id": "350156",
+              "number": 14,
+              "par": 4,
+              "yardage": 433,
+              "strokeIndex": 1
+            },
+            {
+              "id": "350157",
+              "number": 15,
+              "par": 5,
+              "yardage": 581,
+              "strokeIndex": 5
+            },
+            {
+              "id": "350158",
+              "number": 16,
+              "par": 4,
+              "yardage": 395,
+              "strokeIndex": 15
+            },
+            {
+              "id": "350159",
+              "number": 17,
+              "par": 3,
+              "yardage": 173,
+              "strokeIndex": 17
+            },
+            {
+              "id": "350160",
+              "number": 18,
+              "par": 4,
+              "yardage": 426,
+              "strokeIndex": 3
+            }
+          ]
+        },
+        {
+          "id": "106088",
+          "name": "DORADAS",
+          "displayName": null,
+          "gender": "Male",
+          "status": "unknown",
+          "rawStatus": null,
+          "holes": 18,
+          "par": 72,
+          "courseRating": 68.4,
+          "slopeRating": 121,
+          "bogeyRating": 90.8,
+          "totalYards": 6038,
+          "totalMeters": 5521,
+          "frontRating": 34,
+          "frontSlope": 116,
+          "frontBogeyRating": 44.8,
+          "backRating": 34.4,
+          "backSlope": 125,
+          "backBogeyRating": 46,
+          "isShorter": null,
+          "strokeAllocation": true,
+          "eligibleSides": [],
+          "ratings": [
+            {
+              "type": "total",
+              "rawType": "Total",
+              "courseRating": 68.4,
+              "slopeRating": 121,
+              "bogeyRating": 90.8
+            },
+            {
+              "type": "front",
+              "rawType": "Front",
+              "courseRating": 34,
+              "slopeRating": 116,
+              "bogeyRating": 44.8
+            },
+            {
+              "type": "back",
+              "rawType": "Back",
+              "courseRating": 34.4,
+              "slopeRating": 125,
+              "bogeyRating": 46
+            }
+          ],
+          "holeData": [
+            {
+              "id": "761879",
+              "number": 1,
+              "par": 4,
+              "yardage": 362,
+              "strokeIndex": 10
+            },
+            {
+              "id": "761880",
+              "number": 2,
+              "par": 3,
+              "yardage": 136,
+              "strokeIndex": 16
+            },
+            {
+              "id": "761881",
+              "number": 3,
+              "par": 4,
+              "yardage": 358,
+              "strokeIndex": 4
+            },
+            {
+              "id": "761882",
+              "number": 4,
+              "par": 5,
+              "yardage": 469,
+              "strokeIndex": 2
+            },
+            {
+              "id": "761883",
+              "number": 5,
+              "par": 4,
+              "yardage": 365,
+              "strokeIndex": 14
+            },
+            {
+              "id": "761884",
+              "number": 6,
+              "par": 4,
+              "yardage": 323,
+              "strokeIndex": 18
+            },
+            {
+              "id": "761885",
+              "number": 7,
+              "par": 3,
+              "yardage": 138,
+              "strokeIndex": 8
+            },
+            {
+              "id": "761886",
+              "number": 8,
+              "par": 4,
+              "yardage": 334,
+              "strokeIndex": 12
+            },
+            {
+              "id": "761887",
+              "number": 9,
+              "par": 5,
+              "yardage": 457,
+              "strokeIndex": 6
+            },
+            {
+              "id": "761888",
+              "number": 10,
+              "par": 5,
+              "yardage": 490,
+              "strokeIndex": 13
+            },
+            {
+              "id": "761889",
+              "number": 11,
+              "par": 4,
+              "yardage": 326,
+              "strokeIndex": 11
+            },
+            {
+              "id": "761890",
+              "number": 12,
+              "par": 3,
+              "yardage": 108,
+              "strokeIndex": 9
+            },
+            {
+              "id": "761891",
+              "number": 13,
+              "par": 4,
+              "yardage": 326,
+              "strokeIndex": 7
+            },
+            {
+              "id": "761892",
+              "number": 14,
+              "par": 4,
+              "yardage": 392,
+              "strokeIndex": 1
+            },
+            {
+              "id": "761893",
+              "number": 15,
+              "par": 5,
+              "yardage": 542,
+              "strokeIndex": 5
+            },
+            {
+              "id": "761894",
+              "number": 16,
+              "par": 4,
+              "yardage": 368,
+              "strokeIndex": 15
+            },
+            {
+              "id": "761895",
+              "number": 17,
+              "par": 3,
+              "yardage": 156,
+              "strokeIndex": 17
+            },
+            {
+              "id": "761896",
+              "number": 18,
+              "par": 4,
+              "yardage": 388,
+              "strokeIndex": 3
+            }
+          ]
+        },
+        {
+          "id": "106089",
+          "name": "BLANCAS",
+          "displayName": null,
+          "gender": "Female",
+          "status": "unknown",
+          "rawStatus": null,
+          "holes": 18,
+          "par": 72,
+          "courseRating": 77.4,
+          "slopeRating": 153,
+          "bogeyRating": 113.4,
+          "totalYards": 6591,
+          "totalMeters": 6027,
+          "frontRating": 38.1,
+          "frontSlope": 151,
+          "frontBogeyRating": 55.9,
+          "backRating": 39.3,
+          "backSlope": 154,
+          "backBogeyRating": 57.5,
+          "isShorter": null,
+          "strokeAllocation": true,
+          "eligibleSides": [],
+          "ratings": [
+            {
+              "type": "total",
+              "rawType": "Total",
+              "courseRating": 77.4,
+              "slopeRating": 153,
+              "bogeyRating": 113.4
+            },
+            {
+              "type": "front",
+              "rawType": "Front",
+              "courseRating": 38.1,
+              "slopeRating": 151,
+              "bogeyRating": 55.9
+            },
+            {
+              "type": "back",
+              "rawType": "Back",
+              "courseRating": 39.3,
+              "slopeRating": 154,
+              "bogeyRating": 57.5
+            }
+          ],
+          "holeData": [
+            {
+              "id": "350161",
+              "number": 1,
+              "par": 4,
+              "yardage": 392,
+              "strokeIndex": 10
+            },
+            {
+              "id": "350162",
+              "number": 2,
+              "par": 3,
+              "yardage": 165,
+              "strokeIndex": 16
+            },
+            {
+              "id": "350163",
+              "number": 3,
+              "par": 4,
+              "yardage": 398,
+              "strokeIndex": 4
+            },
+            {
+              "id": "350164",
+              "number": 4,
+              "par": 5,
+              "yardage": 483,
+              "strokeIndex": 2
+            },
+            {
+              "id": "350165",
+              "number": 5,
+              "par": 4,
+              "yardage": 389,
+              "strokeIndex": 14
+            },
+            {
+              "id": "350166",
+              "number": 6,
+              "par": 4,
+              "yardage": 343,
+              "strokeIndex": 18
+            },
+            {
+              "id": "350167",
+              "number": 7,
+              "par": 3,
+              "yardage": 158,
+              "strokeIndex": 8
+            },
+            {
+              "id": "350168",
+              "number": 8,
+              "par": 4,
+              "yardage": 374,
+              "strokeIndex": 12
+            },
+            {
+              "id": "350169",
+              "number": 9,
+              "par": 5,
+              "yardage": 488,
+              "strokeIndex": 6
+            },
+            {
+              "id": "350170",
+              "number": 10,
+              "par": 5,
+              "yardage": 529,
+              "strokeIndex": 13
+            },
+            {
+              "id": "350171",
+              "number": 11,
+              "par": 4,
+              "yardage": 358,
+              "strokeIndex": 11
+            },
+            {
+              "id": "350172",
+              "number": 12,
+              "par": 3,
+              "yardage": 138,
+              "strokeIndex": 9
+            },
+            {
+              "id": "350173",
+              "number": 13,
+              "par": 4,
+              "yardage": 368,
+              "strokeIndex": 7
+            },
+            {
+              "id": "350174",
+              "number": 14,
+              "par": 4,
+              "yardage": 433,
+              "strokeIndex": 1
+            },
+            {
+              "id": "350175",
+              "number": 15,
+              "par": 5,
+              "yardage": 581,
+              "strokeIndex": 5
+            },
+            {
+              "id": "350176",
+              "number": 16,
+              "par": 4,
+              "yardage": 395,
+              "strokeIndex": 15
+            },
+            {
+              "id": "350177",
+              "number": 17,
+              "par": 3,
+              "yardage": 173,
+              "strokeIndex": 17
+            },
+            {
+              "id": "350178",
+              "number": 18,
+              "par": 4,
+              "yardage": 426,
+              "strokeIndex": 3
+            }
+          ]
+        },
+        {
+          "id": "106090",
+          "name": "ROJAS",
+          "displayName": null,
+          "gender": "Female",
+          "status": "unknown",
+          "rawStatus": null,
+          "holes": 18,
+          "par": 72,
+          "courseRating": 71,
+          "slopeRating": 137,
+          "bogeyRating": 103.2,
+          "totalYards": 5476,
+          "totalMeters": 5007,
+          "frontRating": 35.1,
+          "frontSlope": 135,
+          "frontBogeyRating": 51,
+          "backRating": 35.9,
+          "backSlope": 138,
+          "backBogeyRating": 52.2,
+          "isShorter": null,
+          "strokeAllocation": true,
+          "eligibleSides": [],
+          "ratings": [
+            {
+              "type": "total",
+              "rawType": "Total",
+              "courseRating": 71,
+              "slopeRating": 137,
+              "bogeyRating": 103.2
+            },
+            {
+              "type": "front",
+              "rawType": "Front",
+              "courseRating": 35.1,
+              "slopeRating": 135,
+              "bogeyRating": 51
+            },
+            {
+              "type": "back",
+              "rawType": "Back",
+              "courseRating": 35.9,
+              "slopeRating": 138,
+              "bogeyRating": 52.2
+            }
+          ],
+          "holeData": [
+            {
+              "id": "1754282",
+              "number": 1,
+              "par": 4,
+              "yardage": 331,
+              "strokeIndex": 10
+            },
+            {
+              "id": "1754283",
+              "number": 2,
+              "par": 3,
+              "yardage": 115,
+              "strokeIndex": 16
+            },
+            {
+              "id": "1754284",
+              "number": 3,
+              "par": 4,
+              "yardage": 297,
+              "strokeIndex": 4
+            },
+            {
+              "id": "1754285",
+              "number": 4,
+              "par": 5,
+              "yardage": 447,
+              "strokeIndex": 2
+            },
+            {
+              "id": "1754286",
+              "number": 5,
+              "par": 4,
+              "yardage": 319,
+              "strokeIndex": 14
+            },
+            {
+              "id": "1754287",
+              "number": 6,
+              "par": 4,
+              "yardage": 270,
+              "strokeIndex": 18
+            },
+            {
+              "id": "1754288",
+              "number": 7,
+              "par": 3,
+              "yardage": 116,
+              "strokeIndex": 8
+            },
+            {
+              "id": "1754289",
+              "number": 8,
+              "par": 4,
+              "yardage": 306,
+              "strokeIndex": 12
+            },
+            {
+              "id": "1754290",
+              "number": 9,
+              "par": 5,
+              "yardage": 430,
+              "strokeIndex": 6
+            },
+            {
+              "id": "1754291",
+              "number": 10,
+              "par": 5,
+              "yardage": 446,
+              "strokeIndex": 13
+            },
+            {
+              "id": "1754292",
+              "number": 11,
+              "par": 4,
+              "yardage": 306,
+              "strokeIndex": 11
+            },
+            {
+              "id": "1754293",
+              "number": 12,
+              "par": 3,
+              "yardage": 99,
+              "strokeIndex": 9
+            },
+            {
+              "id": "1754294",
+              "number": 13,
+              "par": 4,
+              "yardage": 292,
+              "strokeIndex": 7
+            },
+            {
+              "id": "1754295",
+              "number": 14,
+              "par": 4,
+              "yardage": 364,
+              "strokeIndex": 1
+            },
+            {
+              "id": "1754296",
+              "number": 15,
+              "par": 5,
+              "yardage": 503,
+              "strokeIndex": 5
+            },
+            {
+              "id": "1754297",
+              "number": 16,
+              "par": 4,
+              "yardage": 343,
+              "strokeIndex": 15
+            },
+            {
+              "id": "1754298",
+              "number": 17,
+              "par": 3,
+              "yardage": 135,
+              "strokeIndex": 17
+            },
+            {
+              "id": "1754299",
+              "number": 18,
+              "par": 4,
+              "yardage": 357,
+              "strokeIndex": 3
+            }
+          ]
+        },
+        {
+          "id": "280984",
+          "name": "AZULES",
+          "displayName": null,
+          "gender": "Male",
+          "status": "unknown",
+          "rawStatus": null,
+          "holes": 18,
+          "par": 72,
+          "courseRating": 73.8,
+          "slopeRating": 135,
+          "bogeyRating": 98.8,
+          "totalYards": 7122,
+          "totalMeters": 6512,
+          "frontRating": 36.4,
+          "frontSlope": 131,
+          "frontBogeyRating": 48.6,
+          "backRating": 37.4,
+          "backSlope": 138,
+          "backBogeyRating": 50.2,
+          "isShorter": null,
+          "strokeAllocation": true,
+          "eligibleSides": [],
+          "ratings": [
+            {
+              "type": "total",
+              "rawType": "Total",
+              "courseRating": 73.8,
+              "slopeRating": 135,
+              "bogeyRating": 98.8
+            },
+            {
+              "type": "front",
+              "rawType": "Front",
+              "courseRating": 36.4,
+              "slopeRating": 131,
+              "bogeyRating": 48.6
+            },
+            {
+              "type": "back",
+              "rawType": "Back",
+              "courseRating": 37.4,
+              "slopeRating": 138,
+              "bogeyRating": 50.2
+            }
+          ],
+          "holeData": [
+            {
+              "id": "171361",
+              "number": 1,
+              "par": 4,
+              "yardage": 435,
+              "strokeIndex": 10
+            },
+            {
+              "id": "171362",
+              "number": 2,
+              "par": 3,
+              "yardage": 187,
+              "strokeIndex": 16
+            },
+            {
+              "id": "171363",
+              "number": 3,
+              "par": 4,
+              "yardage": 416,
+              "strokeIndex": 4
+            },
+            {
+              "id": "171364",
+              "number": 4,
+              "par": 5,
+              "yardage": 503,
+              "strokeIndex": 2
+            },
+            {
+              "id": "171365",
+              "number": 5,
+              "par": 4,
+              "yardage": 419,
+              "strokeIndex": 14
+            },
+            {
+              "id": "171366",
+              "number": 6,
+              "par": 4,
+              "yardage": 367,
+              "strokeIndex": 18
+            },
+            {
+              "id": "171367",
+              "number": 7,
+              "par": 3,
+              "yardage": 191,
+              "strokeIndex": 8
+            },
+            {
+              "id": "171368",
+              "number": 8,
+              "par": 4,
+              "yardage": 402,
+              "strokeIndex": 12
+            },
+            {
+              "id": "171369",
+              "number": 9,
+              "par": 5,
+              "yardage": 521,
+              "strokeIndex": 6
+            },
+            {
+              "id": "171370",
+              "number": 10,
+              "par": 5,
+              "yardage": 562,
+              "strokeIndex": 13
+            },
+            {
+              "id": "171371",
+              "number": 11,
+              "par": 4,
+              "yardage": 388,
+              "strokeIndex": 11
+            },
+            {
+              "id": "171372",
+              "number": 12,
+              "par": 3,
+              "yardage": 158,
+              "strokeIndex": 9
+            },
+            {
+              "id": "171373",
+              "number": 13,
+              "par": 4,
+              "yardage": 393,
+              "strokeIndex": 7
+            },
+            {
+              "id": "171374",
+              "number": 14,
+              "par": 4,
+              "yardage": 500,
+              "strokeIndex": 1
+            },
+            {
+              "id": "171375",
+              "number": 15,
+              "par": 5,
+              "yardage": 605,
+              "strokeIndex": 5
+            },
+            {
+              "id": "171376",
+              "number": 16,
+              "par": 4,
+              "yardage": 418,
+              "strokeIndex": 15
+            },
+            {
+              "id": "171377",
+              "number": 17,
+              "par": 3,
+              "yardage": 192,
+              "strokeIndex": 17
+            },
+            {
+              "id": "171378",
+              "number": 18,
+              "par": 4,
+              "yardage": 465,
+              "strokeIndex": 3
+            }
+          ]
+        },
+        {
+          "id": "281493",
+          "name": "NEGRAS",
+          "displayName": null,
+          "gender": "Male",
+          "status": "unknown",
+          "rawStatus": null,
+          "holes": 18,
+          "par": 72,
+          "courseRating": 74.3,
+          "slopeRating": 142,
+          "bogeyRating": 100.6,
+          "totalYards": 7326,
+          "totalMeters": 6699,
+          "frontRating": 36.6,
+          "frontSlope": 143,
+          "frontBogeyRating": 49.9,
+          "backRating": 37.7,
+          "backSlope": 140,
+          "backBogeyRating": 50.7,
+          "isShorter": null,
+          "strokeAllocation": true,
+          "eligibleSides": [],
+          "ratings": [
+            {
+              "type": "total",
+              "rawType": "Total",
+              "courseRating": 74.3,
+              "slopeRating": 142,
+              "bogeyRating": 100.6
+            },
+            {
+              "type": "front",
+              "rawType": "Front",
+              "courseRating": 36.6,
+              "slopeRating": 143,
+              "bogeyRating": 49.9
+            },
+            {
+              "type": "back",
+              "rawType": "Back",
+              "courseRating": 37.7,
+              "slopeRating": 140,
+              "bogeyRating": 50.7
+            }
+          ],
+          "holeData": [
+            {
+              "id": "2485456",
+              "number": 1,
+              "par": 4,
+              "yardage": 440,
+              "strokeIndex": 10
+            },
+            {
+              "id": "2485457",
+              "number": 2,
+              "par": 3,
+              "yardage": 193,
+              "strokeIndex": 16
+            },
+            {
+              "id": "2485458",
+              "number": 3,
+              "par": 4,
+              "yardage": 421,
+              "strokeIndex": 4
+            },
+            {
+              "id": "2485459",
+              "number": 4,
+              "par": 5,
+              "yardage": 538,
+              "strokeIndex": 2
+            },
+            {
+              "id": "2485460",
+              "number": 5,
+              "par": 4,
+              "yardage": 428,
+              "strokeIndex": 14
+            },
+            {
+              "id": "2485461",
+              "number": 6,
+              "par": 4,
+              "yardage": 375,
+              "strokeIndex": 18
+            },
+            {
+              "id": "2485462",
+              "number": 7,
+              "par": 3,
+              "yardage": 199,
+              "strokeIndex": 8
+            },
+            {
+              "id": "2485463",
+              "number": 8,
+              "par": 4,
+              "yardage": 425,
+              "strokeIndex": 12
+            },
+            {
+              "id": "2485464",
+              "number": 9,
+              "par": 5,
+              "yardage": 552,
+              "strokeIndex": 6
+            },
+            {
+              "id": "2485465",
+              "number": 10,
+              "par": 5,
+              "yardage": 567,
+              "strokeIndex": 13
+            },
+            {
+              "id": "2485466",
+              "number": 11,
+              "par": 4,
+              "yardage": 393,
+              "strokeIndex": 11
+            },
+            {
+              "id": "2485467",
+              "number": 12,
+              "par": 3,
+              "yardage": 163,
+              "strokeIndex": 9
+            },
+            {
+              "id": "2485468",
+              "number": 13,
+              "par": 4,
+              "yardage": 402,
+              "strokeIndex": 7
+            },
+            {
+              "id": "2485469",
+              "number": 14,
+              "par": 4,
+              "yardage": 505,
+              "strokeIndex": 1
+            },
+            {
+              "id": "2485470",
+              "number": 15,
+              "par": 5,
+              "yardage": 613,
+              "strokeIndex": 5
+            },
+            {
+              "id": "2485471",
+              "number": 16,
+              "par": 4,
+              "yardage": 428,
+              "strokeIndex": 15
+            },
+            {
+              "id": "2485472",
+              "number": 17,
+              "par": 3,
+              "yardage": 213,
+              "strokeIndex": 17
+            },
+            {
+              "id": "2485473",
+              "number": 18,
+              "par": 4,
+              "yardage": 471,
+              "strokeIndex": 3
+            }
+          ]
+        }
+      ]
+    },
+    "endpoint": "/crsCourseMethods.asmx/GetCourseDetails.json",
+    "httpStatus": 200,
+    "fetchedAt": "2026-10-06T23:04:47.343Z"
+  },
+  "postingTees": {
+    "ok": true,
+    "data": [
+      {
+        "id": "106087",
+        "name": "BLANCAS",
+        "displayName": "BLANCAS",
+        "gender": "Male",
+        "status": "active",
+        "rawStatus": "Active",
+        "holes": 18,
+        "par": 72,
+        "courseRating": 70.8,
+        "slopeRating": 128,
+        "bogeyRating": 94.6,
+        "totalYards": 6591,
+        "totalMeters": null,
+        "frontRating": 34.9,
+        "frontSlope": 126,
+        "frontBogeyRating": 46.6,
+        "backRating": 35.9,
+        "backSlope": 130,
+        "backBogeyRating": 48,
+        "isShorter": null,
+        "strokeAllocation": true,
+        "eligibleSides": [],
+        "ratings": [
+          {
+            "type": "total",
+            "rawType": "Total",
+            "courseRating": 70.8,
+            "slopeRating": 128,
+            "bogeyRating": 94.6
+          },
+          {
+            "type": "front",
+            "rawType": "Front",
+            "courseRating": 34.9,
+            "slopeRating": 126,
+            "bogeyRating": 46.6
+          },
+          {
+            "type": "back",
+            "rawType": "Back",
+            "courseRating": 35.9,
+            "slopeRating": 130,
+            "bogeyRating": 48
+          }
+        ],
+        "holeData": [
+          {
+            "id": "350143",
+            "number": 1,
+            "par": 4,
+            "yardage": 392,
+            "strokeIndex": 10
+          },
+          {
+            "id": "350144",
+            "number": 2,
+            "par": 3,
+            "yardage": 165,
+            "strokeIndex": 16
+          },
+          {
+            "id": "350145",
+            "number": 3,
+            "par": 4,
+            "yardage": 398,
+            "strokeIndex": 4
+          },
+          {
+            "id": "350146",
+            "number": 4,
+            "par": 5,
+            "yardage": 483,
+            "strokeIndex": 2
+          },
+          {
+            "id": "350147",
+            "number": 5,
+            "par": 4,
+            "yardage": 389,
+            "strokeIndex": 14
+          },
+          {
+            "id": "350148",
+            "number": 6,
+            "par": 4,
+            "yardage": 343,
+            "strokeIndex": 18
+          },
+          {
+            "id": "350149",
+            "number": 7,
+            "par": 3,
+            "yardage": 158,
+            "strokeIndex": 8
+          },
+          {
+            "id": "350150",
+            "number": 8,
+            "par": 4,
+            "yardage": 374,
+            "strokeIndex": 12
+          },
+          {
+            "id": "350151",
+            "number": 9,
+            "par": 5,
+            "yardage": 488,
+            "strokeIndex": 6
+          },
+          {
+            "id": "350152",
+            "number": 10,
+            "par": 5,
+            "yardage": 529,
+            "strokeIndex": 13
+          },
+          {
+            "id": "350153",
+            "number": 11,
+            "par": 4,
+            "yardage": 358,
+            "strokeIndex": 11
+          },
+          {
+            "id": "350154",
+            "number": 12,
+            "par": 3,
+            "yardage": 138,
+            "strokeIndex": 9
+          },
+          {
+            "id": "350155",
+            "number": 13,
+            "par": 4,
+            "yardage": 368,
+            "strokeIndex": 7
+          },
+          {
+            "id": "350156",
+            "number": 14,
+            "par": 4,
+            "yardage": 433,
+            "strokeIndex": 1
+          },
+          {
+            "id": "350157",
+            "number": 15,
+            "par": 5,
+            "yardage": 581,
+            "strokeIndex": 5
+          },
+          {
+            "id": "350158",
+            "number": 16,
+            "par": 4,
+            "yardage": 395,
+            "strokeIndex": 15
+          },
+          {
+            "id": "350159",
+            "number": 17,
+            "par": 3,
+            "yardage": 173,
+            "strokeIndex": 17
+          },
+          {
+            "id": "350160",
+            "number": 18,
+            "par": 4,
+            "yardage": 426,
+            "strokeIndex": 3
+          }
+        ]
+      },
+      {
+        "id": "106088",
+        "name": "DORADAS",
+        "displayName": "DORADAS",
+        "gender": "Male",
+        "status": "active",
+        "rawStatus": "Active",
+        "holes": 18,
+        "par": 72,
+        "courseRating": 68.4,
+        "slopeRating": 121,
+        "bogeyRating": 90.8,
+        "totalYards": 6038,
+        "totalMeters": null,
+        "frontRating": 34,
+        "frontSlope": 116,
+        "frontBogeyRating": 44.8,
+        "backRating": 34.4,
+        "backSlope": 125,
+        "backBogeyRating": 46,
+        "isShorter": null,
+        "strokeAllocation": true,
+        "eligibleSides": [],
+        "ratings": [
+          {
+            "type": "total",
+            "rawType": "Total",
+            "courseRating": 68.4,
+            "slopeRating": 121,
+            "bogeyRating": 90.8
+          },
+          {
+            "type": "front",
+            "rawType": "Front",
+            "courseRating": 34,
+            "slopeRating": 116,
+            "bogeyRating": 44.8
+          },
+          {
+            "type": "back",
+            "rawType": "Back",
+            "courseRating": 34.4,
+            "slopeRating": 125,
+            "bogeyRating": 46
+          }
+        ],
+        "holeData": [
+          {
+            "id": "761879",
+            "number": 1,
+            "par": 4,
+            "yardage": 362,
+            "strokeIndex": 10
+          },
+          {
+            "id": "761880",
+            "number": 2,
+            "par": 3,
+            "yardage": 136,
+            "strokeIndex": 16
+          },
+          {
+            "id": "761881",
+            "number": 3,
+            "par": 4,
+            "yardage": 358,
+            "strokeIndex": 4
+          },
+          {
+            "id": "761882",
+            "number": 4,
+            "par": 5,
+            "yardage": 469,
+            "strokeIndex": 2
+          },
+          {
+            "id": "761883",
+            "number": 5,
+            "par": 4,
+            "yardage": 365,
+            "strokeIndex": 14
+          },
+          {
+            "id": "761884",
+            "number": 6,
+            "par": 4,
+            "yardage": 323,
+            "strokeIndex": 18
+          },
+          {
+            "id": "761885",
+            "number": 7,
+            "par": 3,
+            "yardage": 138,
+            "strokeIndex": 8
+          },
+          {
+            "id": "761886",
+            "number": 8,
+            "par": 4,
+            "yardage": 334,
+            "strokeIndex": 12
+          },
+          {
+            "id": "761887",
+            "number": 9,
+            "par": 5,
+            "yardage": 457,
+            "strokeIndex": 6
+          },
+          {
+            "id": "761888",
+            "number": 10,
+            "par": 5,
+            "yardage": 490,
+            "strokeIndex": 13
+          },
+          {
+            "id": "761889",
+            "number": 11,
+            "par": 4,
+            "yardage": 326,
+            "strokeIndex": 11
+          },
+          {
+            "id": "761890",
+            "number": 12,
+            "par": 3,
+            "yardage": 108,
+            "strokeIndex": 9
+          },
+          {
+            "id": "761891",
+            "number": 13,
+            "par": 4,
+            "yardage": 326,
+            "strokeIndex": 7
+          },
+          {
+            "id": "761892",
+            "number": 14,
+            "par": 4,
+            "yardage": 392,
+            "strokeIndex": 1
+          },
+          {
+            "id": "761893",
+            "number": 15,
+            "par": 5,
+            "yardage": 542,
+            "strokeIndex": 5
+          },
+          {
+            "id": "761894",
+            "number": 16,
+            "par": 4,
+            "yardage": 368,
+            "strokeIndex": 15
+          },
+          {
+            "id": "761895",
+            "number": 17,
+            "par": 3,
+            "yardage": 156,
+            "strokeIndex": 17
+          },
+          {
+            "id": "761896",
+            "number": 18,
+            "par": 4,
+            "yardage": 388,
+            "strokeIndex": 3
+          }
+        ]
+      },
+      {
+        "id": "106089",
+        "name": "BLANCAS",
+        "displayName": "BLANCAS",
+        "gender": "Female",
+        "status": "active",
+        "rawStatus": "Active",
+        "holes": 18,
+        "par": 72,
+        "courseRating": 77.4,
+        "slopeRating": 153,
+        "bogeyRating": 113.4,
+        "totalYards": 6591,
+        "totalMeters": null,
+        "frontRating": 38.1,
+        "frontSlope": 151,
+        "frontBogeyRating": 55.9,
+        "backRating": 39.3,
+        "backSlope": 154,
+        "backBogeyRating": 57.5,
+        "isShorter": null,
+        "strokeAllocation": true,
+        "eligibleSides": [],
+        "ratings": [
+          {
+            "type": "total",
+            "rawType": "Total",
+            "courseRating": 77.4,
+            "slopeRating": 153,
+            "bogeyRating": 113.4
+          },
+          {
+            "type": "front",
+            "rawType": "Front",
+            "courseRating": 38.1,
+            "slopeRating": 151,
+            "bogeyRating": 55.9
+          },
+          {
+            "type": "back",
+            "rawType": "Back",
+            "courseRating": 39.3,
+            "slopeRating": 154,
+            "bogeyRating": 57.5
+          }
+        ],
+        "holeData": [
+          {
+            "id": "350161",
+            "number": 1,
+            "par": 4,
+            "yardage": 392,
+            "strokeIndex": 10
+          },
+          {
+            "id": "350162",
+            "number": 2,
+            "par": 3,
+            "yardage": 165,
+            "strokeIndex": 16
+          },
+          {
+            "id": "350163",
+            "number": 3,
+            "par": 4,
+            "yardage": 398,
+            "strokeIndex": 4
+          },
+          {
+            "id": "350164",
+            "number": 4,
+            "par": 5,
+            "yardage": 483,
+            "strokeIndex": 2
+          },
+          {
+            "id": "350165",
+            "number": 5,
+            "par": 4,
+            "yardage": 389,
+            "strokeIndex": 14
+          },
+          {
+            "id": "350166",
+            "number": 6,
+            "par": 4,
+            "yardage": 343,
+            "strokeIndex": 18
+          },
+          {
+            "id": "350167",
+            "number": 7,
+            "par": 3,
+            "yardage": 158,
+            "strokeIndex": 8
+          },
+          {
+            "id": "350168",
+            "number": 8,
+            "par": 4,
+            "yardage": 374,
+            "strokeIndex": 12
+          },
+          {
+            "id": "350169",
+            "number": 9,
+            "par": 5,
+            "yardage": 488,
+            "strokeIndex": 6
+          },
+          {
+            "id": "350170",
+            "number": 10,
+            "par": 5,
+            "yardage": 529,
+            "strokeIndex": 13
+          },
+          {
+            "id": "350171",
+            "number": 11,
+            "par": 4,
+            "yardage": 358,
+            "strokeIndex": 11
+          },
+          {
+            "id": "350172",
+            "number": 12,
+            "par": 3,
+            "yardage": 138,
+            "strokeIndex": 9
+          },
+          {
+            "id": "350173",
+            "number": 13,
+            "par": 4,
+            "yardage": 368,
+            "strokeIndex": 7
+          },
+          {
+            "id": "350174",
+            "number": 14,
+            "par": 4,
+            "yardage": 433,
+            "strokeIndex": 1
+          },
+          {
+            "id": "350175",
+            "number": 15,
+            "par": 5,
+            "yardage": 581,
+            "strokeIndex": 5
+          },
+          {
+            "id": "350176",
+            "number": 16,
+            "par": 4,
+            "yardage": 395,
+            "strokeIndex": 15
+          },
+          {
+            "id": "350177",
+            "number": 17,
+            "par": 3,
+            "yardage": 173,
+            "strokeIndex": 17
+          },
+          {
+            "id": "350178",
+            "number": 18,
+            "par": 4,
+            "yardage": 426,
+            "strokeIndex": 3
+          }
+        ]
+      },
+      {
+        "id": "106090",
+        "name": "ROJAS",
+        "displayName": "ROJAS",
+        "gender": "Female",
+        "status": "active",
+        "rawStatus": "Active",
+        "holes": 18,
+        "par": 72,
+        "courseRating": 71,
+        "slopeRating": 137,
+        "bogeyRating": 103.2,
+        "totalYards": 5476,
+        "totalMeters": null,
+        "frontRating": 35.1,
+        "frontSlope": 135,
+        "frontBogeyRating": 51,
+        "backRating": 35.9,
+        "backSlope": 138,
+        "backBogeyRating": 52.2,
+        "isShorter": null,
+        "strokeAllocation": true,
+        "eligibleSides": [],
+        "ratings": [
+          {
+            "type": "total",
+            "rawType": "Total",
+            "courseRating": 71,
+            "slopeRating": 137,
+            "bogeyRating": 103.2
+          },
+          {
+            "type": "front",
+            "rawType": "Front",
+            "courseRating": 35.1,
+            "slopeRating": 135,
+            "bogeyRating": 51
+          },
+          {
+            "type": "back",
+            "rawType": "Back",
+            "courseRating": 35.9,
+            "slopeRating": 138,
+            "bogeyRating": 52.2
+          }
+        ],
+        "holeData": [
+          {
+            "id": "1754282",
+            "number": 1,
+            "par": 4,
+            "yardage": 331,
+            "strokeIndex": 10
+          },
+          {
+            "id": "1754283",
+            "number": 2,
+            "par": 3,
+            "yardage": 115,
+            "strokeIndex": 16
+          },
+          {
+            "id": "1754284",
+            "number": 3,
+            "par": 4,
+            "yardage": 297,
+            "strokeIndex": 4
+          },
+          {
+            "id": "1754285",
+            "number": 4,
+            "par": 5,
+            "yardage": 447,
+            "strokeIndex": 2
+          },
+          {
+            "id": "1754286",
+            "number": 5,
+            "par": 4,
+            "yardage": 319,
+            "strokeIndex": 14
+          },
+          {
+            "id": "1754287",
+            "number": 6,
+            "par": 4,
+            "yardage": 270,
+            "strokeIndex": 18
+          },
+          {
+            "id": "1754288",
+            "number": 7,
+            "par": 3,
+            "yardage": 116,
+            "strokeIndex": 8
+          },
+          {
+            "id": "1754289",
+            "number": 8,
+            "par": 4,
+            "yardage": 306,
+            "strokeIndex": 12
+          },
+          {
+            "id": "1754290",
+            "number": 9,
+            "par": 5,
+            "yardage": 430,
+            "strokeIndex": 6
+          },
+          {
+            "id": "1754291",
+            "number": 10,
+            "par": 5,
+            "yardage": 446,
+            "strokeIndex": 13
+          },
+          {
+            "id": "1754292",
+            "number": 11,
+            "par": 4,
+            "yardage": 306,
+            "strokeIndex": 11
+          },
+          {
+            "id": "1754293",
+            "number": 12,
+            "par": 3,
+            "yardage": 99,
+            "strokeIndex": 9
+          },
+          {
+            "id": "1754294",
+            "number": 13,
+            "par": 4,
+            "yardage": 292,
+            "strokeIndex": 7
+          },
+          {
+            "id": "1754295",
+            "number": 14,
+            "par": 4,
+            "yardage": 364,
+            "strokeIndex": 1
+          },
+          {
+            "id": "1754296",
+            "number": 15,
+            "par": 5,
+            "yardage": 503,
+            "strokeIndex": 5
+          },
+          {
+            "id": "1754297",
+            "number": 16,
+            "par": 4,
+            "yardage": 343,
+            "strokeIndex": 15
+          },
+          {
+            "id": "1754298",
+            "number": 17,
+            "par": 3,
+            "yardage": 135,
+            "strokeIndex": 17
+          },
+          {
+            "id": "1754299",
+            "number": 18,
+            "par": 4,
+            "yardage": 357,
+            "strokeIndex": 3
+          }
+        ]
+      },
+      {
+        "id": "280984",
+        "name": "AZULES",
+        "displayName": "AZULES",
+        "gender": "Male",
+        "status": "active",
+        "rawStatus": "Active",
+        "holes": 18,
+        "par": 72,
+        "courseRating": 73.8,
+        "slopeRating": 135,
+        "bogeyRating": 98.8,
+        "totalYards": 7122,
+        "totalMeters": null,
+        "frontRating": 36.4,
+        "frontSlope": 131,
+        "frontBogeyRating": 48.6,
+        "backRating": 37.4,
+        "backSlope": 138,
+        "backBogeyRating": 50.2,
+        "isShorter": null,
+        "strokeAllocation": true,
+        "eligibleSides": [],
+        "ratings": [
+          {
+            "type": "total",
+            "rawType": "Total",
+            "courseRating": 73.8,
+            "slopeRating": 135,
+            "bogeyRating": 98.8
+          },
+          {
+            "type": "front",
+            "rawType": "Front",
+            "courseRating": 36.4,
+            "slopeRating": 131,
+            "bogeyRating": 48.6
+          },
+          {
+            "type": "back",
+            "rawType": "Back",
+            "courseRating": 37.4,
+            "slopeRating": 138,
+            "bogeyRating": 50.2
+          }
+        ],
+        "holeData": [
+          {
+            "id": "171361",
+            "number": 1,
+            "par": 4,
+            "yardage": 435,
+            "strokeIndex": 10
+          },
+          {
+            "id": "171362",
+            "number": 2,
+            "par": 3,
+            "yardage": 187,
+            "strokeIndex": 16
+          },
+          {
+            "id": "171363",
+            "number": 3,
+            "par": 4,
+            "yardage": 416,
+            "strokeIndex": 4
+          },
+          {
+            "id": "171364",
+            "number": 4,
+            "par": 5,
+            "yardage": 503,
+            "strokeIndex": 2
+          },
+          {
+            "id": "171365",
+            "number": 5,
+            "par": 4,
+            "yardage": 419,
+            "strokeIndex": 14
+          },
+          {
+            "id": "171366",
+            "number": 6,
+            "par": 4,
+            "yardage": 367,
+            "strokeIndex": 18
+          },
+          {
+            "id": "171367",
+            "number": 7,
+            "par": 3,
+            "yardage": 191,
+            "strokeIndex": 8
+          },
+          {
+            "id": "171368",
+            "number": 8,
+            "par": 4,
+            "yardage": 402,
+            "strokeIndex": 12
+          },
+          {
+            "id": "171369",
+            "number": 9,
+            "par": 5,
+            "yardage": 521,
+            "strokeIndex": 6
+          },
+          {
+            "id": "171370",
+            "number": 10,
+            "par": 5,
+            "yardage": 562,
+            "strokeIndex": 13
+          },
+          {
+            "id": "171371",
+            "number": 11,
+            "par": 4,
+            "yardage": 388,
+            "strokeIndex": 11
+          },
+          {
+            "id": "171372",
+            "number": 12,
+            "par": 3,
+            "yardage": 158,
+            "strokeIndex": 9
+          },
+          {
+            "id": "171373",
+            "number": 13,
+            "par": 4,
+            "yardage": 393,
+            "strokeIndex": 7
+          },
+          {
+            "id": "171374",
+            "number": 14,
+            "par": 4,
+            "yardage": 500,
+            "strokeIndex": 1
+          },
+          {
+            "id": "171375",
+            "number": 15,
+            "par": 5,
+            "yardage": 605,
+            "strokeIndex": 5
+          },
+          {
+            "id": "171376",
+            "number": 16,
+            "par": 4,
+            "yardage": 418,
+            "strokeIndex": 15
+          },
+          {
+            "id": "171377",
+            "number": 17,
+            "par": 3,
+            "yardage": 192,
+            "strokeIndex": 17
+          },
+          {
+            "id": "171378",
+            "number": 18,
+            "par": 4,
+            "yardage": 465,
+            "strokeIndex": 3
+          }
+        ]
+      },
+      {
+        "id": "281493",
+        "name": "NEGRAS",
+        "displayName": "NEGRAS",
+        "gender": "Male",
+        "status": "active",
+        "rawStatus": "Active",
+        "holes": 18,
+        "par": 72,
+        "courseRating": 74.3,
+        "slopeRating": 142,
+        "bogeyRating": 100.6,
+        "totalYards": 7326,
+        "totalMeters": null,
+        "frontRating": 36.6,
+        "frontSlope": 143,
+        "frontBogeyRating": 49.9,
+        "backRating": 37.7,
+        "backSlope": 140,
+        "backBogeyRating": 50.7,
+        "isShorter": null,
+        "strokeAllocation": true,
+        "eligibleSides": [],
+        "ratings": [
+          {
+            "type": "total",
+            "rawType": "Total",
+            "courseRating": 74.3,
+            "slopeRating": 142,
+            "bogeyRating": 100.6
+          },
+          {
+            "type": "front",
+            "rawType": "Front",
+            "courseRating": 36.6,
+            "slopeRating": 143,
+            "bogeyRating": 49.9
+          },
+          {
+            "type": "back",
+            "rawType": "Back",
+            "courseRating": 37.7,
+            "slopeRating": 140,
+            "bogeyRating": 50.7
+          }
+        ],
+        "holeData": [
+          {
+            "id": "2485456",
+            "number": 1,
+            "par": 4,
+            "yardage": 440,
+            "strokeIndex": 10
+          },
+          {
+            "id": "2485457",
+            "number": 2,
+            "par": 3,
+            "yardage": 193,
+            "strokeIndex": 16
+          },
+          {
+            "id": "2485458",
+            "number": 3,
+            "par": 4,
+            "yardage": 421,
+            "strokeIndex": 4
+          },
+          {
+            "id": "2485459",
+            "number": 4,
+            "par": 5,
+            "yardage": 538,
+            "strokeIndex": 2
+          },
+          {
+            "id": "2485460",
+            "number": 5,
+            "par": 4,
+            "yardage": 428,
+            "strokeIndex": 14
+          },
+          {
+            "id": "2485461",
+            "number": 6,
+            "par": 4,
+            "yardage": 375,
+            "strokeIndex": 18
+          },
+          {
+            "id": "2485462",
+            "number": 7,
+            "par": 3,
+            "yardage": 199,
+            "strokeIndex": 8
+          },
+          {
+            "id": "2485463",
+            "number": 8,
+            "par": 4,
+            "yardage": 425,
+            "strokeIndex": 12
+          },
+          {
+            "id": "2485464",
+            "number": 9,
+            "par": 5,
+            "yardage": 552,
+            "strokeIndex": 6
+          },
+          {
+            "id": "2485465",
+            "number": 10,
+            "par": 5,
+            "yardage": 567,
+            "strokeIndex": 13
+          },
+          {
+            "id": "2485466",
+            "number": 11,
+            "par": 4,
+            "yardage": 393,
+            "strokeIndex": 11
+          },
+          {
+            "id": "2485467",
+            "number": 12,
+            "par": 3,
+            "yardage": 163,
+            "strokeIndex": 9
+          },
+          {
+            "id": "2485468",
+            "number": 13,
+            "par": 4,
+            "yardage": 402,
+            "strokeIndex": 7
+          },
+          {
+            "id": "2485469",
+            "number": 14,
+            "par": 4,
+            "yardage": 505,
+            "strokeIndex": 1
+          },
+          {
+            "id": "2485470",
+            "number": 15,
+            "par": 5,
+            "yardage": 613,
+            "strokeIndex": 5
+          },
+          {
+            "id": "2485471",
+            "number": 16,
+            "par": 4,
+            "yardage": 428,
+            "strokeIndex": 15
+          },
+          {
+            "id": "2485472",
+            "number": 17,
+            "par": 3,
+            "yardage": 213,
+            "strokeIndex": 17
+          },
+          {
+            "id": "2485473",
+            "number": 18,
+            "par": 4,
+            "yardage": 471,
+            "strokeIndex": 3
+          }
+        ]
+      }
+    ],
+    "endpoint": "/Courses/23233/TeeSetRatingsForScorePosting.json",
+    "httpStatus": 200,
+    "fetchedAt": "2026-10-06T23:04:47.443Z"
+  },
+  "trace": [
+    {
+      "endpoint": "/crsCourseMethods.asmx/GetCourseDetails.json",
+      "method": "GET",
+      "httpStatus": 200,
+      "outcome": "PASS",
+      "durationMs": 34
+    },
+    {
+      "endpoint": "/Courses/23233/TeeSetRatingsForScorePosting.json",
+      "method": "GET",
+      "httpStatus": 200,
+      "outcome": "PASS",
+      "durationMs": 94
+    }
+  ],
+  "catalogComparison": [
+    {
+      "id": "tee-la-vista-club-current-white",
+      "courseId": "course-la-vista-club-current",
+      "name": "Blancas",
+      "holes": [
+        {
+          "par": 4,
+          "yards": 392,
+          "hole_number": 1,
+          "stroke_index": 5
+        },
+        {
+          "par": 3,
+          "yards": 165,
+          "hole_number": 2,
+          "stroke_index": 17
+        },
+        {
+          "par": 4,
+          "yards": 398,
+          "hole_number": 3,
+          "stroke_index": 7
+        },
+        {
+          "par": 5,
+          "yards": 483,
+          "hole_number": 4,
+          "stroke_index": 1
+        },
+        {
+          "par": 4,
+          "yards": 389,
+          "hole_number": 5,
+          "stroke_index": 9
+        },
+        {
+          "par": 4,
+          "yards": 343,
+          "hole_number": 6,
+          "stroke_index": 13
+        },
+        {
+          "par": 3,
+          "yards": 158,
+          "hole_number": 7,
+          "stroke_index": 15
+        },
+        {
+          "par": 4,
+          "yards": 374,
+          "hole_number": 8,
+          "stroke_index": 3
+        },
+        {
+          "par": 5,
+          "yards": 488,
+          "hole_number": 9,
+          "stroke_index": 11
+        },
+        {
+          "par": 5,
+          "yards": 529,
+          "hole_number": 10,
+          "stroke_index": 12
+        },
+        {
+          "par": 4,
+          "yards": 358,
+          "hole_number": 11,
+          "stroke_index": 8
+        },
+        {
+          "par": 3,
+          "yards": 138,
+          "hole_number": 12,
+          "stroke_index": 18
+        },
+        {
+          "par": 4,
+          "yards": 368,
+          "hole_number": 13,
+          "stroke_index": 14
+        },
+        {
+          "par": 4,
+          "yards": 433,
+          "hole_number": 14,
+          "stroke_index": 2
+        },
+        {
+          "par": 5,
+          "yards": 581,
+          "hole_number": 15,
+          "stroke_index": 4
+        },
+        {
+          "par": 4,
+          "yards": 395,
+          "hole_number": 16,
+          "stroke_index": 10
+        },
+        {
+          "par": 3,
+          "yards": 173,
+          "hole_number": 17,
+          "stroke_index": 16
+        },
+        {
+          "par": 4,
+          "yards": 425,
+          "hole_number": 18,
+          "stroke_index": 6
+        }
+      ]
+    },
+    {
+      "id": "tee-la-vista-club-current-gold",
+      "courseId": "course-la-vista-club-current",
+      "name": "Doradas",
+      "holes": [
+        {
+          "par": 4,
+          "yards": 362,
+          "hole_number": 1,
+          "stroke_index": 5
+        },
+        {
+          "par": 3,
+          "yards": 136,
+          "hole_number": 2,
+          "stroke_index": 17
+        },
+        {
+          "par": 4,
+          "yards": 358,
+          "hole_number": 3,
+          "stroke_index": 7
+        },
+        {
+          "par": 5,
+          "yards": 469,
+          "hole_number": 4,
+          "stroke_index": 1
+        },
+        {
+          "par": 4,
+          "yards": 365,
+          "hole_number": 5,
+          "stroke_index": 9
+        },
+        {
+          "par": 4,
+          "yards": 323,
+          "hole_number": 6,
+          "stroke_index": 13
+        },
+        {
+          "par": 3,
+          "yards": 138,
+          "hole_number": 7,
+          "stroke_index": 15
+        },
+        {
+          "par": 4,
+          "yards": 334,
+          "hole_number": 8,
+          "stroke_index": 3
+        },
+        {
+          "par": 5,
+          "yards": 457,
+          "hole_number": 9,
+          "stroke_index": 11
+        },
+        {
+          "par": 5,
+          "yards": 490,
+          "hole_number": 10,
+          "stroke_index": 12
+        },
+        {
+          "par": 4,
+          "yards": 326,
+          "hole_number": 11,
+          "stroke_index": 8
+        },
+        {
+          "par": 3,
+          "yards": 108,
+          "hole_number": 12,
+          "stroke_index": 18
+        },
+        {
+          "par": 4,
+          "yards": 326,
+          "hole_number": 13,
+          "stroke_index": 14
+        },
+        {
+          "par": 4,
+          "yards": 392,
+          "hole_number": 14,
+          "stroke_index": 2
+        },
+        {
+          "par": 5,
+          "yards": 542,
+          "hole_number": 15,
+          "stroke_index": 4
+        },
+        {
+          "par": 4,
+          "yards": 368,
+          "hole_number": 16,
+          "stroke_index": 10
+        },
+        {
+          "par": 3,
+          "yards": 156,
+          "hole_number": 17,
+          "stroke_index": 16
+        },
+        {
+          "par": 4,
+          "yards": 388,
+          "hole_number": 18,
+          "stroke_index": 6
+        }
+      ]
+    }
+  ],
+  "integrity": {
+    "beforeCount": 26,
+    "afterCount": 26,
+    "changed": [],
+    "providerCount": 6,
+    "receiptCount": 0,
+    "qa24": {
+      "id": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
+      "localId": "rrouggse",
+      "version": 4,
+      "lifecycle": "live",
+      "scoresHash": "66e1869c4a4a09292175d295235e2762",
+      "snapshotHash": "16c685ee0777efdeeb9a7795e313446a"
+    }
+  }
+}

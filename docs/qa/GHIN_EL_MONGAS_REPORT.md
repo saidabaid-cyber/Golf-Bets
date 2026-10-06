@@ -1,6 +1,147 @@
+# GHIN FULL CYCLE — continuación de mapping real
+
+Estado: **NO_EXISTING_POSTABLE_ROUND. No DONE.**
+DEV exclusivo: https://dev.thebackyard.com.mx. Branch integration/backyard-current.
+Inicio: 6701089f443a7e2f5d635a175b5f6fd89121b406. Código probado/desplegado: 7586232a14ae4d1767b0714c964ee0bdeea33d29.
+
+## COURSE_LOOKUP
+
+PASS live con la sesión legítima del GHIN vinculado a el_mongas.
+Facility search, course search, details y tee detail respondieron HTTP 200.
+Facility **19886**, course **23233**, LA VISTA COUNTRY CLUB, 18 hoyos, par 72.
+Evidencia normalizada pública: [GHIN_LA_VISTA_LOOKUP.json](GHIN_LA_VISTA_LOOKUP.json).
+No se repitieron scoring record ni imports1/2. No se consultaron otras cuentas.
+
+## COURSE_MAPPING
+
+PASS. El link oficial está en course-la-vista; las rondas congelaron
+course-la-vista-club-current, la tarjeta del club versionada. Los IDs externos
+son únicos y permanecen en sus links canónicos. Se añadió ghin_provider_alias_v1
+a metadata del course actual y de Doradas; dos filas de catálogo, DB DEV
+bymeopxkxapfizeeqeyb. No nueva tabla/migración, no cambios RLS ni snapshot.
+DML auditado e idempotente: [GHIN_LA_VISTA_MAPPING_DEV.sql](GHIN_LA_VISTA_MAPPING_DEV.sql).
+El resolver exige links CONFIRMED, club, rating/género, par, yardaje, geometría
+y evidencia congelada; no usa un nombre como prueba. Ante drift devuelve null.
+No se ejecutó rollback. La adición se puede retirar de manera controlada
+eliminando sólo esas claves de metadata si una revisión futura lo requiere;
+no se necesitan restauraciones de rondas, tablas ni catálogo.
+
+## TEE_MAPPING
+
+| Tee | Snapshot Backyard | GHIN live | Resultado |
+|---|---|---|---|
+| Doradas | MEN,68.4/121,6038yd,par72 |106088 Male,68.4/121,6038yd,par72|Alias físico CONFIRMED|
+| Blancas |MEN,70.8/125,6590yd,par72|106087 Male,70.8/128,6591yd|No CONFIRMED|
+| Blancas femenina |El snapshot es MEN70.8/125|106089 Female,77.4/153,6591yd|No compatible|
+
+Doradas coincide en las **18 geometrías par/yardaje**. Los 18 stroke indexes
+difieren entre las versiones club y provider: se registra esa diferencia y
+se conserva el freeze Backyard. No se afirma equivalencia de asignación
+ni se recalculan apuestas/handicaps históricos. Blancas además difiere en
+slope y H18 yardaje425 vs426; no se corrige una ronda para hacerla postable.
+
+## SCORE_POSTING_ENTITLEMENT
+
+PASS de lectura: /Courses/23233/TeeSetRatingsForScorePosting.json, HTTP200,
+seis tees: 106087, 106088, 106089, 106090, 280984 y 281493. No hubo bypass.
+La lista de tees permitidas no reemplaza el guard de género/rating del jugador.
+
+## EXISTING_CANDIDATE
+
+**NO_EXISTING_POSTABLE_ROUND**, 22 completadas revisadas.
+Una lectura explícita /golfers/search.json confirmó la identidad vinculada
+y género **F**, HTTP200,2026-10-06T23:22:40.388Z. No se dedujo del nombre,
+no se devuelve nombre/GHIN completo al navegador ni se cambia el perfil.
+12 Doradas resuelven el alias pero congelaron MEN; GHIN Doradas sólo es Male.
+9 Blancas no tienen rating compatible; 1 Campestre Puebla permanece sin
+course+tee confirmado. Los conteos usan tee individual del owner, no el label
+global de una card de grupo. Preflight real conservado en el manifest.
+No QA25: el bloqueo no es sólo de identidad de catálogo. QA24 no se toca.
+
+## DRY_RUN
+
+Preflight local con rondas persistidas y datos GHIN live: 0 compatibles.
+No se construye payload ni fingerprint de un candidato inválido; dry run
+READY de posting no ejecutado. No se habilitó el flag privado.
+
+## POST / PROVIDER_VERIFY / ROUND_TRIP / IDEMPOTENCE
+
+**No ejecutados** por el guard anterior. 0 provider POST, 0 receipts nuevos.
+No se inventa provider score ID ni se declara PASS usando fixtures.
+La importación 1/2 anterior sigue PASS: 6 nuevas / 0 nuevas / 0 duplicados.
+Segundo posting attempt no ejecutado, porque no existe un primero válido.
+
+## UNIFIED_HISTORY
+
+Revisado físicamente en DEV después del deploy del resolver. Resumen conserva
+22 completas, promedio 82.8, mejor 71 y 18 birdies; GHIN 30.8 y Backyard 5.5 separados.
+Rondas muestra 6 GHIN de sólo lectura con Ajustado, 22 completas Backyard-only y
+la cancelada preservada; 0 vinculadas, 0 ambiguas. El alias de catálogo no
+fabrica un match de score. No se inventan stats ni se duplican rondas.
+
+## REQUEST_BUDGET
+
+Ventana desde23:03Z, sólo sesión del agente. Cuatro POST a /api/profile/ghin/courses
+(consultas read-only, no score posting),seis GET upstream necesarios, todos200.
+Cloud GET 3 / POST 0 / rounds 0 observados. Dos full bundles legítimos por cargas deliberadas
+de las dos UI nuevas;521587B cada uno, knownCloud=false, apply/gate success.
+Un evento online produjo lectura condicional259B.0 full inesperados,0 retries,
+0 failures/409,0 storm,0 polling. No se reinvestigó cloud ni se cambió su código.
+Reposo23:22:41–23:24:41Z:120s,0 llamadas cloud y0 GHIN periódicas.
+Lookup requests: 148 B total; respuestas: 34,767 B total, máxima 23,785 B. Request máximo: 41 B.
+GHIN upstream raw bytes y conteos exhaustivos de GET perfil/import-page no
+instrumentados: null, no cero. No confundir estas cuatro consultas con POST
+a /scores/hbh.json: este último recibió **0**.
+
+## QA24 / BASELINE
+
+PASS: 26/26 IDs, versiones y hashes de snapshot/scores intactos: 22 completed,
+1 cancelled, 3 live. QA24 v4, ID 16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d, live H2, H1 = 5/6.
+SnapshotMD5 16c685ee0777efdeeb9a7795e313446a; scoresMD5 66e1869c4a4a09292175d295235e2762.
+GHIN 6, receipts 0, Backyard Index 5.5, Atest 11/20 = 55% y GHIN 30.8 preservados.
+No rondas nuevas, edición, cancelación ni cleanup.
+
+## TESTS
+
+142/142 dirigidos GHIN; suite de 4,598: 4,593 PASS, exactamente 5 baseline, 0 nuevos FAIL.
+117/117 scripts. Typecheck, lint y build PASS. Baseline: equipment-owner-review,
+equipment-ui-contract,final-brand-ghin-closeout Equipment,iphone-capture Rules,
+nightly-catalog-quality equipment-gaps. Un fallo de fixture VM se corrigió en
+el test nuevo; restricciones locales de localhost/temp/build se validaron
+con el mismo runner autorizado y sin credenciales. Ninguna falla nueva final.
+Nuevos tests verifican sesión/selector/privacidad/DEV guards, género explícito,
+no auto lookup/coalescing,alias conservador,geometría congelada y lectura
+batch de50cards con dos consultas de catálogo,en proceso local,sin Vercel.
+
+## GIT
+
+Commits de esta continuación: c2a5503 lookup,52c99d6 género/estado,7586232 alias/regresiones.
+Archivos funcionales: route profile/ghin/courses;ghin-course-lookup;read-only
+panel/hook y CSS scoped;core/course-lookup/catalog-alias/score-import.server;
+tests GHIN. DML/facts/manifest/guía/reporte son auditoría del mismo alcance.
+El commit final de documentación y su SHA se entregan tras push/health.
+main,beta,Production,app.thebackyard.com.mx y rama de campos no tocados.
+
+## UNRESOLVED
+
+No tarjeta completed compatible con el género/rating del GHIN vinculado.
+Posting,provider verify,round-trip y segundo intento no ejecutados.
+Confirmación de clean login posterior al import aún pendiente; el Safari
+privado previo sigue PASS pero no sustituye esa evidencia.
+DEV del código READY/health200/buildSha7586232a14ae4d1767b0714c964ee0bdeea33d29.
+Todo queda persistido para revisión; no se declara DONE.
+
+---
+
+# Evidencia anterior de importación — checkpoint preservado
+
+Lo siguiente documenta la fase anterior, no nuevas ejecuciones ni el estado
+actual del mapping. Su bloqueo anterior por identidad fue parcialmente
+resuelto arriba; el bloqueo actual es la incompatibilidad de rating/género.
+
 # GHIN Full Cycle — importación real de el_mongas
 
-Estado actual: **POSTING_BLOCKED_MAPPING. No DONE del ciclo completo.**
+Estado de aquel checkpoint: **POSTING_BLOCKED_MAPPING. No DONE del ciclo completo.**
 Continuación desde `b1030d00b27f9a6a259c32c5200eea4063636bb1`,
 exclusivamente `integration/backyard-current` y **https://dev.thebackyard.com.mx**.
 El smoke limpio de hydration permanece **PASS externo**, certificado por el
