@@ -191,7 +191,9 @@ import type { CompletionSection } from "../lib/profile-completion";
 import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, cloudDraftApplyPlan, cloudSyncPayloadFingerprint, cloudSyncUploadReasons, cloudSyncUploadRequired, collectLocalCloudData, downloadCloudData, findAmbiguousCloudConflicts, hasLocalCloudPreferenceState, isCloudFieldConflict, mergeLocalAndCloud, persistCloudMetadata, resolveAmbiguousCloudConflicts, restoreLocalRoundUi, stableValue, trackLocalCloudCheckpoint, trackLocalCloudEdits, type CloudDataBundle, type CloudDataConflict, recordCloudDeletion, uploadCloudData, withCloudAuthRetry } from "../lib/cloud-sync";
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
-import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName, syncAccountRoundIndex } from "../lib/account-primary-player";
+import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, projectAccountPrimaryFrequentPlayers, syncAccountRoundIndex } from "../lib/account-primary-player";
+import { CloudHydrationBoundary } from "../lib/cloud-hydration";
+import { roundDraftHydrationView } from "../lib/round-draft-hydration-view";
 import { cloudCycleErrorFields, runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { CloudCanonicalSession } from "../lib/cloud-canonical-session";
 import { CloudConflictResolutionBuffer } from "../lib/cloud-conflict-resolution";
@@ -591,6 +593,7 @@ function GolfBetsApp() {
   const [draftAvailable, setDraftAvailable] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"saving" | "saved" | "error">("saved");
   const offlineDeviceId = useRef("");
+  const cloudHydrationBoundary = useRef(new CloudHydrationBoundary());
   const [holeSummary, setHoleSummary] = useState<string[]>([]);
   const [holeValidationErrors, setHoleValidationErrors] = useState<string[]>([]);
   const [holeBetEditor, setHoleBetEditor] = useState<"loba" | "ballFriend" | null>(null);
@@ -617,6 +620,7 @@ function GolfBetsApp() {
   const [historyMonth, setHistoryMonth] = useState("");
   const [frequentPlayers, setFrequentPlayers] = useState<FrequentPlayer[]>([]);
   const [frequentGroups, setFrequentGroups] = useState<FrequentGroup[]>([]);
+  const displayedFrequentPlayers = useMemo(() => projectAccountPrimaryFrequentPlayers(frequentPlayers, identity, accountIndex), [frequentPlayers, identity, accountIndex]);
   const [roundTemplateOrigin, setRoundTemplateOrigin] = useState<RoundTemplateOrigin | null>(null);
   const [groupName, setGroupName] = useState("");
   const [frequentGroupDraft, setFrequentGroupDraft] = useState<FrequentGroup | null>(null);
@@ -741,6 +745,10 @@ function GolfBetsApp() {
     setRoundStartedAt(current => current ?? startedAt);
     void recordProductEvent({ eventId: `round-created-${roundId}`, eventName: "round_created", accessToken: identity.accessToken, occurredAt: startedAt, metadata: { source: "round", roundHoles, playerCount: players.length } });
     return startedAt;
+  }
+  function playersForRoundStart() {
+    const locked = Boolean(roundStartedAt || roundReviewPending);
+    return applyRoundCourseHandicaps(syncAccountRoundIndex(players, identity.userId, accountIndex, locked), playerTeeAssignments, course, new Date().toISOString(), locked);
   }
   useEffect(() => {
     currentIndexRef.current = currentIndex;
@@ -910,9 +918,13 @@ function GolfBetsApp() {
   const completedHoles = useMemo(() => new Set(order.filter(number => players.length > 0 && players.every(player => typeof scores[number]?.[player.id] === "number"))), [order, players, scores]);
   const scoreDraft = useMemo(() => holeCapture(scores, scoreEdits, hole, players), [scores, scoreEdits, hole, players]);
   const scoreCaptureComplete = isHoleCaptureComplete(scores, scoreEdits, holeNumber, players);
-  const missingActiveHandicapPlayers = useMemo(() => roundPresentation.playMode === 'score_only' ? [] : missingHandicapsForActiveBets(players, bets, supplementalBets), [roundPresentation.playMode, players, bets, supplementalBets]);
+  const setupPlayers = useMemo(() => {
+    const locked = Boolean(roundStartedAt || roundReviewPending);
+    return applyRoundCourseHandicaps(syncAccountRoundIndex(players, identity.userId, accountIndex, locked), playerTeeAssignments, course, roundStartedAt || new Date(0).toISOString(), locked);
+  }, [players, identity.userId, accountIndex, playerTeeAssignments, course, roundStartedAt, roundReviewPending]);
+  const missingActiveHandicapPlayers = useMemo(() => roundPresentation.playMode === 'score_only' ? [] : missingHandicapsForActiveBets(setupPlayers, bets, supplementalBets), [roundPresentation.playMode, setupPlayers, bets, supplementalBets]);
   const betConfigurationIssues = useMemo(() => roundPresentation.playMode === 'score_only' ? [] : collectBetConfigurationIssues({
-    players,
+    players: setupPlayers,
     ownerId,
     bets,
     segments,
@@ -922,12 +934,12 @@ function GolfBetsApp() {
     roundHoles,
     startHole,
     handicapBasis: roundHandicapBasis,
-  }), [roundPresentation.playMode, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, roundHoles, startHole, roundHandicapBasis]);
+  }), [roundPresentation.playMode, setupPlayers, ownerId, bets, segments, personalBets, supplementalBets, manualBets, roundHoles, startHole, roundHandicapBasis]);
   const roundSetupPreflight = useMemo(() => collectRoundSetupPreflightIssues({
     courseSelected,
-    players,
+    players: setupPlayers,
     betIssues: betConfigurationIssues,
-  }), [courseSelected, players, betConfigurationIssues]);
+  }), [courseSelected, setupPlayers, betConfigurationIssues]);
   const wizardBets = useMemo(() => buildWizardBetCatalog({ bets, personalBets, supplementalBets, manualBets, players, ownerId }), [bets, personalBets, supplementalBets, manualBets, players, ownerId]);
   useEffect(() => {
     if (!courseSelected) { setPlayerTeeAssignments([]); return; }
@@ -937,8 +949,10 @@ function GolfBetsApp() {
     if (!courseSelected) return;
     if (!roundStartedAt && !roundReviewPending) setCourse(current => withPlayerCourseCards(current, playerTeeAssignments));
     const locked = Boolean(roundStartedAt || roundReviewPending);
-    setPlayers((current) => applyRoundCourseHandicaps(syncAccountRoundIndex(current, identity.userId, accountIndex, locked), playerTeeAssignments, course, new Date().toISOString(), locked));
-  }, [course, courseSelected, playerTeeAssignments, roundReviewPending, roundStartedAt, identity.userId, accountIndex]);
+    // Profile/provider loading is a read. Bind its current Index only at an
+    // explicit setup/start action, never as a hydration-triggered mutation.
+    setPlayers((current) => applyRoundCourseHandicaps(current, playerTeeAssignments, course, new Date().toISOString(), locked));
+  }, [course, courseSelected, playerTeeAssignments, roundReviewPending, roundStartedAt]);
   useEffect(() => {
     setNavigationGuard((next) => {
       const safeDestination = activeBetSafeDestination(next, draftAvailable && !roundClosed && betConfigurationIssues.length > 0);
@@ -972,6 +986,8 @@ function GolfBetsApp() {
     }
     const draft = normalizeRoundDraft(value, resolvedOwnerIdForRoundDraft(value, identity.userId));
     const draftCore = draft ? resolveRoundDraftCore(draft, identity.userId) : null;
+    const hydratedView = draftCore ? roundDraftHydrationView(draft, laVista, draftCore) : null;
+    cloudHydrationBoundary.current.rememberDraft(value, hydratedView);
     setRoundPresentation(normalizeRoundPresentation(draft?.presentation));
     const draftRoundHoles: 9 | 18 = draftCore?.roundHoles ?? 18;
     setRoundClosed(draft?.lifecycleState === "cancelled");
@@ -992,7 +1008,7 @@ function GolfBetsApp() {
       setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null);
     }
     if (draft && draftCore) {
-        setCourse(draft.course ? withDefaultLaVistaRules(draft.course) : laVista);
+        setCourse(hydratedView!.course);
         setCourseSelected(draft.courseSelected === true);
         setCourseSetupStage(draft.courseSelected === true ? "details" : draft.course && draft.courseIdentity ? "tee" : "course");
         setPendingCourseIdentity(draft.courseSelected === true ? null : normalizeRoundSetupCourseIdentity(draft.courseIdentity));
@@ -1000,8 +1016,8 @@ function GolfBetsApp() {
         setStartHole(draftCore.startHole);
         setRoundHoles(draftCore.roundHoles);
         setRoundHandicapBasis(normalizeRoundHandicapBasis(draft.handicapBasis));
-        setPlayers(draftCore.players);
-        setPlayerTeeAssignments(reconcilePlayerTeeAssignments(draft.playerTeeAssignments, draftCore.players, draft.course ? withDefaultLaVistaRules(draft.course) : laVista, new Date().toISOString()));
+        setPlayers(hydratedView!.players);
+        setPlayerTeeAssignments(hydratedView!.playerTeeAssignments);
         setOwnerId(draftCore.ownerId);
         const draftPlayerIds = draftCore.players.map((p: Player) => p.id);
         const restored = restoreBetConfig(draft.bets, draftPlayerIds, {
@@ -1021,34 +1037,7 @@ function GolfBetsApp() {
           const segmentSize = [3, 6, 9, 18].includes(draft.bets?.foursome?.segmentSize) ? draft.bets.foursome.segmentSize : 6;
           setSegments(normalizeFoursomeSegments(draft.segments, draftOrder, segmentSize));
         }
-        if (draft.personalBets) setPersonalBets(draft.personalBets.map((b: any) => ({
-          id: b.id,
-          enabled: b.enabled,
-          rivalMode: b.rivalMode,
-          rivalPlayerId: b.rivalPlayerId,
-          externalRivalId: b.externalRivalId,
-          rivalHandicap: b.rivalHandicap ?? null,
-          nassauVersion: b.nassauVersion,
-          carryEnabled: b.carryEnabled,
-          rivalName: b.rivalName,
-          externalScores: b.externalScores && typeof b.externalScores === "object" && !Array.isArray(b.externalScores) ? b.externalScores : {},
-          baseValue: Object.hasOwn(b, "baseValue") ? b.baseValue : undefined,
-          advantageReceiver: b.nassauVersion === 2
-            ? b.advantageReceiver
-            : (b.advantageReceiver === "owner" || b.advantageReceiver === "rival" || b.advantageReceiver === "none")
-              ? b.advantageReceiver
-              : b.advantageReceiverId ? (b.advantageReceiverId === draftCore.ownerId ? "owner" : "rival")
-                : b.advantageStrokes === 0 ? "none" : undefined,
-          advantageStrokes: Object.hasOwn(b, "advantageStrokes") ? b.advantageStrokes : undefined,
-          back9Multiplier: b.back9Multiplier,
-          pressureMultiplier: b.pressureMultiplier,
-          pressureNine: b.pressureNine,
-          advantageMode: b.advantageMode,
-          ownerIndexSnapshot: b.ownerIndexSnapshot,
-          rivalIndexSnapshot: b.rivalIndexSnapshot,
-          slidingAdvantage: b.slidingAdvantage,
-          components: b.components,
-        })));
+        setPersonalBets(hydratedView!.personalBets as PersonalBet[]);
         if (Array.isArray(draft.manualBets)) setManualBets(draft.manualBets.map((bet: ManualBet) => ({ ...bet, name: typeof bet.name === "string" ? bet.name : "" })));
         setSupplementalBets(normalizeSupplementalBets(draft.supplementalBets, draftRoundHoles));
         setPutts(draft.putts && typeof draft.putts === "object" ? draft.putts : {});
@@ -1092,13 +1081,14 @@ function GolfBetsApp() {
 
   useEffect(() => {
     let cancelled = false;
+    cloudHydrationBoundary.current.clear();
     setHydrated(false);
     setHydratedWorkspaceOwner(null);
     const hydrate = async () => {
       try {
         offlineDeviceId.current = await getOfflineDeviceId();
         if (!cancelled && ownsLocalWorkspace(localStorage, identity.userId)) {
-          await restoreOfflineWorkspace(identity.userId, localStorage, identity.defaultHandicap, offlineDeviceId.current);
+          await restoreOfflineWorkspace(identity.userId, localStorage, liveIdentity.current.defaultHandicap, offlineDeviceId.current);
         }
       } catch {
         if (!cancelled) setSaveStatus("error");
@@ -1118,7 +1108,11 @@ function GolfBetsApp() {
         setCourses(mergedCourses);
         setFavoriteCourseIds(normalizeCourseIds(readStoredJson<unknown>(localStorage, coursePreferenceStorageKey("favorites", identity.userId), []), availableCourseIds));
         setRecentCourseIds(normalizeCourseIds(readStoredJson<unknown>(localStorage, coursePreferenceStorageKey("recents", identity.userId), []), availableCourseIds));
-        if (Array.isArray(savedHistory)) setHistory((savedHistory as RoundSnapshot[]).map(normalizeHistorySnapshot));
+        if (Array.isArray(savedHistory)) {
+          const viewHistory = (savedHistory as RoundSnapshot[]).map(normalizeHistorySnapshot);
+          cloudHydrationBoundary.current.rememberHistory(savedHistory as RoundSnapshot[], viewHistory);
+          setHistory(viewHistory);
+        }
         if (Array.isArray(savedRivals)) setSavedPersonalRivals(savedRivals);
         if (Array.isArray(savedFrequentPlayers)) setFrequentPlayers(savedFrequentPlayers);
         setFrequentGroups(savedFrequentGroups);
@@ -1136,7 +1130,7 @@ function GolfBetsApp() {
     };
     void hydrate();
     return () => { cancelled = true; };
-  }, [identity.userId, identity.mode, identity.defaultHandicap, setTab, applyDraft]);
+  }, [identity.userId, identity.mode, setTab, applyDraft]);
 
   // Local navigation is separate from synchronized golf data: no sync loops,
   // no extra round, and no cursor inherited from a different account/round.
@@ -1150,7 +1144,7 @@ function GolfBetsApp() {
   // a newer checkpoint. A delayed passive effect could capture the NEW fence
   // revision with OLD scores, making its 250 ms timer look current again.
   useLayoutEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || hydratedWorkspaceOwner !== identity.userId) return;
     setSaveStatus("saving");
     const revision = localPersistRevision.current;
     const persist = () => {
@@ -1160,10 +1154,10 @@ function GolfBetsApp() {
       try {
         const draft = withDerivedRoundLifecycle({ version: 11, course, courseSelected, courseIdentity: courseSelected ? undefined : pendingCourseIdentity ?? undefined, playerTeeAssignments, startHole, roundHoles, handicapBasis: roundHandicapBasis, presentation: normalizeRoundPresentation(roundPresentation), players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scorecardPhotoIds, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending, templateOrigin: roundTemplateOrigin ?? undefined });
         const previousFingerprint = cloudSyncPayloadFingerprint(collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current));
-        const activeDraft = roundClosed ? null : draft;
+        const activeDraft = roundClosed ? null : cloudHydrationBoundary.current.projectDraft(draft);
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
-        localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(history));
+        localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(cloudHydrationBoundary.current.projectHistory(history)));
         localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(savedPersonalRivals));
         localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(frequentPlayers));
         localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(frequentGroups));
@@ -1171,7 +1165,7 @@ function GolfBetsApp() {
         localStorage.setItem(STORAGE_KEYS.notifications, String(notificationsEnabled));
         localStorage.setItem(coursePreferenceStorageKey("favorites", identity.userId), JSON.stringify(favoriteCourseIds));
         localStorage.setItem(coursePreferenceStorageKey("recents", identity.userId), JSON.stringify(recentCourseIds));
-        localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(!roundClosed && hasRoundProgress(draft) ? draft : null));
+        localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(!roundClosed && hasRoundProgress(draft) ? activeDraft : null));
         setDraftAvailable(!roundClosed && hasRoundProgress(draft));
         const offline = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
         offline.deviceId = offlineDeviceId.current;
@@ -1188,7 +1182,7 @@ function GolfBetsApp() {
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, pendingCourseIdentity, playerTeeAssignments, startHole, roundHoles, roundHandicapBasis, roundPresentation, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, scorecardPhotoIds, putts, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, roundTemplateOrigin, currentIndex]);
+  }, [hydrated, hydratedWorkspaceOwner, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, pendingCourseIdentity, playerTeeAssignments, startHole, roundHoles, roundHandicapBasis, roundPresentation, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, scorecardPhotoIds, putts, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, roundTemplateOrigin, currentIndex]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1203,20 +1197,6 @@ function GolfBetsApp() {
       document.removeEventListener("visibilitychange", flushWhenHidden);
     };
   }, [hydrated]);
-
-  useEffect(() => {
-    if (!hydrated || identity.mode !== "authenticated" || !identity.displayName.trim()) return;
-    const profile = {
-      userId: identity.userId,
-      displayName: identity.displayName,
-      email: identity.email,
-      avatarUrl: identity.avatarUrl,
-      defaultHandicap: identity.defaultHandicap,
-    };
-    const updatedAt = new Date().toISOString();
-    setFrequentPlayers((current) => syncAccountPrimaryFrequentPlayer(current, profile, updatedAt, accountIndex));
-    setPlayers((current) => syncLinkedRoundPlayerName(current, profile));
-  }, [hydrated, identity.mode, identity.userId, identity.displayName, identity.email, identity.avatarUrl, identity.defaultHandicap, accountIndex]);
 
   const applyCloudBundle = useCallback((data: CloudDataBundle, local: CloudDataBundle) => {
     // Cloud responses can arrive after a local-first finalization. Reconcile
@@ -1251,6 +1231,7 @@ function GolfBetsApp() {
     }
     const mergedCourses = mergeDefaultCourses(reconciled.courses);
     const normalizedHistory = reconciled.history.map(normalizeHistorySnapshot);
+    cloudHydrationBoundary.current.rememberHistory(reconciled.history, normalizedHistory);
     if (changed(local.courses, reconciled.courses)) setCourses(mergedCourses);
     if (changed(local.history, normalizedHistory)) setHistory(normalizedHistory);
     if (changed(local.rivals, reconciled.rivals)) setSavedPersonalRivals(reconciled.rivals);
@@ -1259,7 +1240,7 @@ function GolfBetsApp() {
     if (local.preferences.highContrast !== reconciled.preferences.highContrast) setHighContrast(reconciled.preferences.highContrast);
     if (!Object.is(local.preferences.defaultHandicap, reconciled.preferences.defaultHandicap)) applyCloudPreferences(reconciled.preferences);
     localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(mergedCourses));
-    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(normalizedHistory));
+    localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(cloudHydrationBoundary.current.projectHistory(normalizedHistory)));
     localStorage.setItem(STORAGE_KEYS.rivals, JSON.stringify(reconciled.rivals));
     localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(reconciled.frequentPlayers));
     localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(reconciled.frequentGroups));
@@ -1857,7 +1838,7 @@ function GolfBetsApp() {
   function editActiveRound() {
     commitFocusedNumericCapture();
     if (flushLocalState.current?.() === false) { setFeedback("No pudimos guardar la captura. Conservamos la ronda abierta."); return; }
-    applyDraft(roundDraftPayload(), { preserveLocalUi: true });
+    applyDraft(cloudHydrationBoundary.current.projectDraft(roundDraftPayload()), { preserveLocalUi: true });
     setRoundSetupInitialStep(1); setEditingRound(true); setTab("setup");
   }
 
@@ -2215,7 +2196,7 @@ function GolfBetsApp() {
     try {
       if (localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return false;
       const previousDraft = readStoredJson<unknown>(window.localStorage, STORAGE_KEYS.draft, null);
-      const draft = persistPendingRoundReview(window.localStorage, roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true, startedAt, scorecardPhotoIds: savedPhotoIds }));
+      const draft = persistPendingRoundReview(window.localStorage, cloudHydrationBoundary.current.projectDraft(roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true, startedAt, scorecardPhotoIds: savedPhotoIds })));
       // Fence timers/read callbacks from the previous React render. Until the
       // next persistence effect installs its fresh closure, the verified
       // checkpoint is already durable and must not be overwritten by that render.
@@ -2243,7 +2224,7 @@ function GolfBetsApp() {
     try {
       if (localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return false;
       const previousDraft = readStoredJson<unknown>(window.localStorage, STORAGE_KEYS.draft, null);
-      const draft = roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false, startedAt, scorecardPhotoIds: savedPhotoIds });
+      const draft = cloudHydrationBoundary.current.projectDraft(roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false, startedAt, scorecardPhotoIds: savedPhotoIds }));
       // localStorage is the synchronous durability boundary used by Safari/PWA.
       // Metadata and the offline outbox are created only after exact readback.
       persistRoundDraftCheckpoint(window.localStorage, draft);
@@ -2511,13 +2492,13 @@ function GolfBetsApp() {
       applyFrequentGroupToDraft(intent.group, intent.selectedMemberIds, intent.scoreOnly === true);
       return;
     }
-    const loaded = intent.players.map((player) => ({ ...player, id: player.accountUserId ? accountPrimaryPlayerId(player.accountUserId) : makeId() }));
+    const loaded = syncAccountRoundIndex(intent.players.map((player) => ({ ...player, id: player.accountUserId ? accountPrimaryPlayerId(player.accountUserId) : makeId() })), identity.userId, accountIndex);
     setPlayers(loaded); setOwnerId(loaded.find((player) => player.accountUserId === identity.userId)?.id || loaded[0]?.id || ""); setBets(initialBets(loaded.map((player) => player.id)));
   }
 
   function applyFrequentGroupToDraft(group: FrequentGroup, selectedMemberIds: string[], scoreOnly = false) {
     const loaded = instantiateGroupGameTemplate(group, makeId, selectedMemberIds, frequentPlayers);
-    setPlayers(loaded.players); setOwnerId(loaded.players.find(player => player.accountUserId === identity.userId)?.id || loaded.ownerId); setStartHole(loaded.startHole); setRoundHoles(loaded.roundHoles); setRoundHandicapBasis(loaded.roundHandicapBasis);
+    setPlayers(syncAccountRoundIndex(loaded.players, identity.userId, accountIndex)); setOwnerId(loaded.players.find(player => player.accountUserId === identity.userId)?.id || loaded.ownerId); setStartHole(loaded.startHole); setRoundHoles(loaded.roundHoles); setRoundHandicapBasis(loaded.roundHandicapBasis);
     setBets(scoreOnly ? initialBets([]) : loaded.bets); setSegments(loaded.segments); setPersonalBets(scoreOnly ? [] : loaded.personalBets); setSupplementalBets(scoreOnly ? [] : loaded.supplementalBets); setManualBets(scoreOnly ? [] : loaded.manualBets);
     setRoundTemplateOrigin(loaded.origin);
     setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPutts({}); setAdvancedStats({}); setShots([]); setScoreEdits({});
@@ -4043,7 +4024,7 @@ function GolfBetsApp() {
         ballFriendSetup,
         templateOrigin: roundTemplateOrigin ?? undefined,
       })}
-      memoryContext={{ profile: identity, frequentPlayers, frequentGroups, history, courses, today: roundDate, idFactory: makeId }}
+      memoryContext={{ profile: identity, frequentPlayers: displayedFrequentPlayers, frequentGroups, history, courses, today: roundDate, idFactory: makeId }}
       accessToken={identity.accessToken}
       requiresRemoteConsent={identity.mode === "authenticated"}
       savedPersonalRivals={savedPersonalRivals}
@@ -4100,7 +4081,7 @@ function GolfBetsApp() {
     {holeValidationErrors.length > 0 && <div className="modalBackdrop" role="presentation"><section className="confirmDialog holeValidationDialog" role="alertdialog" aria-modal="true" aria-labelledby="hole-validation-title" aria-describedby="hole-validation-description"><ModalCloseButton onClose={() => setHoleValidationErrors([])} /><h2 id="hole-validation-title">Falta completar este hoyo</h2><p id="hole-validation-description">Revisa todos estos puntos antes de guardar y avanzar:</p><ul>{holeValidationErrors.map(error => <li key={error}>{error}</li>)}</ul><div className="dialogActions"><button autoFocus className="primary" onClick={() => setHoleValidationErrors([])}>Volver y completar</button></div></section></div>}
     {tab === "personalDetail" && renderPersonalLive("Detalle Personal")}
     {tab === "historyDetail" && (() => { const saved = history.find(round => round.id === historyDetailId); return saved?.totalScoreCapture ? <TotalScoreHistory key={saved.id} round={saved} onSave={saveTotalHistory} onBack={() => setTab("history")} /> : saved && justSavedGroupRound?.id === saved.id ? <RoundSavedConfirmation round={saved} userId={identity.userId} accessToken={identity.accessToken || undefined} onView={() => setJustSavedGroupRound(null)} onPlay={() => { setJustSavedGroupRound(null); setTab("play"); }} onGroups={() => { setJustSavedGroupRound(null); setTab("groups"); }} /> : saved ? <HistoricalRoundDetail round={saved} priorRounds={history} accountUserId={identity.userId} accessToken={identity.accessToken || undefined} onParticipantConfirmed={refreshConfirmedSharedHistory} onEdit={() => editHistoricalRound(saved)} onPhoto={() => viewScorecardPhoto(saved)} /> : <div className="empty">La ronda ya no está disponible.</div>; })()}
-    {tab === "groups" && <GroupBuilder detailGroup={frequentGroupView && !frequentGroupView.created ? frequentGroups.find(group => group.id === frequentGroupView.id) : undefined} onCloseDetail={() => setFrequentGroupView(null)} frequentPlayers={frequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onOpenFrequentGroup={group => setFrequentGroupView({ id: group.id, created: false })} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} onAcceptedMembers={(group, members) => setFrequentGroups(current => current.map(item => item.id === group.id ? { ...item, players: mergeAcceptedGroupMembers(item.players, members) } : item))} />}
+    {tab === "groups" && <GroupBuilder detailGroup={frequentGroupView && !frequentGroupView.created ? frequentGroups.find(group => group.id === frequentGroupView.id) : undefined} onCloseDetail={() => setFrequentGroupView(null)} frequentPlayers={displayedFrequentPlayers} frequentGroups={frequentGroups} onBack={() => setTab("welcome")} onPlay={startRoundWithGeneratedGroup} onSaveFrequentGroup={saveGeneratedFrequentGroup} onCreateFrequentGroup={beginCreateFrequentGroup} onOpenFrequentGroup={group => setFrequentGroupView({ id: group.id, created: false })} onStartFrequentGroup={loadFrequentGroup} onEditFrequentGroup={beginEditFrequentGroup} onDeleteFrequentGroup={setFrequentGroupToDelete} onAcceptedMembers={(group, members) => setFrequentGroups(current => current.map(item => item.id === group.id ? { ...item, players: mergeAcceptedGroupMembers(item.players, members) } : item))} />}
 
     {tab === "profile" && <ProfileAccountPanel key={`profile:${identity.userId}`} view="profile" initialLaunchMonitor={launchMonitorEntry} indexControl={indexControl} ghinControl={unifiedGhinControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} completionTarget={profileCompletionTarget} onCompletionTargetHandled={() => setProfileCompletionTarget(null)} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} internalNotificationsSaving={internalNotificationsSaving} internalNotificationsMessage={internalNotificationsMessage} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => openAccountSettings()} onOpenAccountSection={openAccountSettings} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
     {tab === "account" && <ProfileAccountPanel key={`${identity.userId}:account:${accountSection}`} view="account" initialAccountSection={accountSection} openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} ghinControl={unifiedGhinControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} internalNotificationsSaving={internalNotificationsSaving} internalNotificationsMessage={internalNotificationsMessage} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} onPageBack={handlePageBack} />}
@@ -4112,12 +4093,14 @@ function GolfBetsApp() {
         if (roundSetupPreflight.length) return false;
         if (hasActiveBettingConfiguration() && !hasPersistedBettingConsent() && !await requestBettingConsent()) return false;
         setShowBetSetupErrors(false);
+        const startedPlayers = playersForRoundStart();
+        setPlayers(startedPlayers);
         const startedAt = ensureRoundStarted();
         if (!roundStartedAt && startedAt && !course.operationsSnapshot) {
           const resolvedCourse = await loadCourseOperations(course, startedAt, null, identity.accessToken).catch(() => course);
           setCourse(resolvedCourse);
         }
-        setBets(current => freezeRoundHandicapBases(current, players, roundHandicapBasis));
+        setBets(current => freezeRoundHandicapBases(current, startedPlayers, roundHandicapBasis));
         if (!editingRound) setCurrentIndex(0);
         setEditingRound(false);
         setTab("round");
@@ -4214,7 +4197,7 @@ function GolfBetsApp() {
             <button className="templateLoad" onClick={() => loadFrequentGroup(group)} aria-label={`Cargar grupo ${group.name} a la ronda`}><b>{group.name}</b><span>{group.players.map((member) => member.name).join(" · ")}<br />{frequentGroupTemplateSummary(group)} · Toca para cargar</span></button>
             <div className="templateActions"><button className="secondary" onClick={() => beginEditFrequentGroup(group)}>✏ Editar</button><button className="dangerGhost" onClick={() => setFrequentGroupToDelete(group)}>🗑 Eliminar</button></div>
           </div>)}</div></details>}
-          {frequentPlayers.length > 0 && <details className="frequentDisclosure"><summary><span>Jugadores frecuentes ({frequentPlayers.length})<small>Toca aquí para agregar un jugador</small></span></summary><div className="frequentTemplateList">{frequentPlayers.map((saved) => editingFrequentPlayerId === saved.id ? <div className="templateEditor" key={saved.id}>
+          {frequentPlayers.length > 0 && <details className="frequentDisclosure"><summary><span>Jugadores frecuentes ({frequentPlayers.length})<small>Toca aquí para agregar un jugador</small></span></summary><div className="frequentTemplateList">{displayedFrequentPlayers.map((saved) => editingFrequentPlayerId === saved.id ? <div className="templateEditor" key={saved.id}>
             <input aria-label="Nombre frecuente" value={frequentPlayerDraft.name} onChange={(event) => setFrequentPlayerDraft((draft) => ({ ...draft, name: event.target.value }))} />
             <NumericCaptureInput aria-label="HCP frecuente" className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP" value={frequentPlayerDraft.handicap} emptyWhenZero={false} onValueChange={(handicap) => setFrequentPlayerDraft((draft) => ({ ...draft, handicap }))} />
             <div className="templateActions"><button className="primary" disabled={!frequentPlayerDraft.name.trim()} onClick={saveFrequentPlayerEdit}>Guardar</button><button className="secondary" onClick={() => setEditingFrequentPlayerId(null)}>Cancelar</button></div>
@@ -4694,11 +4677,11 @@ function GolfBetsApp() {
       <div ref={groupEditorBodyRef} className="groupWizardBody"><fieldset disabled={frequentGroupSaving} className="groupWizardFields">
       {frequentGroupEditorTab === "members" ? <>
         <label>Nombre del grupo<input value={frequentGroupDraft.name} placeholder="Miércoles La Vista" onChange={event => setFrequentGroupDraft(group => group ? { ...group, name: event.target.value } : group)} /></label>
-        <GroupMemberSelection group={frequentGroupDraft} frequentPlayers={frequentPlayers} accessToken={identity.accessToken} onAdd={addPlayerToFrequentGroup} onRemove={removeMemberFromFrequentGroup} />
+        <GroupMemberSelection group={frequentGroupDraft} frequentPlayers={displayedFrequentPlayers} accessToken={identity.accessToken} onAdd={addPlayerToFrequentGroup} onRemove={removeMemberFromFrequentGroup} />
         <section className="groupWizardBlock"><h3>Jugador sin app</h3><p>Agrega a alguien que jugará contigo aunque todavía no tenga cuenta en The Backyard. Podrás llevar su score, HCP y apuestas durante la ronda.</p>
           <div className="groupMemberNewRow"><label>Nombre<input placeholder="Nombre del jugador" value={newGroupMember.name} onChange={event => setNewGroupMember(member => ({ ...member, name: event.target.value }))} /></label><label>HCP opcional<NumericCaptureInput inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP" value={newGroupMember.handicap} emptyWhenZero={false} onValueChange={handicap => setNewGroupMember(member => ({ ...member, handicap }))} /></label></div>
           <label className="checkRow"><input type="checkbox" checked={saveNewGroupMemberAsFrequent} onChange={event => setSaveNewGroupMemberAsFrequent(event.target.checked)} />Guardar como jugador frecuente</label><button type="button" className="secondary groupMemberAddButton" disabled={!newGroupMember.name.trim()} onClick={addNewPlayerToFrequentGroup}>+ Agregar jugador sin app</button>
-          {frequentPlayers.length > 0 && <details className="groupSavedPlayers"><summary>Jugadores frecuentes guardados</summary><div className="chips">{frequentPlayers.map(player => <button type="button" className="chipButton" key={player.id} onClick={() => { const member = frequentGroupMemberFromFrequentPlayer(player); if (member) addPlayerToFrequentGroup({ ...member, memberId: `member-${makeId()}` }); }}>+ {player.name} · {typeof player.handicap === "number" ? `HCP ${player.handicap}` : "HCP por completar"}{!player.accountUserId ? " · Sin app" : ""}</button>)}</div></details>}
+          {frequentPlayers.length > 0 && <details className="groupSavedPlayers"><summary>Jugadores frecuentes guardados</summary><div className="chips">{displayedFrequentPlayers.map(player => <button type="button" className="chipButton" key={player.id} onClick={() => { const member = frequentGroupMemberFromFrequentPlayer(player); if (member) addPlayerToFrequentGroup({ ...member, memberId: `member-${makeId()}` }); }}>+ {player.name} · {typeof player.handicap === "number" ? `HCP ${player.handicap}` : "HCP por completar"}{!player.accountUserId ? " · Sin app" : ""}</button>)}</div></details>}
         </section>
         <section className="groupWizardBlock"><h3>Jugadores del grupo · {frequentGroupDraft.players.length}</h3><div className="groupSelectedList">{frequentGroupDraft.players.map((member, index) => <div className="groupPersonRow" key={member.memberId || index}>
           <span className="groupPersonAvatar" aria-hidden="true">{member.name.trim().split(/\s+/).slice(0, 2).map(part => part[0]).join("")}</span><div><b>{member.name}</b><small>{member.username ? `@${member.username} · ` : ""}{typeof member.handicap === "number" ? `HCP ${member.handicap}` : "HCP por completar"}{!member.accountUserId && <span className="groupGuestBadge">Sin app</span>}</small>{canEditGuestHandicap(member) && <details><summary>Editar jugador sin app</summary><label>Nombre<input value={member.name} onChange={event => editFrequentGroupMember(index, { name: event.target.value })} /></label><label>HCP opcional<NumericCaptureInput aria-label={`HCP de ${member.name}`} step={0.1} min={-15} max={36} value={member.handicap} emptyWhenZero={false} onValueChange={handicap => editFrequentGroupMember(index, { handicap })} /></label></details>}<details><summary>Ordenar jugador</summary><div className="groupMemberActions"><button type="button" className="secondary" aria-label={`Subir a ${member.name}`} disabled={index === 0} onClick={() => setFrequentGroupDraft(group => group ? moveFrequentGroupMember(group, index, -1) : group)}>↑</button><button type="button" className="secondary" aria-label={`Bajar a ${member.name}`} disabled={index === frequentGroupDraft.players.length - 1} onClick={() => setFrequentGroupDraft(group => group ? moveFrequentGroupMember(group, index, 1) : group)}>↓</button></div></details></div><button type="button" className="groupPersonAdd" aria-label={`Quitar ${member.name}`} onClick={() => removeMemberFromFrequentGroup(index)}>×</button>

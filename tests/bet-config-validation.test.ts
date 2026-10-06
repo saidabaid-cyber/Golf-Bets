@@ -722,7 +722,7 @@ test("the setup gate renders every issue before consent, HCP freezing or round n
   const gate = page.indexOf("if (roundSetupPreflight.length) return false;", setupGateRegion);
   const consent = page.indexOf("await requestBettingConsent()", gate);
   const start = page.indexOf("ensureRoundStarted();", gate);
-  const freeze = page.indexOf("freezeRoundHandicapBases(current, players, roundHandicapBasis)", gate);
+  const freeze = page.indexOf("freezeRoundHandicapBases(current, startedPlayers, roundHandicapBasis)", gate);
   const navigation = page.indexOf('setTab("round")', gate);
   assert.ok(gate > setupGateRegion && consent > gate && start > consent && freeze > start && navigation > freeze);
   assert.match(wizard, /FALTA COMPLETAR/);

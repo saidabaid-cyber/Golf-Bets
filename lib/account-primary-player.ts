@@ -66,6 +66,7 @@ export function syncAccountPrimaryFrequentPlayer(
   }
   const existing = linkedIndexes.length ? players[linkedIndexes[0]] : undefined;
   const next: FrequentPlayer = {
+    ...existing,
     // Preserve an adopted legacy local_id so cloud sync updates that record
     // instead of creating a second row under a new id.
     id: existing?.id || stableId,
@@ -82,6 +83,16 @@ export function syncAccountPrimaryFrequentPlayer(
     && existing.accountUserId === next.accountUserId) return players;
   const linked = new Set(linkedIndexes);
   return [next, ...players.filter((_, index) => !linked.has(index))];
+}
+
+/** Profile/provider hydration may change presentation, never saved usage,
+ * identity, order or clocks. A real round save/edit persists templates through
+ * the existing explicit mutation functions. */
+export function projectAccountPrimaryFrequentPlayers(players: FrequentPlayer[], profile: BackyardProfile, index: SelectedHandicapIndex) {
+  const principal = accountPrimaryRoundPlayer(profile, index);
+  if (!principal) return players;
+  return players.map(player => player.accountUserId === profile.userId || player.id === principal.id
+    ? { ...player, name: principal.name, handicap: principal.handicap } : player);
 }
 
 /** Keep a linked in-progress player name coherent with the account profile.

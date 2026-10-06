@@ -6,6 +6,7 @@ import { resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { normalizeRoundDraft } from "../lib/round-utils";
+import { CloudHydrationBoundary } from "../lib/cloud-hydration";
 import { wizardEngineFixture } from "./fixtures/round-wizard-engine";
 import { applyRoundCourseHandicaps } from "../features/handicap/round-player-handicap";
 import { withPlayerCourseCards } from "../lib/player-course-card";
@@ -122,7 +123,7 @@ test("real tee-selection handler re-freezes new inputs during edit and automatic
 test("active edit passes its real snapshot through existing hydration, preserving the current hole", () => {
   const snapshot = { roundId: "existing", course: { name: "La Vista" }, scores: { 1: { said: 4 } } };
   let actual: any, options: any, step = 0, editing = false, tab = "";
-  const edit = execute("editActiveRound", { commitFocusedNumericCapture() {}, flushLocalState: { current: () => true }, roundDraftPayload: () => snapshot, applyDraft: (value: any, opts: any) => { actual = value; options = opts; }, setRoundSetupInitialStep: (value: number) => { step = value; }, setEditingRound: (value: boolean) => { editing = value; }, setTab: (value: string) => { tab = value; } });
+  const edit = execute("editActiveRound", { cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, commitFocusedNumericCapture() {}, flushLocalState: { current: () => true }, roundDraftPayload: () => snapshot, applyDraft: (value: any, opts: any) => { actual = value; options = opts; }, setRoundSetupInitialStep: (value: number) => { step = value; }, setEditingRound: (value: boolean) => { editing = value; }, setTab: (value: string) => { tab = value; } });
   edit(); assert.equal(actual, snapshot); assert.equal(options.preserveLocalUi, true); assert.equal(step, 1); assert.equal(editing, true); assert.equal(tab, "setup");
 });
 
@@ -130,7 +131,7 @@ test("real draft hydration restores selected course, layout, tee, roster, bets, 
   const input = wizardEngineFixture(10, "course");
   const draft = { version: 11, roundId: "active-config", roundDate: "2026-10-04", startedAt: "2026-10-04T12:00:00Z", courseSelected: true, course: input.course, players: input.players, ownerId: "said", startHole: 10, roundHoles: 18, handicapBasis: "course", bets: input.bets, segments: input.segments, personalBets: input.personalBets, supplementalBets: input.supplementalBets, manualBets: input.manualBets, scores: { 10: input.scores[10], 11: input.scores[11] }, currentIndex: 2, ballFriendSetup: input.ballFriendSetup, templateOrigin: { groupId: "g", groupNameSnapshot: "Miércoles", basedOnUpdatedAt: "initial", roundPlayerIdByMemberId: { member: "said" } } };
   const captured: Record<string, any> = {};
-  const globals: Record<string, any> = { identity: { userId: "qa-owner" }, undoStack: { current: [] }, holeSummarySession: { current: null }, emptyExpenses: {}, laVista: input.course, Date, Object, Array };
+  const globals: Record<string, any> = { cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, identity: { userId: "qa-owner" }, undoStack: { current: [] }, holeSummarySession: { current: null }, emptyExpenses: {}, laVista: input.course, Date, Object, Array };
   const required = createRequire(resolve(__dirname, "../app/page.js"));
   const arrow = declaration("applyDraft").getText(ast);
   for (const statement of ast.statements) {

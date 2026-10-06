@@ -757,6 +757,15 @@ export function cloudUploadDelta(bundle: CloudDataBundle, base: CloudDataBundle)
         return true;
       }
       if (JSON.stringify(stableValue(other)) === JSON.stringify(stableValue(item))) return false;
+      if (key === "history") {
+        const { updatedAt: localClock, ...localMaterial } = item as RoundSnapshot;
+        const { updatedAt: remoteClock, ...remoteMaterial } = other as RoundSnapshot;
+        void localClock; void remoteClock;
+        // Reserializing an identical completed card does not constitute an
+        // edit, even across installations. Material differences still use the
+        // normal clocks/conflict detection/CAS path below.
+        if (JSON.stringify(stableValue(localMaterial)) === JSON.stringify(stableValue(remoteMaterial))) return false;
+      }
       if (bundle.deviceId && bundle.deviceId === base.deviceId) {
         const localRound = item as RoundSnapshot, cloudRound = other as RoundSnapshot;
         const closing = key === "history" && cloudRound.lifecycleState === "live" && localRound.lifecycleState === "completed" && localRound.scorekeeping?.version === 1;

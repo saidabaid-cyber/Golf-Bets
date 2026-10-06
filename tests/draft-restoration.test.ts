@@ -42,21 +42,23 @@ test("draft application wires resolved values through unconditional setters", ()
   const page = readFileSync("app/page.tsx", "utf8");
   assert.match(page, /const draftCore = draft \? resolveRoundDraftCore\(draft, identity\.userId\) : null/);
   assert.match(page, /setStartHole\(draftCore\.startHole\);\s+setRoundHoles\(draftCore\.roundHoles\)/);
-  assert.match(page, /setPlayers\(draftCore\.players\)/);
-  assert.match(page, /setPlayerTeeAssignments\(reconcilePlayerTeeAssignments\(draft\.playerTeeAssignments, draftCore\.players/);
+  assert.match(page, /setPlayers\(hydratedView!\.players\)/);
+  assert.match(page, /const hydratedView = draftCore \? roundDraftHydrationView\(draft, laVista, draftCore\) : null/);
+  assert.match(page, /setPlayerTeeAssignments\(hydratedView!\.playerTeeAssignments\)/);
   assert.match(page, /setOwnerId\(draftCore\.ownerId\)/);
   assert.doesNotMatch(page, /if \(draft\.startHole\) setStartHole/);
   assert.doesNotMatch(page, /if \(draft\.ownerId\) setOwnerId/);
   assert.match(page, /normalizeRoundResumeContext\(savedContext \|\| \{ roundId: restoredRoundId, currentIndex: recoveredRoundResumeIndex\(draft, draftPlayerIds, restoredOrder\) \}, restoredRoundId, draftPlayerIds, draftCore\.ownerId, draftRoundHoles\)/);
   assert.match(page, /setCurrentIndex\(restoredContext\.currentIndex\)/);
-  assert.match(page, /setCourse\(draft\.course \? withDefaultLaVistaRules\(draft\.course\) : laVista\)/);
+  assert.match(page, /setCourse\(hydratedView!\.course\)/);
   assert.match(page, /setExpenses\(draft\.expenses \? normalizeExpenses\(draft\.expenses\) : emptyExpenses\)/);
   assert.match(page, /const restoredRoundId = typeof draft\.roundId === "string" && draft\.roundId\.trim\(\) \? draft\.roundId : makeId\(\)/);
   assert.match(page, /setRoundId\(restoredRoundId\)/);
   assert.match(page, /setRoundDate\(typeof draft\.roundDate === "string" && draft\.roundDate\.trim\(\) \? draft\.roundDate : localDateMexico\(\)\)/);
   assert.doesNotMatch(page, /if \(draft\.expenses\) setExpenses/);
-  assert.match(page, /id: b\.id,\s+enabled: b\.enabled/);
-  assert.match(page, /advantageReceiver: b\.nassauVersion === 2\s+\? b\.advantageReceiver/);
+  assert.match(page, /setPersonalBets\(hydratedView!\.personalBets as PersonalBet\[\]\)/);
+  const hydration = readFileSync("lib/round-draft-hydration-view.ts", "utf8");
+  assert.match(hydration, /advantageReceiver: b\.nassauVersion === 2 \? b\.advantageReceiver/);
 });
 
 test("completed cloud drafts remain review-only until history acknowledgement", () => {

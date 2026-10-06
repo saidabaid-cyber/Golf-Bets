@@ -1,0 +1,439 @@
+{
+  "bets": {
+    "fish": {
+      "value": 100,
+      "enabled": false,
+      "participantIds": [],
+      "settlementMode": "round",
+      "determinationMode": "last_event",
+      "mostEventsTieRule": "tied_players_pay",
+      "secondNinePressed": false,
+      "secondNineMultiplier": 2
+    },
+    "loba": {
+      "value": 100,
+      "hcpPct": 100,
+      "enabled": false,
+      "unitValue": 100,
+      "unitsEnabled": false,
+      "participantIds": [],
+      "duplicateUnitsByMode": false
+    },
+    "polla": {
+      "first9": {
+        "value": 100,
+        "hcpPct": 100,
+        "enabled": false,
+        "decimals": "round",
+        "participantIds": [],
+        "playedHalfVersion": 1
+      },
+      "second9": {
+        "value": 100,
+        "hcpPct": 100,
+        "enabled": false,
+        "decimals": "round",
+        "participantIds": []
+      },
+      "total18": {
+        "value": 100,
+        "hcpPct": 100,
+        "enabled": false,
+        "decimals": "round",
+        "participantIds": []
+      }
+    },
+    "skins": {
+      "mode": "carry",
+      "value": 50,
+      "hcpPct": 100,
+      "enabled": false,
+      "decimals": "decimal",
+      "accumulate": true,
+      "participantIds": []
+    },
+    "units": {
+      "value": 100,
+      "enabled": false,
+      "participantIds": []
+    },
+    "camels": {
+      "value": 100,
+      "enabled": false,
+      "participantIds": [],
+      "settlementMode": "round",
+      "determinationMode": "last_event",
+      "mostEventsTieRule": "tied_players_pay",
+      "secondNinePressed": false,
+      "secondNineMultiplier": 2
+    },
+    "monkey": {
+      "value": 20,
+      "hcpPct": 100,
+      "enabled": false,
+      "participantIds": []
+    },
+    "vipers": {
+      "value": 100,
+      "enabled": false,
+      "participantIds": [],
+      "settlementMode": "round",
+      "determinationMode": "last_event",
+      "mostEventsTieRule": "tied_players_pay",
+      "secondNinePressed": false,
+      "secondNineMultiplier": 2
+    },
+    "rabbits": {
+      "mode": "continuous",
+      "value": 100,
+      "hcpPct": 100,
+      "enabled": false,
+      "decimals": "decimal",
+      "accumulate": true,
+      "participantIds": []
+    },
+    "foursome": {
+      "mode": "fixed",
+      "hcpPct": 100,
+      "enabled": false,
+      "baseMode": "moving",
+      "decimals": "round",
+      "fixedValue": 200,
+      "pointValue": 100,
+      "segmentSize": 6,
+      "pressSecond9": false,
+      "pressureNine": "holes_10_18",
+      "handicapMethod": "configured",
+      "participantIds": [],
+      "pressureMultiplier": 1
+    },
+    "miniPolla": {
+      "value": 100,
+      "hcpPct": 100,
+      "enabled": false,
+      "decimals": "round",
+      "participantIds": []
+    },
+    "ballFriend": {
+      "value": 20,
+      "hcpPct": 100,
+      "enabled": false,
+      "baseMode": "moving",
+      "decimals": "round",
+      "maxScore": 9,
+      "participantIds": []
+    }
+  },
+  "putts": {},
+  "shots": [],
+  "course": {
+    "id": "tee-la-vista-club-current-white::scorecard-la-vista-club-current::MEN",
+    "name": "Par 72 — Tarjeta del club — Actual",
+    "holes": [
+      {
+        "par": 4,
+        "yards": 392,
+        "number": 1,
+        "strokeIndex": 5
+      },
+      {
+        "par": 3,
+        "yards": 165,
+        "number": 2,
+        "strokeIndex": 17
+      },
+      {
+        "par": 4,
+        "yards": 398,
+        "number": 3,
+        "strokeIndex": 7
+      },
+      {
+        "par": 5,
+        "yards": 483,
+        "number": 4,
+        "strokeIndex": 1
+      },
+      {
+        "par": 4,
+        "yards": 389,
+        "number": 5,
+        "strokeIndex": 9
+      },
+      {
+        "par": 4,
+        "yards": 343,
+        "number": 6,
+        "strokeIndex": 13
+      },
+      {
+        "par": 3,
+        "yards": 158,
+        "number": 7,
+        "strokeIndex": 15
+      },
+      {
+        "par": 4,
+        "yards": 374,
+        "number": 8,
+        "strokeIndex": 3
+      },
+      {
+        "par": 5,
+        "yards": 488,
+        "number": 9,
+        "strokeIndex": 11
+      },
+      {
+        "par": 5,
+        "yards": 529,
+        "number": 10,
+        "strokeIndex": 12
+      },
+      {
+        "par": 4,
+        "yards": 358,
+        "number": 11,
+        "strokeIndex": 8
+      },
+      {
+        "par": 3,
+        "yards": 138,
+        "number": 12,
+        "strokeIndex": 18
+      },
+      {
+        "par": 4,
+        "yards": 368,
+        "number": 13,
+        "strokeIndex": 14
+      },
+      {
+        "par": 4,
+        "yards": 433,
+        "number": 14,
+        "strokeIndex": 2
+      },
+      {
+        "par": 5,
+        "yards": 581,
+        "number": 15,
+        "strokeIndex": 4
+      },
+      {
+        "par": 4,
+        "yards": 395,
+        "number": 16,
+        "strokeIndex": 10
+      },
+      {
+        "par": 3,
+        "yards": 173,
+        "number": 17,
+        "strokeIndex": 16
+      },
+      {
+        "par": 4,
+        "yards": 425,
+        "number": 18,
+        "strokeIndex": 6
+      }
+    ],
+    "slope": 125,
+    "rating": 70.8,
+    "address": "BOULEVARD ATLIXCAYOTL Km. 4, Cholula, PUE, 72840, MEX",
+    "builtIn": true,
+    "country": "México",
+    "teeName": "Blancas",
+    "clubName": "LA VISTA COUNTRY CLUB",
+    "latitude": 19.0082969665527,
+    "provider": "BACKYARD_INTERNAL",
+    "longitude": -98.2546310424805,
+    "sourceName": "Proveedor autorizado (BACKYARD_INTERNAL)",
+    "totalYards": 6590,
+    "verifiedAt": "2026-09-28T00:00:00Z",
+    "catalogTeeId": "tee-la-vista-club-current-white",
+    "layoutOrigin": "BACKYARD_ADMIN",
+    "catalogClubId": "club-la-vista",
+    "isProvisional": false,
+    "providerStatus": "ACTIVE",
+    "catalogCourseId": "course-la-vista-club-current",
+    "scorecardProfileId": "scorecard-la-vista-club-current",
+    "indexRatingEvidence": {
+      "kind": "CURATED_RATED_TEE",
+      "teeId": "tee-la-vista-club-current-white",
+      "courseId": "course-la-vista-club-current",
+      "authority": "CLUB_SCORECARD · Par 72 — Tarjeta del club — Actual",
+      "sourceUrl": "https://dev.thebackyard.com.mx/api/courses/catalog?courseId=course-la-vista-club-current",
+      "verifiedAt": "2026-09-28T00:00:00+00:00",
+      "slopeRating": 125,
+      "courseRating": 70.8,
+      "ratingGender": "MEN",
+      "scorecardProfileId": "scorecard-la-vista-club-current"
+    },
+    "roundTeeSelectionId": "tee-la-vista-club-current-white::scorecard-la-vista-club-current::MEN",
+    "scorecardProfileName": "Par 72 — Tarjeta del club — Actual",
+    "scorecardProfileSourceUrl": "https://dev.thebackyard.com.mx/api/courses/catalog?courseId=course-la-vista-club-current",
+    "scorecardProfileHistorical": false,
+    "scorecardProfileProvenance": "CLUB_SCORECARD_VERIFIED",
+    "scorecardProfileVerifiedAt": "2026-09-28T00:00:00+00:00",
+    "scorecardProfileDefaultForPlay": true
+  },
+  "scores": {
+    "1": {
+      "qa-guest": 6,
+      "account:qa-owner": 5
+    }
+  },
+  "ownerId": "account:qa-owner",
+  "players": [
+    {
+      "id": "account:qa-owner",
+      "name": "QA Owner",
+      "handicap": 5,
+      "accountUserId": "qa-owner",
+      "handicapIndex": 5.5,
+      "handicapSource": "profile_index",
+      "handicapIndexSource": "BACKYARD_INDEX",
+      "courseHandicapSnapshot": {
+        "par": 72,
+        "index": 5.5,
+        "slope": 125,
+        "teeId": "tee-la-vista-club-current-white",
+        "teeName": "Blancas",
+        "effectiveAt": "2026-10-06T15:46:30.792Z",
+        "indexSource": "BACKYARD_INDEX",
+        "calculatedAt": "2026-10-06T15:23:04.259Z",
+        "courseRating": 70.8,
+        "courseHandicap": 5,
+        "formulaVersion": "WHS-2024-COURSE-HANDICAP-V1",
+        "appliedHandicap": 5
+      }
+    },
+    {
+      "id": "qa-guest",
+      "name": "QA Guest",
+      "handicap": 12,
+      "handicapSource": "manual"
+    }
+  ],
+  "roundId": "qa24-style",
+  "version": 11,
+  "expenses": {
+    "food": 0,
+    "other": 0,
+    "caddie": 0,
+    "drinks": 0,
+    "greenFee": 0,
+    "cartRental": 0
+  },
+  "segments": [
+    {
+      "id": "seg-0",
+      "basePair": [],
+      "endIndex": 5,
+      "startIndex": 0
+    },
+    {
+      "id": "seg-6",
+      "basePair": [],
+      "endIndex": 11,
+      "startIndex": 6
+    },
+    {
+      "id": "seg-12",
+      "basePair": [],
+      "endIndex": 17,
+      "startIndex": 12
+    }
+  ],
+  "lobaHoles": {},
+  "roundDate": "2026-10-01",
+  "startHole": 1,
+  "startedAt": "2026-10-01T10:00:00.000Z",
+  "manualBets": [],
+  "roundHoles": 18,
+  "scoreEdits": {},
+  "unitEvents": [],
+  "personalBets": [],
+  "presentation": {
+    "version": 1,
+    "playMode": "score_only",
+    "groupNassauTerm": "polla"
+  },
+  "advancedStats": {},
+  "handicapBasis": "relative",
+  "reviewPending": false,
+  "courseSelected": true,
+  "lifecycleState": "live",
+  "ballFriendSetup": {},
+  "counterBetEvents": [],
+  "scoreCaptureMode": "quick",
+  "supplementalBets": [],
+  "counterBetKeepers": {
+    "fish": {},
+    "camels": {},
+    "vipers": {}
+  },
+  "scorecardPhotoIds": [],
+  "playerTeeAssignments": [
+    {
+      "par": 72,
+      "slope": 125,
+      "teeId": "tee-la-vista-club-current-white",
+      "yards": 6590,
+      "rating": 70.8,
+      "source": "catalog",
+      "teeName": "Blancas",
+      "courseId": "course-la-vista-club-current",
+      "layoutId": "course-la-vista-club-current",
+      "playerId": "account:qa-owner",
+      "capturedAt": "2026-10-01T09:00:00.000Z",
+      "verifiedAt": "2026-09-28T00:00:00Z",
+      "scorecardProfileId": "scorecard-la-vista-club-current",
+      "indexRatingEvidence": {
+        "kind": "CURATED_RATED_TEE",
+        "teeId": "tee-la-vista-club-current-white",
+        "courseId": "course-la-vista-club-current",
+        "authority": "CLUB_SCORECARD · Par 72 — Tarjeta del club — Actual",
+        "sourceUrl": "https://dev.thebackyard.com.mx/api/courses/catalog?courseId=course-la-vista-club-current",
+        "verifiedAt": "2026-09-28T00:00:00+00:00",
+        "slopeRating": 125,
+        "courseRating": 70.8,
+        "ratingGender": "MEN",
+        "scorecardProfileId": "scorecard-la-vista-club-current"
+      },
+      "scorecardProfileName": "Par 72 — Tarjeta del club — Actual",
+      "scorecardProfileProvenance": "CLUB_SCORECARD_VERIFIED"
+    },
+    {
+      "par": 72,
+      "slope": 125,
+      "teeId": "tee-la-vista-club-current-white",
+      "yards": 6590,
+      "rating": 70.8,
+      "source": "catalog",
+      "teeName": "Blancas",
+      "courseId": "course-la-vista-club-current",
+      "layoutId": "course-la-vista-club-current",
+      "playerId": "qa-guest",
+      "capturedAt": "2026-10-01T09:00:00.000Z",
+      "verifiedAt": "2026-09-28T00:00:00Z",
+      "scorecardProfileId": "scorecard-la-vista-club-current",
+      "indexRatingEvidence": {
+        "kind": "CURATED_RATED_TEE",
+        "teeId": "tee-la-vista-club-current-white",
+        "courseId": "course-la-vista-club-current",
+        "authority": "CLUB_SCORECARD · Par 72 — Tarjeta del club — Actual",
+        "sourceUrl": "https://dev.thebackyard.com.mx/api/courses/catalog?courseId=course-la-vista-club-current",
+        "verifiedAt": "2026-09-28T00:00:00+00:00",
+        "slopeRating": 125,
+        "courseRating": 70.8,
+        "ratingGender": "MEN",
+        "scorecardProfileId": "scorecard-la-vista-club-current"
+      },
+      "scorecardProfileName": "Par 72 — Tarjeta del club — Actual",
+      "scorecardProfileProvenance": "CLUB_SCORECARD_VERIFIED"
+    }
+  ]
+}

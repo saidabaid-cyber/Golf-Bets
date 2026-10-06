@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { CloudHydrationBoundary } from "../lib/cloud-hydration";
 import { stableValue, cloudDraftApplyPlan, restoreLocalRoundUi } from "../lib/cloud-sync";
 import { recoveredRoundResumeIndex } from "../lib/active-round-navigation";
 import { STORAGE_KEYS } from "../lib/round-utils";
@@ -23,7 +24,7 @@ test("the actual cloud apply callback recovers H2 on a cold workspace and preser
     const values = new Map<string, string>(); const exported: any = {};
     const revision = { current: 0 };
     runInNewContext(js, {
-      exports: exported, mergeLocalAndCloud: (_local: unknown, remote: unknown) => remote,
+      exports: exported, cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, mergeLocalAndCloud: (_local: unknown, remote: unknown) => remote,
       stableValue, cloudDraftApplyPlan, restoreLocalRoundUi, localPersistRevision: revision,
       flushLocalState: { current: () => true }, preserveDraftConflict() {}, setFeedback() {},
       applyDraft: (value: typeof draft, options: { preserveLocalUi: boolean }) => { preserve = options.preserveLocalUi; if (!preserve) index = recoveredRoundResumeIndex(value, ["a", "b"], [1, 2, 3]); },
