@@ -86,6 +86,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
   const canShowLegacyCategories = round.playerBalances === undefined && round.categoryBalances === undefined;
   const issueCopy = [...new Set(recap.issues.map((issue) => issueMessages[issue.code]))];
   const safelyEditable = Boolean(recap.golf)
+    && round.lifecycleState !== "cancelled"
     && !recap.issues.some((issue) => ["invalid_geometry", "invalid_course", "invalid_players", "invalid_scores"].includes(issue.code))
     && canEditSnapshot(round);
   const duplicateSettlementNames = useMemo(() => {
@@ -264,7 +265,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
 
     <section className="card historicalActions" aria-label="Acciones de la ronda guardada">
       {round.photoId && <button type="button" className="secondary" onClick={onPhoto}>Ver tarjeta original</button>}
-      {safelyEditable ? <button type="button" className="primary" onClick={onEdit}>{round.lifecycleState === "live" || round.lifecycleState === "cancelled" ? "Reanudar ronda" : "Corregir ronda guardada"}</button> : <p className="notice">Registro de solo lectura: faltan datos suficientes para corregirlo sin inventar su configuración original.</p>}
+      {safelyEditable ? <button type="button" className="primary" onClick={onEdit}>{round.lifecycleState === "live" ? "Reanudar ronda" : "Corregir ronda guardada"}</button> : <p className="notice">{round.lifecycleState === "cancelled" ? "Ronda cancelada: los scores se conservan para consulta. La cancelación no permite reactivar esta tarjeta." : "Registro de solo lectura: faltan datos suficientes para corregirlo sin inventar su configuración original."}</p>}
     </section>
   </div>;
 }

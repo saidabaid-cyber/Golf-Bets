@@ -30,7 +30,7 @@ function execute(name: string, dependencies: Record<string, any>) {
 }
 
 test("paused detail resumes the same snapshot through active-round preservation, without completed editing", () => {
-  for (const lifecycleState of ["live", "cancelled"]) {
+  for (const lifecycleState of ["live"]) {
     const snapshot = { id: "paused", lifecycleState, resumeCurrentIndex: 1, scores: { 1: { qa: 5 } } };
     let intent: any;
     execute("editHistoricalRound", { canEditSnapshot: () => true, roundId: "other", roundClosed: false,
@@ -39,6 +39,18 @@ test("paused detail resumes the same snapshot through active-round preservation,
     assert.equal(intent.kind, "resume"); assert.equal(intent.snapshot, snapshot);
     assert.equal(intent.snapshot.resumeCurrentIndex, 1); assert.equal(intent.snapshot.scores[1].qa, 5);
   }
+});
+
+test("cancelled detail cannot create a resume intent or overwrite the active draft", () => {
+  const snapshot = { id: "cancelled-qa", lifecycleState: "cancelled", scores: { 1: { qa: 5 } } };
+  const before = JSON.stringify(snapshot);
+  let feedback = "";
+  const forbidden = () => { throw new Error("cancelled evidence must stay read-only"); };
+  execute("editHistoricalRound", { setFeedback: (value: string) => { feedback = value; },
+    canEditSnapshot: forbidden, continueActiveRound: forbidden, requestNewRoundIntent: forbidden,
+    restoreRoundSnapshot: forbidden })(snapshot);
+  assert.match(feedback, /cancelada.*scores.*no puede reactivarse/);
+  assert.equal(JSON.stringify(snapshot), before);
 });
 
 test("current paused detail continues directly and shared read-only snapshots cannot resume", () => {

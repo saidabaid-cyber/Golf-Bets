@@ -48,12 +48,16 @@ function completeRound(): RoundSnapshot {
   };
 }
 
-test("paused and cancelled owner details offer resume while completed rounds keep correction", () => {
+test("paused details resume, completed details correct, cancelled details preserve read-only evidence", () => {
   for (const lifecycleState of ["live", "cancelled", "completed"] as const) {
     const round = { ...completeRound(), lifecycleState, betConfig: initialBets(players.map(player => player.id)),
       ...(lifecycleState === "completed" ? {} : { scores: { 1: { said: 5, ana: 5 } } }) };
     const markup = renderToStaticMarkup(createElement(HistoricalRoundDetail, { round, onEdit() {}, onPhoto() {} }));
-    assert.match(markup, lifecycleState === "completed" ? /Corregir ronda guardada/ : /Reanudar ronda/);
+    if (lifecycleState === "cancelled") {
+      assert.match(markup, /scores se conservan para consulta/);
+      assert.match(markup, /no permite reactivar/);
+      assert.doesNotMatch(markup, /Reanudar ronda|Corregir ronda guardada/);
+    } else assert.match(markup, lifecycleState === "completed" ? /Corregir ronda guardada/ : /Reanudar ronda/);
     if (lifecycleState !== "completed") assert.doesNotMatch(markup, /Corregir ronda guardada/);
   }
 });

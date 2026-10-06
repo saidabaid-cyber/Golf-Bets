@@ -2424,7 +2424,11 @@ function GolfBetsApp() {
   });
 
   function editHistoricalRound(snapshot: RoundSnapshot) {
-    if (snapshot.lifecycleState === 'live' || snapshot.lifecycleState === 'cancelled') {
+    if (snapshot.lifecycleState === 'cancelled') {
+      setFeedback("La ronda cancelada conserva sus scores para consulta y no puede reactivarse.");
+      return;
+    }
+    if (snapshot.lifecycleState === 'live') {
       if (!canEditSnapshot(snapshot)) return;
       if (snapshot.id === roundId && !roundClosed) continueActiveRound();
       else requestNewRoundIntent({ kind: 'resume', snapshot });
