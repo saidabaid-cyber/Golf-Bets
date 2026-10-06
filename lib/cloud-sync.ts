@@ -768,6 +768,15 @@ export function cloudSyncUploadRequired(bundle: CloudDataBundle, remote: CloudDa
   return cloudSyncPayloadFingerprint(mergeLocalAndCloud(cloudUploadDelta(bundle, remote), remote)) !== cloudSyncPayloadFingerprint(remote);
 }
 
+/** DEV diagnostic labels are a fixed allowlist of collection names. Never
+ * report identities, field paths, values or resource payloads. */
+export function cloudSyncUploadReasons(bundle: CloudDataBundle, remote: CloudDataBundle) {
+  const effective = mergeLocalAndCloud(cloudUploadDelta(bundle, remote), remote);
+  const canonical = cloudSyncPayloadFingerprint(remote);
+  return (["history", "frequentPlayers", "frequentGroups", "rivals", "courses", "preferences", "activeDraft", "activeDraftUpdatedAt", "tombstones"] as const)
+    .filter(key => cloudSyncPayloadFingerprint({ ...remote, [key]: effective[key] }) !== canonical);
+}
+
 export async function uploadCloudData(bundle: CloudDataBundle, accessToken: string, base?: CloudDataBundle,
   trace?: (event: { method: "GET" | "POST"; requestBytes: number; responseBytes: number; durationMs: number; success: boolean }) => void) {
   if (!accessToken?.trim()) throw new Error("Inicia sesión para sincronizar con Supabase.");

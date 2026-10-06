@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CloudRetryBudget, CloudSyncGate } from "../lib/cloud-sync-gate";
-import { cloudDataFingerprint, cloudSyncPayloadFingerprint, cloudSyncUploadRequired, cloudUploadDelta, downloadCloudData, mergeLocalAndCloud, uploadCloudData, type CloudDataBundle } from "../lib/cloud-sync";
+import { cloudDataFingerprint, cloudSyncPayloadFingerprint, cloudSyncUploadReasons, cloudSyncUploadRequired, cloudUploadDelta, downloadCloudData, mergeLocalAndCloud, uploadCloudData, type CloudDataBundle } from "../lib/cloud-sync";
 import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
 import { ownerRoundSyncFingerprint, ownerRoundTransportPayload, syncOwnerRound } from "../lib/owner-round-sync";
 import { readCloudBundle, writeCloudBundle } from "../lib/cloud-sync-service";
@@ -188,6 +188,13 @@ test("legacy history uses its completion or date revision when updatedAt is abse
   assert.equal(cloudSyncUploadRequired(local, remote), false);
   const edited = { ...local, history: [{ ...local.history[0], updatedAt: "2026-10-05T12:01:00.000Z" }] };
   assert.equal(cloudUploadDelta(edited, remote).history.length, 1);
+});
+
+test("upload diagnostics expose only allowlisted categories and no card contents", () => {
+  const remote = bundle({ deviceId: "iphone" });
+  assert.deepEqual(cloudSyncUploadReasons(remote, remote), []);
+  const edited = { ...remote, activeDraft: { roundId: "private-round-id", players: [{ id: "private-player", name: "Private QA name" }], scores: { 1: { "private-player": 6 } } }, activeDraftUpdatedAt: at };
+  assert.deepEqual(cloudSyncUploadReasons(edited, remote), ["activeDraft", "activeDraftUpdatedAt"]);
 });
 
 test("conditional private GET returns known bundle using only a small receipt", async () => {
