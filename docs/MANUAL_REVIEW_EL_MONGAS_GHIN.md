@@ -4,6 +4,8 @@ Usar exclusivamente **https://dev.thebackyard.com.mx** e iniciar sesión como **
 
 ## Checkpoint real actual
 
+**STOPPED_USAGE_GUARD:** el acceso de El Mongas a DEV ya se confirmó. Se detuvo QA antes de importar/publicar por escrituras de hidratación y un conflicto cloud 409 con reintento y bundle completo. Evitar reloads repetidos. La página de la prueba se llevó a `about:blank` para detener actividad; no se borró storage ni se cerró la cuenta.
+
 - GHIN pertenece al vínculo VERIFIED de el_mongas; número enmascarado `****3351`.
 - Último Handicap Index persistido: **30.8**. La actualización real requiere reautorización; el valor posterior aún no está comprobado.
 - Backyard Index: **5.5**, separado del provider y conservado.
@@ -11,7 +13,7 @@ Usar exclusivamente **https://dev.thebackyard.com.mx** e iniciar sesión como **
 - Atest últimas 20: **11/20, 55%**. GHIN-only no modifica este porcentaje.
 - Scoring record upstream: **cantidad aún no comprobada**, porque el flujo devolvió REAUTH_REQUIRED.
 - Tarjetas GHIN importadas hasta este checkpoint: **0**. No hay tarjeta publicada ni provider score ID de posting.
-- No se ha hecho cleanup, publicación ni modificación de las rondas.
+- No se hizo cleanup ni publicación. Todos los scores siguen iguales. QA21 cambió versión 10 → 11 solamente por `updatedAt`, demostrado contra su versión anterior auditada; no se revirtió. QA24 sigue versión 4 intacta.
 
 ## Qué revisar
 
@@ -35,7 +37,7 @@ Usar exclusivamente **https://dev.thebackyard.com.mx** e iniciar sesión como **
 
 ## Pendientes reales
 
-- Acceso manual a DEV y renovación de GHIN por REAUTH_REQUIRED.
+- Resolver la actividad cloud de hidratación antes de reanudar el QA real. El acceso manual a DEV está completado; sesión GHIN viva todavía no reconsultada, la consulta anterior devolvió REAUTH_REQUIRED.
 - Scoring record real, primera y segunda importación, QA visual con los datos oficiales y relogin limpio posterior.
 - Candidato con mappings confirmados antes de habilitar cualquier transport de posting.
 - Post → verificación provider → reimport → dedupe → segundo intento bloqueado: **no ejecutado**.

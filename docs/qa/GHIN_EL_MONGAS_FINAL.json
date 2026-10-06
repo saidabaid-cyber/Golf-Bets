@@ -1,9 +1,9 @@
 {
-  "status": "USER_REAUTH_REQUIRED",
+  "status": "STOPPED_USAGE_GUARD",
   "environment": "DEV",
   "branch": "integration/backyard-current",
   "url": "https://dev.thebackyard.com.mx",
-  "capturedAt": "2026-10-06T19:22:33.258Z",
+  "capturedAt": "2026-10-06T19:55:14Z",
   "initialSha": "8422256d795ed51e35ba99ac37eccdba349bdab3",
   "ownerId": "b182e0a1-d3f5-4e32-a005-29c6d55b6cdf",
   "BEFORE": {
@@ -14,7 +14,7 @@
     "backyardCompletedCount": 22
   },
   "IMPORT": {
-    "status": "USER_REAUTH_REQUIRED",
+    "status": "STOPPED_USAGE_GUARD",
     "fetched": null,
     "imported": 0,
     "matched": 0,
@@ -36,7 +36,7 @@
   },
   "AFTER": {
     "ghinIndex": 30.8,
-    "ghinIndexLiveRefresh": "USER_REAUTH_REQUIRED",
+    "ghinIndexLiveRefresh": "VISIBLE_PROFILE_30.8_UPSTREAM_NOT_QUERIED",
     "providerScoreCount": 0,
     "providerScoringRecordCount": null,
     "backyardCompletedCount": 22,
@@ -54,220 +54,235 @@
     ]
   },
   "baseline": {
-    "unchangedRounds": 26,
-    "changedRoundIds": [],
+    "unchangedRounds": 25,
+    "changedRoundIds": [
+      "24493b70-a2ef-456b-8060-aa5d69bb02ea"
+    ],
     "qa24Id": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
     "qa24Version": 4,
     "integrity": [
       {
-        "id": "aec5071d-0011-49ff-92df-fbebcf9b5f95",
-        "local_id": "s6h4mk2d",
-        "version": 1,
-        "snapshot_hash": "213d74817c4f342a5e927a42b2caed34",
-        "scores_hash": "99914b932bd37a50b983c5e7c90ae93b",
-        "lifecycle": "live"
-      },
-      {
-        "id": "ad727513-d19e-45f5-9b3b-6cba094f6544",
-        "local_id": "oonshxl8",
-        "version": 23,
-        "snapshot_hash": "b8fd155f9a7cdd50d65e5fd4461cc9cd",
-        "scores_hash": "ffbd5e044d39f73202877ce58b200bcf",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "697e4c3f-42cf-4c95-9c3f-7c57ddfcbf58",
-        "local_id": "8t9l8dma",
-        "version": 21,
-        "snapshot_hash": "990f2ac738342d5df411210132aa8b31",
-        "scores_hash": "c803f597f7dad6949922c780c910c1f1",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "c250c150-8694-46f8-bba9-07472e1eb7bc",
-        "local_id": "gys71iow",
-        "version": 21,
-        "snapshot_hash": "c220ef36073417f54c8c6537199747e1",
-        "scores_hash": "ebc8605d10baa9ebb8923a6f90f85a06",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "19bfd6a6-5808-4d8e-9432-4a8a9911dfa8",
-        "local_id": "uud3jzr4",
-        "version": 21,
-        "snapshot_hash": "e7b5e66b4d198f172baca8ee4fa8fc75",
-        "scores_hash": "4369eea0fdcb0afae5bb7e952e36fd43",
-        "lifecycle": "completed"
-      },
-      {
         "id": "4d004e21-fb27-489d-8081-0e38d6cc2733",
+        "version": 21,
         "local_id": "fz2xs46i",
-        "version": 21,
-        "snapshot_hash": "3a4a5935c4dd62565b9a189d4c3c48aa",
+        "lifecycle": "completed",
         "scores_hash": "8e26517a2e6067a1ab5b270e9c79bfa8",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "75fcbd06-804a-4508-bc34-ea0f23eb1895",
-        "local_id": "k1932hf8",
-        "version": 21,
-        "snapshot_hash": "711cb72037ab20c9e0ca4cce1346572b",
-        "scores_hash": "7d1301aacf25f3196a9d4da01431a942",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "570c3a9f-03ca-4238-89fc-46ad039d25ba",
-        "local_id": "2r8lnvh2",
-        "version": 20,
-        "snapshot_hash": "09be3a19b0aa6875f859bd50aa070ecb",
-        "scores_hash": "21e23680c3714db00b12ec6f1af006d2",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "7d13f9fb-4e93-49b3-b2d7-b20a5427e4ae",
-        "local_id": "fzkvtuec",
-        "version": 23,
-        "snapshot_hash": "4713940b382971525ec488f9df418817",
-        "scores_hash": "564fe5c4c261027300c63cb158c2c8e9",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "d1562db7-b37f-4e6b-b3f5-76a511c85fe6",
-        "local_id": "408e4png",
-        "version": 5,
-        "snapshot_hash": "08cbae4a42db49653777c0d5a36974a7",
-        "scores_hash": "87157cc4d3a77613c9eacef88229f768",
-        "lifecycle": "live"
-      },
-      {
-        "id": "1c5abff5-a02c-4a45-b151-0b2f5ac9bb55",
-        "local_id": "5fgb1a39",
-        "version": 20,
-        "snapshot_hash": "b945e73aa10b72f9e2a5d5ba97d6f4a9",
-        "scores_hash": "0b63a683d1b96e988c45b0331870ca22",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "59031561-6934-4cd0-b3cd-0181e5c76aa2",
-        "local_id": "vq7oerek",
-        "version": 20,
-        "snapshot_hash": "fdc4fa66971aab315bc9379d9847c86a",
-        "scores_hash": "6b13276e010a9d6a95d9bb73998fb3d7",
-        "lifecycle": "completed"
+        "snapshot_hash": "3a4a5935c4dd62565b9a189d4c3c48aa"
       },
       {
         "id": "19c03579-423d-4521-9eb1-c7e61110e143",
+        "version": 19,
         "local_id": "gboenefn",
-        "version": 19,
-        "snapshot_hash": "89e5c2576bcbd8384dea88cb5252756b",
+        "lifecycle": "completed",
         "scores_hash": "ec60d4b2e6e8e712b0599521706cc168",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "60d444f6-f550-4496-a535-b6a559511954",
-        "local_id": "9zonng6p",
-        "version": 19,
-        "snapshot_hash": "10efb3c2dab43e0f9da04cfdc763068e",
-        "scores_hash": "b2a31226f39501c5414d51afd2130f7a",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "1cc2c7cc-3c0f-4d93-9f25-9698216700ae",
-        "local_id": "uk0v5gmp",
-        "version": 19,
-        "snapshot_hash": "b694ce3c605412f7067af38d73b00dca",
-        "scores_hash": "443566bdafb05687e07521346386b086",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "a1bfd195-9fd5-49f3-82ed-2c12e51ca5b0",
-        "local_id": "8flnuur6",
-        "version": 19,
-        "snapshot_hash": "4a1ecdcfbaf69548716b6c5e21f275d3",
-        "scores_hash": "152443c54fd07f14e4841f764e3b31da",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "19e2d57c-bd49-4e37-b3f5-bb56d3f72eb0",
-        "local_id": "0hul3yua",
-        "version": 20,
-        "snapshot_hash": "3d8da2ba0943fd8bcb6b5a7b80c65eca",
-        "scores_hash": "b8182d45c5a8472421c7901e39b246d9",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "4db8c485-fbd4-4a7b-90d0-816786ec7462",
-        "local_id": "1phhh8px",
-        "version": 20,
-        "snapshot_hash": "91b1a2e60c5e5209e3c368a54df0a9c3",
-        "scores_hash": "a748ce9e58bff2b6f97c7277553c8dac",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "abf43e91-d09d-499e-beaa-ec76f0ca0c7e",
-        "local_id": "z36etwrb",
-        "version": 20,
-        "snapshot_hash": "eaa3c02044b7751992d63aa6f57a86a5",
-        "scores_hash": "165572bcd7bfd32adfd6ddbc83474559",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "3c8d6add-5e5d-4002-ac00-164e1ab21257",
-        "local_id": "2dsahjll",
-        "version": 19,
-        "snapshot_hash": "59119da235bc2e0f71bf1fc60f0de111",
-        "scores_hash": "d63ca6265700e57081e9191e85b6a8bf",
-        "lifecycle": "completed"
-      },
-      {
-        "id": "4ede402e-0eca-442a-9335-31f7d9d44ebb",
-        "local_id": "p3lna28k",
-        "version": 20,
-        "snapshot_hash": "a0503cf9821678279f02f23089697326",
-        "scores_hash": "9efe0a5b70ec6ea00701d5b9c6f79786",
-        "lifecycle": "completed"
+        "snapshot_hash": "89e5c2576bcbd8384dea88cb5252756b"
       },
       {
         "id": "4dbafd9d-dccd-4e23-83bf-6a7638e2821e",
-        "local_id": "o3iwbjfy",
         "version": 20,
-        "snapshot_hash": "6236ed1a4348feabea15e57592499e17",
+        "local_id": "o3iwbjfy",
+        "lifecycle": "completed",
         "scores_hash": "201d1ba96137f677a3fd3232113cde1d",
-        "lifecycle": "completed"
+        "snapshot_hash": "6236ed1a4348feabea15e57592499e17"
+      },
+      {
+        "id": "697e4c3f-42cf-4c95-9c3f-7c57ddfcbf58",
+        "version": 21,
+        "local_id": "8t9l8dma",
+        "lifecycle": "completed",
+        "scores_hash": "c803f597f7dad6949922c780c910c1f1",
+        "snapshot_hash": "990f2ac738342d5df411210132aa8b31"
+      },
+      {
+        "id": "19e2d57c-bd49-4e37-b3f5-bb56d3f72eb0",
+        "version": 20,
+        "local_id": "0hul3yua",
+        "lifecycle": "completed",
+        "scores_hash": "b8182d45c5a8472421c7901e39b246d9",
+        "snapshot_hash": "3d8da2ba0943fd8bcb6b5a7b80c65eca"
+      },
+      {
+        "id": "75fcbd06-804a-4508-bc34-ea0f23eb1895",
+        "version": 21,
+        "local_id": "k1932hf8",
+        "lifecycle": "completed",
+        "scores_hash": "7d1301aacf25f3196a9d4da01431a942",
+        "snapshot_hash": "711cb72037ab20c9e0ca4cce1346572b"
+      },
+      {
+        "id": "c250c150-8694-46f8-bba9-07472e1eb7bc",
+        "version": 21,
+        "local_id": "gys71iow",
+        "lifecycle": "completed",
+        "scores_hash": "ebc8605d10baa9ebb8923a6f90f85a06",
+        "snapshot_hash": "c220ef36073417f54c8c6537199747e1"
+      },
+      {
+        "id": "60d444f6-f550-4496-a535-b6a559511954",
+        "version": 19,
+        "local_id": "9zonng6p",
+        "lifecycle": "completed",
+        "scores_hash": "b2a31226f39501c5414d51afd2130f7a",
+        "snapshot_hash": "10efb3c2dab43e0f9da04cfdc763068e"
+      },
+      {
+        "id": "1cc2c7cc-3c0f-4d93-9f25-9698216700ae",
+        "version": 19,
+        "local_id": "uk0v5gmp",
+        "lifecycle": "completed",
+        "scores_hash": "443566bdafb05687e07521346386b086",
+        "snapshot_hash": "b694ce3c605412f7067af38d73b00dca"
+      },
+      {
+        "id": "19bfd6a6-5808-4d8e-9432-4a8a9911dfa8",
+        "version": 21,
+        "local_id": "uud3jzr4",
+        "lifecycle": "completed",
+        "scores_hash": "4369eea0fdcb0afae5bb7e952e36fd43",
+        "snapshot_hash": "e7b5e66b4d198f172baca8ee4fa8fc75"
+      },
+      {
+        "id": "4db8c485-fbd4-4a7b-90d0-816786ec7462",
+        "version": 20,
+        "local_id": "1phhh8px",
+        "lifecycle": "completed",
+        "scores_hash": "a748ce9e58bff2b6f97c7277553c8dac",
+        "snapshot_hash": "91b1a2e60c5e5209e3c368a54df0a9c3"
       },
       {
         "id": "24493b70-a2ef-456b-8060-aa5d69bb02ea",
+        "version": 11,
         "local_id": "z082rref",
-        "version": 10,
-        "snapshot_hash": "df069e4dd75d2acf42306540828671a2",
+        "lifecycle": "completed",
         "scores_hash": "2960e5c76ebf5fe5b2888aeebc699cf5",
-        "lifecycle": "completed"
+        "snapshot_hash": "1ffc4f0db13ba5354a67b1988243f9c0"
+      },
+      {
+        "id": "570c3a9f-03ca-4238-89fc-46ad039d25ba",
+        "version": 20,
+        "local_id": "2r8lnvh2",
+        "lifecycle": "completed",
+        "scores_hash": "21e23680c3714db00b12ec6f1af006d2",
+        "snapshot_hash": "09be3a19b0aa6875f859bd50aa070ecb"
+      },
+      {
+        "id": "7d13f9fb-4e93-49b3-b2d7-b20a5427e4ae",
+        "version": 23,
+        "local_id": "fzkvtuec",
+        "lifecycle": "completed",
+        "scores_hash": "564fe5c4c261027300c63cb158c2c8e9",
+        "snapshot_hash": "4713940b382971525ec488f9df418817"
+      },
+      {
+        "id": "d1562db7-b37f-4e6b-b3f5-76a511c85fe6",
+        "version": 5,
+        "local_id": "408e4png",
+        "lifecycle": "live",
+        "scores_hash": "87157cc4d3a77613c9eacef88229f768",
+        "snapshot_hash": "08cbae4a42db49653777c0d5a36974a7"
+      },
+      {
+        "id": "a1bfd195-9fd5-49f3-82ed-2c12e51ca5b0",
+        "version": 19,
+        "local_id": "8flnuur6",
+        "lifecycle": "completed",
+        "scores_hash": "152443c54fd07f14e4841f764e3b31da",
+        "snapshot_hash": "4a1ecdcfbaf69548716b6c5e21f275d3"
       },
       {
         "id": "8b512844-eee5-4c34-95d1-877470b19361",
-        "local_id": "hho9yjs8",
         "version": 3,
-        "snapshot_hash": "83168e5eda848fad550650f538abaed0",
+        "local_id": "hho9yjs8",
+        "lifecycle": "cancelled",
         "scores_hash": "da0be7cc59306a53fc422ff7be71509e",
-        "lifecycle": "cancelled"
+        "snapshot_hash": "83168e5eda848fad550650f538abaed0"
+      },
+      {
+        "id": "abf43e91-d09d-499e-beaa-ec76f0ca0c7e",
+        "version": 20,
+        "local_id": "z36etwrb",
+        "lifecycle": "completed",
+        "scores_hash": "165572bcd7bfd32adfd6ddbc83474559",
+        "snapshot_hash": "eaa3c02044b7751992d63aa6f57a86a5"
+      },
+      {
+        "id": "1c5abff5-a02c-4a45-b151-0b2f5ac9bb55",
+        "version": 20,
+        "local_id": "5fgb1a39",
+        "lifecycle": "completed",
+        "scores_hash": "0b63a683d1b96e988c45b0331870ca22",
+        "snapshot_hash": "b945e73aa10b72f9e2a5d5ba97d6f4a9"
+      },
+      {
+        "id": "3c8d6add-5e5d-4002-ac00-164e1ab21257",
+        "version": 19,
+        "local_id": "2dsahjll",
+        "lifecycle": "completed",
+        "scores_hash": "d63ca6265700e57081e9191e85b6a8bf",
+        "snapshot_hash": "59119da235bc2e0f71bf1fc60f0de111"
       },
       {
         "id": "fee4ab11-9650-4f3b-99b3-8af0bd0eebde",
-        "local_id": "a9sro2vv",
         "version": 21,
-        "snapshot_hash": "d03201080ccb438347b2bca305108443",
+        "local_id": "a9sro2vv",
+        "lifecycle": "completed",
         "scores_hash": "d6480f8441ec31c9f994f47097f42062",
-        "lifecycle": "completed"
+        "snapshot_hash": "d03201080ccb438347b2bca305108443"
+      },
+      {
+        "id": "59031561-6934-4cd0-b3cd-0181e5c76aa2",
+        "version": 20,
+        "local_id": "vq7oerek",
+        "lifecycle": "completed",
+        "scores_hash": "6b13276e010a9d6a95d9bb73998fb3d7",
+        "snapshot_hash": "fdc4fa66971aab315bc9379d9847c86a"
+      },
+      {
+        "id": "4ede402e-0eca-442a-9335-31f7d9d44ebb",
+        "version": 20,
+        "local_id": "p3lna28k",
+        "lifecycle": "completed",
+        "scores_hash": "9efe0a5b70ec6ea00701d5b9c6f79786",
+        "snapshot_hash": "a0503cf9821678279f02f23089697326"
       },
       {
         "id": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
-        "local_id": "rrouggse",
         "version": 4,
-        "snapshot_hash": "16c685ee0777efdeeb9a7795e313446a",
+        "local_id": "rrouggse",
+        "lifecycle": "live",
         "scores_hash": "66e1869c4a4a09292175d295235e2762",
-        "lifecycle": "live"
+        "snapshot_hash": "16c685ee0777efdeeb9a7795e313446a"
+      },
+      {
+        "id": "aec5071d-0011-49ff-92df-fbebcf9b5f95",
+        "version": 1,
+        "local_id": "s6h4mk2d",
+        "lifecycle": "live",
+        "scores_hash": "99914b932bd37a50b983c5e7c90ae93b",
+        "snapshot_hash": "213d74817c4f342a5e927a42b2caed34"
+      },
+      {
+        "id": "ad727513-d19e-45f5-9b3b-6cba094f6544",
+        "version": 23,
+        "local_id": "oonshxl8",
+        "lifecycle": "completed",
+        "scores_hash": "ffbd5e044d39f73202877ce58b200bcf",
+        "snapshot_hash": "b8fd155f9a7cdd50d65e5fd4461cc9cd"
       }
-    ]
+    ],
+    "scoreChanges": 0,
+    "qa21Discrepancy": {
+      "previousVersion": 10,
+      "currentVersion": 11,
+      "changedFields": [
+        "updatedAt"
+      ],
+      "previousHash": "df069e4dd75d2acf42306540828671a2",
+      "currentHash": "1ffc4f0db13ba5354a67b1988243f9c0",
+      "changedAt": "2026-10-06T19:49:14.818Z",
+      "auditPreviousVersionVerified": true,
+      "automaticRollback": false
+    }
   },
   "DB": {
     "project": "bymeopxkxapfizeeqeyb",
@@ -281,25 +296,34 @@
   },
   "requestBudget": {
     "realScoringRecordActions": 1,
-    "scoringRecordResult": "REAUTH_REQUIRED",
+    "scoringRecordResult": "EARLIER_REAUTH_REQUIRED_NOT_REQUERIED",
     "realImports": 0,
     "realProviderPosts": 0,
-    "cloudSyncGet": null,
-    "cloudSyncPost": null,
-    "cloudRounds": null,
-    "ghinImportGet": null,
-    "maxResponseBytes": null,
-    "retriesObserved": null,
+    "cloudSyncGetObserved": 4,
+    "cloudSyncGetUninstrumentedRecovery": 1,
+    "cloudSyncPostObserved": 3,
+    "cloudSyncSuccessfulPostsObserved": 2,
+    "cloudSyncConflictPostsObserved": 1,
+    "cloudRoundsObserved": 0,
+    "ghinImportGetObserved": 1,
+    "ghinImportGetResponseBytes": 193,
+    "maxResponseBytesObserved": 521694,
+    "maxUploadBytesObserved": 26495,
+    "fullCloudGetObserved": 3,
+    "fullCanonicalPostReceiptObserved": 2,
+    "retriesObserved": 1,
     "authenticatedIdleCalls": null,
-    "requestStorm": "NOT_OBSERVED",
+    "requestStorm": "NOT_PROVEN",
     "pollingAdded": false,
-    "usageGuardTriggered": false,
-    "note": "Authenticated traffic/idle verification remains blocked. Null means not measured, not zero."
+    "usageGuardTriggered": true,
+    "note": "Captured window 19:49:27–19:50:55Z. One additional full recovery GET is inferred from CLOUD_FIELD_CONFLICT catch/rebase; it lacks request diagnostics, so observed totals are not exhaustive. POST 409 logged responseBytes=0 means unmeasured body, not proof of empty response. Two full GETs correspond to login/current-build hydration; one full retry GET followed conflict. QA halted before imports and idle certification."
   },
   "cleanSession": {
-    "status": "BLOCKED_EXTERNAL",
+    "status": "STOPPED_USAGE_GUARD",
+    "appLoginConfirmed": true,
+    "account": "el_mongas",
     "importedCardsRestored": false,
-    "reason": "Canonical DEV awaiting manual login code; GHIN scoring query needs manual reauthorization."
+    "reason": "DEV login succeeded; final post-import clean-session recovery not run because cloud usage guard halted QA."
   },
   "tests": {
     "directed": {
@@ -318,20 +342,34 @@
         "iphone-capture Rules",
         "nightly-catalog-quality equipment-gaps"
       ],
-      "newFailures": 0,
-      "total": 4565,
-      "pass": 4560,
-      "fail": 5
+      "newFailures": 0
     },
     "typecheck": "PASS",
     "lint": "PASS",
     "build": "PASS"
   },
   "unresolved": [
-    "Manual canonical DEV login and GHIN reauthorization.",
-    "Real provider scoring record count and normalized import.",
-    "Second real import idempotence, visual source/history checks and clean-session recovery.",
-    "Confirmed eligible course/tee mappings before any real transport or posting.",
-    "Real posting/verification/round-trip/exactly-once attempt; optional posts 2–3 not started."
-  ]
+    "Explain hydration-only frequentPlayers/activeDraft writes and CLOUD_FIELD_CONFLICT with local reproduction before resuming real QA.",
+    "Real scoring record and legitimate GHIN session validity; earlier query required reauthorization.",
+    "First/second real imports, matches, visual history, clean-session recovery and two-minute idle verification.",
+    "CONFIRMED eligible course/tee mappings before any transport or real posting.",
+    "Real post/provider verify/round-trip/exactly-once; optional posts 2–3 not started."
+  ],
+  "cloudGuard": {
+    "status": "STOPPED_USAGE_GUARD",
+    "newFailure": "CLOUD_FIELD_CONFLICT",
+    "httpStatus": 409,
+    "persistenceCategory": "canonical",
+    "sequence": [
+      "Profile/login hydration uploaded frequentPlayers/activeDraft changes without manual round edits",
+      "Intentional current-build reload hydrates knownCloud missing",
+      "Frequent-player hydration becomes dirty; POST 409 CLOUD_FIELD_CONFLICT",
+      "Recovery downloads canonical bundle and rebases",
+      "One bounded automatic retry GET 521587 bytes and POST canonical receipt 521694 bytes",
+      "Cycle succeeds; no successful POST misclassified as failure observed",
+      "QA stopped before GHIN sync; browser navigated about:blank without clearing storage"
+    ],
+    "exactOriginOfHydrationMutation": "UNRESOLVED",
+    "scope": "No application code or cloud guards changed"
+  }
 }

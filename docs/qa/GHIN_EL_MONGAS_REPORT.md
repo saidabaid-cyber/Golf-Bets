@@ -2,11 +2,11 @@
 
 ## A. STATUS
 
-**USER_REAUTH_REQUIRED / BLOCKED_EXTERNAL. No DONE.** Implementación y regresiones locales completadas. El ciclo real de scoring record/import/post/round-trip/relogin sigue pendiente.
+**STOPPED_USAGE_GUARD. No DONE.** Login canónico confirmado como El Mongas; QA detenido antes de importar o publicar GHIN por escrituras durante hidratación, POST 409 `CLOUD_FIELD_CONFLICT` y un reintento con bundle completo. Implementación y regresiones locales completadas. Scoring record/import/post/round-trip/relogin siguen pendientes.
 
 ## B. BASELINE
 
-PASS: 26 registros Backyard conservan los mismos hashes y versiones que el snapshot inicial: 22 completados, QA22 cancelada y tres live. Incluye las 20 originales, QA21, QA23, QA24 y dos parciales antiguas. No se escribió ni borró ninguna ronda, score, apuesta o Atest.
+Las 26 rondas siguen en servidor: 22 completadas, QA22 cancelada y tres live. Las 20 originales, QA23, QA24 y dos parciales antiguas conservan hashes/versiones. Los hashes de scores de las 26 son idénticos. **Discrepancia QA21:** versión 10 → 11 durante la hidratación de acceso; `cloud_record_versions` confirma que el único campo cambiado fue `updatedAt`. No se revirtió ni sobrescribió esta revisión. No hubo edición manual de scores ni borrado.
 
 QA24 ya tenía versión 4 al inicio de esta tarea, frente a versión 3 del checkpoint anterior. H1 sigue 5/6 y el hash de scores no cambió. Se conservó la versión actual; no se restauró un snapshot anterior.
 
@@ -16,7 +16,7 @@ PASS persistido: owner `b182e0a1-d3f5-4e32-a005-29c6d55b6cdf`, VERIFIED, GHIN `*
 
 ## D. GHIN PROFILE
 
-Index persistido antes/después: **30.8**. La última sincronización exitosa guardada fue `2026-10-06T18:19:44.856Z`. Index actualizado mediante nueva consulta: USER_REAUTH_REQUIRED, no comprobado.
+Index inicial y visible tras el acceso: **30.8**. Perfil muestra última actualización `6/10/2026, 1:40:10 p.m.`. No se hizo una nueva consulta upstream durante este checkpoint; la consulta anterior había devuelto REAUTH_REQUIRED. No se interpreta el valor visible como prueba de scoring record recuperado.
 
 ## E. SCORING RECORD
 
@@ -76,7 +76,11 @@ PASS integridad DB: `16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d` / `rrouggse`, live, H
 
 ## S. REQUEST BUDGET
 
-Una acción real “Ver scoring record” devolvió REAUTH_REQUIRED. Importaciones reales: 0. Posts provider: 0. El lector nuevo no agrega polling ni retries automáticos; coalescing probado. La medición autenticada de requests/bytes/reposo está pendiente, y se registra como null, nunca como cero falso. No se ejecutó mega corrida, stress ni loops.
+Ventana capturada `19:49:27–19:50:55Z`: **4 GET sync observados**, **3 POST sync observados** (dos 200, uno 409), **1 retry**, **3 GET completos observados**, **2 receipts POST completos**, **1 GET privado de importación** (200, 193 bytes), **0 importaciones y 0 posts GHIN**. Máxima respuesta observada **521,694 bytes**, máximo upload **26,495 bytes**. `/api/cloud/rounds`: 0 en los diagnostics capturados; no equivale a un conteo de red exhaustivo.
+
+Un GET completo adicional de recuperación se infiere del catch de `CLOUD_FIELD_CONFLICT`, que descarga sin callback de diagnostics. Los totales observados no lo incluyen. Dos full GET corresponden a hidratación de acceso/reload intencional para cargar el build publicado; el otro full GET se ejecutó con trigger retry después del conflicto. El body del POST 409 se registra como 0 bytes por el instrumentador, pero su tamaño real no fue medido.
+
+Secuencia comprobada: hidratación dirty (`frequentPlayers`/`activeDraft`) → POST **409 CLOUD_FIELD_CONFLICT** → recovery/rebase → retry GET **521,587 bytes** → POST **200**, receipt **521,694 bytes** → `cycle:success`. **No se observó POST 200 convertido incorrectamente en failure.** La causa exacta de las mutaciones de hidratación sigue sin resolver; no se afirma polling ni request storm demostrado. Guard activado conservadoramente; página llevada a `about:blank` sin limpiar storage. Reposo autenticado de dos minutos **no certificado**, no se reporta cero falso.
 
 ## T. TESTS
 
@@ -94,7 +98,7 @@ Migración aditiva `20261006184558_ghin_owned_score_import`, aplicada exclusivam
 
 ## V. CLEAN SESSION
 
-BLOCKED_EXTERNAL: la pestaña canónica está esperando el código manual de el_mongas. El GET persistido no depende de una sesión GHIN viva ni de storage del browser, pero la recuperación con login limpio después de importar aún debe ejecutarse.
+Acceso canónico confirmado como El Mongas. GET privado de tarjetas persistidas: 200, 193 bytes, tabla todavía vacía. **STOPPED_USAGE_GUARD:** recuperación limpia posterior a importar no ejecutada. No se reutiliza este acceso como prueba de un relogin final con tarjetas GHIN.
 
 ## W. MANUAL REVIEW
 
@@ -112,7 +116,7 @@ Diff limitado a GHIN privado, presentación de Carrera/Histórico, pruebas y QA 
 
 ## Z. UNRESOLVED
 
-1. Login manual canónico y reautorización legítima GHIN.
+1. Diagnóstico local de mutaciones sin edición durante hidratación, conflicto 409 y recuperación; no seguir consumiendo DEV hasta esclarecerlo. Acceso manual canónico completado. Validez de sesión GHIN viva todavía no reconsultada.
 2. Consulta scoring record, importaciones reales 1 y 2, count/IDs/matches/ambigüedades y QA visual.
 3. Mappings CONFIRMED suficientes para una tarjeta completada segura.
 4. Transport legítimo y posting con los diez guards; verificación provider, round-trip e idempotencia reales.
