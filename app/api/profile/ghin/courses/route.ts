@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
   if (!session) return privateGhinJson({ code: "REAUTH_REQUIRED", error: "Renueva autorización GHIN para consultar campos." }, 409);
   if (!limiter.consume(account.userId).allowed) return privateGhinJson({ code: "RATE_LIMITED" }, 429);
   const start = session.client.getTrace().length;
-  const result = await lookupGhinCourse(session.client, input);
+  const result = await lookupGhinCourse(session.client, input, profile.data.external_player_id);
   const trace = session.client.getTrace().slice(start).map(({ endpoint, method, httpStatus, outcome, durationMs }) =>
     ({ endpoint: endpoint.split("?")[0], method, httpStatus, outcome, durationMs }));
   console.info("backyard_ghin_course_lookup", JSON.stringify({ operation: input.operation, trace }));

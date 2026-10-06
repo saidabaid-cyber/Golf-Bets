@@ -4,7 +4,8 @@ import type { NormalizedGhinCourse, NormalizedGhinFacility, NormalizedGhinTee } 
 export type GhinCourseLookupInput =
   | { operation: "search"; name: string }
   | { operation: "course"; courseId: string }
-  | { operation: "tee"; teeId: string };
+  | { operation: "tee"; teeId: string }
+  | { operation: "posting-profile" };
 export type LookupOutcome<T> = { ok: true; data: T; httpStatus: number; fetchedAt: string }
   | { ok: false; code: string; httpStatus: number | null };
 export type GhinCourseLookupResponse = {
@@ -14,11 +15,13 @@ export type GhinCourseLookupResponse = {
   course?: LookupOutcome<NormalizedGhinCourse>;
   postingTees?: LookupOutcome<NormalizedGhinTee[]>;
   tee?: LookupOutcome<NormalizedGhinTee>;
+  postingProfile?: LookupOutcome<{ identityMatches: boolean; gender: "M" | "F" | null }>;
 };
 
 export function parseCourseLookupInput(value: unknown): GhinCourseLookupInput | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
+  if (v.operation === "posting-profile") return Object.keys(v).length === 1 ? { operation: "posting-profile" } : null;
   const key = v.operation === "search" ? "name" : v.operation === "course" ? "courseId" : v.operation === "tee" ? "teeId" : null;
   if (!key || Object.keys(v).some(k => k !== "operation" && k !== key) || typeof v[key] !== "string") return null;
   const text = (v[key] as string).trim();
@@ -38,8 +41,16 @@ async function outcome<T>(read: () => Promise<{ data: T; httpStatus: number; fet
 
 /** Explicit reads on the linked golfer's own client. No global QA credentials,
  * writes, polling, scoring-record reads or posting are part of this lookup. */
-export async function lookupGhinCourse(client: Pick<GhinReadOnlyClient, "searchFacilities" | "searchCourses" | "getCourse" | "getScorePostingTees" | "getTee">,
-  input: GhinCourseLookupInput): Promise<GhinCourseLookupResponse> {
+export async function lookupGhinCourse(client: Pick<GhinReadOnlyClient, "searchFacilities" | "searchCourses" | "getCourse" | "getScorePostingTees" | "getTee" | "lookupGolfer">,
+  input: GhinCourseLookupInput, linkedGolferId?: string): Promise<GhinCourseLookupResponse> {
+  if (input.operation === "posting-profile") {
+    if (!linkedGolferId) return { readOnly: true, postingProfile: { ok: false, code: "MISSING_LINKED_IDENTITY", httpStatus: null } };
+    const profile = await outcome(() => client.lookupGolfer(linkedGolferId));
+    return { readOnly: true, postingProfile: profile.ok ? { ...profile, data: {
+      identityMatches: profile.data.ghinNumber === linkedGolferId,
+      gender: profile.data.ghinNumber === linkedGolferId ? profile.data.gender ?? null : null,
+    } } : profile };
+  }
   if (input.operation === "search") {
     const [facilities, courses] = await Promise.all([
       outcome(() => client.searchFacilities({ name: input.name })),

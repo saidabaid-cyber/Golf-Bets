@@ -23,7 +23,10 @@ export function GhinCourseLookup({ lookup }: { lookup: (input: GhinCourseLookupI
   async function read(input: GhinCourseLookupInput) {
     if (pending.current) return;
     pending.current = true; setBusy(true); setError("");
-    try { setData(await lookup(input)); }
+    try {
+      const next = await lookup(input);
+      setData(current => input.operation === "tee" || input.operation === "posting-profile" ? { ...current, ...next } : next);
+    }
     catch (error) { setError(error instanceof Error ? error.message : "No se pudo consultar GHIN."); }
     finally { pending.current = false; setBusy(false); }
   }
@@ -34,6 +37,7 @@ export function GhinCourseLookup({ lookup }: { lookup: (input: GhinCourseLookupI
       <label>Campo GHIN<input value={name} maxLength={100} minLength={2} onChange={event => setName(event.target.value)} required /></label>
       <button type="submit" className="secondary" disabled={busy}>{busy ? "CONSULTANDO…" : "BUSCAR CAMPO GHIN"}</button>
     </form>
+    <button type="button" className="textButton" disabled={busy} onClick={() => void read({ operation: "posting-profile" })}>VERIFICAR PERFIL PARA POSTING</button>
     {error && <p role="alert">{error}</p>}
     {data?.facilities && <p>{data.facilities.ok ? `Instalaciones encontradas: ${data.facilities.data.length}` : `Facility search: ${data.facilities.code} · HTTP ${data.facilities.httpStatus ?? "—"}`}</p>}
     {data?.facilities?.ok && data.facilities.data.map(f => <p key={f.id}>{f.name} · Facility ID {f.id} · {f.city}, {f.state}, {f.country}</p>)}
@@ -47,6 +51,9 @@ export function GhinCourseLookup({ lookup }: { lookup: (input: GhinCourseLookupI
     </section>}
     {data?.postingTees && <p role="status">{data.postingTees.ok ? `Tees habilitadas por GHIN para score posting: ${data.postingTees.data.map(t => t.id).join(", ") || "ninguna"}` : `Score posting entitlement: ${data.postingTees.code} · HTTP ${data.postingTees.httpStatus ?? "—"}`}</p>}
     {data?.tee && (data.tee.ok ? <Tee tee={data.tee.data} /> : <p>Tee details: {data.tee.code} · HTTP {data.tee.httpStatus ?? "—"}</p>)}
+    {data?.postingProfile && <p role="status">{data.postingProfile.ok
+      ? `Perfil GHIN: ${data.postingProfile.data.identityMatches ? "identidad vinculada confirmada" : "identidad no coincide"} · Género declarado por GHIN: ${data.postingProfile.data.gender ?? "no informado"}`
+      : `Perfil para posting: ${data.postingProfile.code} · HTTP ${data.postingProfile.httpStatus ?? "—"}`}</p>}
     {data && <details><summary>Evidencia de campo y tees</summary><pre className={styles.evidence}>{JSON.stringify(data, null, 2)}</pre></details>}
   </details>;
 }

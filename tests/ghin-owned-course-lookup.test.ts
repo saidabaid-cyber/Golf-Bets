@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { lookupGhinCourse, parseCourseLookupInput } from "../lib/ghin/course-lookup";
 import { socialUI, uiFind, uiText, settleUI } from "./helpers/social-ui";
+import { parseGhinGolfer } from "../lib/ghin/core";
 
 const result = (data: any) => Promise.resolve({ data, httpStatus: 200, fetchedAt: "2026-10-06T00:00:00Z" });
 test("lookup rejects owner/golfer selectors, malformed IDs and oversized queries", () => {
@@ -13,6 +14,23 @@ test("lookup rejects owner/golfer selectors, malformed IDs and oversized queries
     {operation:"search",name:"x"},{operation:"search",name:"x".repeat(101)}]) assert.equal(parseCourseLookupInput(input),null);
   assert.deepEqual(parseCourseLookupInput({operation:"search",name:" La Vista "}),{operation:"search",name:"La Vista"});
   assert.deepEqual(parseCourseLookupInput({operation:"course",courseId:"23233"}),{operation:"course",courseId:"23233"});
+  assert.deepEqual(parseCourseLookupInput({operation:"posting-profile"}),{operation:"posting-profile"});
+  assert.equal(parseCourseLookupInput({operation:"posting-profile",golferId:"other"}),null);
+});
+test("posting gender comes only from an explicit provider field, never a name or played tee",()=>{
+  assert.equal(parseGhinGolfer({ghin_number:"123456",name:"Female Name",tee:"Red"})?.gender,undefined);
+  for(const [gender,expected] of [["Male","M"],["Female","F"],["m","M"],["F","F"],["unknown",null],[null,null]])
+    assert.equal(parseGhinGolfer({ghin_number:"123456",gender})?.gender,expected);
+});
+test("posting profile binds the owner-linked golfer and returns no names or identifiers",async()=>{
+  let calls=0;
+  const client={lookupGolfer:(id:string)=>{assert.equal(id,"123456");calls++;return result({ghinNumber:id,gender:"F",name:"Private Name",handicapIndex:30.8});}} as any;
+  const r=await lookupGhinCourse(client,{operation:"posting-profile"},"123456");
+  assert.equal(calls,1);assert.deepEqual(r.postingProfile,{ok:true,data:{identityMatches:true,gender:"F"},httpStatus:200,fetchedAt:"2026-10-06T00:00:00Z"});
+  assert.doesNotMatch(JSON.stringify(r),/123456|Private Name|30\.8/);
+  const missing=await lookupGhinCourse(client,{operation:"posting-profile"});assert.equal(missing.postingProfile?.ok,false);assert.equal(calls,1);
+  const mismatch=await lookupGhinCourse({lookupGolfer:()=>result({ghinNumber:"other",gender:"M"})} as any,{operation:"posting-profile"},"123456");
+  assert.equal(mismatch.postingProfile?.ok && mismatch.postingProfile.data.gender,null);
 });
 test("facility denial does not hide an independently authorized course result", async () => {
   const calls:string[]=[];
@@ -70,4 +88,14 @@ test("opening or rendering course lookup does not read GHIN; simultaneous submit
   const form=uiFind(tree,n=>n.type==="form");form.props.onSubmit({preventDefault(){}});form.props.onSubmit({preventDefault(){}});assert.equal(reads,1);
   resolve!({readOnly:true,postingTees:{ok:false,code:"FORBIDDEN",httpStatus:403}});await settleUI();
   assert.match(uiText(h.render("GhinCourseLookup",props)),/Score posting entitlement: FORBIDDEN · HTTP 403/);assert.equal(reads,1);
+});
+test("a tee/profile inspect keeps existing course and entitlement evidence without fetching again",async()=>{
+  const h=socialUI("app/components/ghin-course-lookup.tsx");
+  let calls=0;
+  const props={lookup:async(input:any)=>{calls++;return input.operation==="search"
+    ? {readOnly:true,course:{ok:true,data:{id:"23233",name:"La Vista",facilityId:"19886",tees:[{id:"106088",name:"Doradas"}]}},postingTees:{ok:true,data:[{id:"106088"}]}}
+    : {readOnly:true,postingProfile:{ok:true,data:{identityMatches:true,gender:"F"}}};}};
+  let tree=h.render("GhinCourseLookup",props);uiFind(tree,n=>n.type==="form").props.onSubmit({preventDefault(){}});await settleUI();
+  tree=h.render("GhinCourseLookup",props);uiFind(tree,n=>n.type==="button" && uiText(n)==="VERIFICAR PERFIL PARA POSTING").props.onClick();await settleUI();
+  tree=h.render("GhinCourseLookup",props);assert.match(uiText(tree),/Course ID 23233/);assert.match(uiText(tree),/Tees habilitadas por GHIN/);assert.match(uiText(tree),/Género declarado por GHIN: F/);assert.equal(calls,2);
 });

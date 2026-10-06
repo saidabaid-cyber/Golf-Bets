@@ -24,6 +24,8 @@ export type NormalizedGhinGolfer = {
   rawStatus: string | null;
   isActive: boolean | null;
   updatedAt: string | null;
+  /** Only an explicit provider value; never inferred from a name or tee. */
+  gender?: "M" | "F" | null;
 };
 
 export type NormalizedGhinScore = {
@@ -323,6 +325,7 @@ export function parseGhinGolfer(payload: unknown): NormalizedGhinGolfer | null {
   const club = childRecord(record, ["club", "golf_club", "primary_club"]);
   const association = childRecord(record, ["association", "golf_association"]);
   const status = statusDetails(record);
+  const providerGender = field(record, ["gender", "sex"]);
 
   return {
     ghinNumber,
@@ -342,7 +345,14 @@ export function parseGhinGolfer(payload: unknown): NormalizedGhinGolfer | null {
     handicapIndex: parseGhinHandicapIndex(field(record, ["handicap_index", "handicapindex", "current_handicap_index", "hi"])),
     ...status,
     updatedAt: text(field(record, ["handicap_updated_at", "updated_at", "revision_date", "rev_date", "effective_date", "as_of_date"])),
+    ...(providerGender === undefined ? {} : { gender: normalizeGhinGender(providerGender) }),
   };
+}
+
+export function normalizeGhinGender(value: unknown): "M" | "F" | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "m" || normalized === "male" ? "M" : normalized === "f" || normalized === "female" ? "F" : null;
 }
 
 export function parseGhinGolfers(payload: unknown): NormalizedGhinGolfer[] {
