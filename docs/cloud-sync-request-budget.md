@@ -79,3 +79,17 @@ GET-only when the delta has no canonical effect. The mega QA is still paused.
 Final local reduction check: 27 new tests in total; 184/184 directed PASS.
 Fresh full suite: 4,480 tests, 4,475 PASS, the same five baseline failures,
 zero new failures. Typecheck/lint/build PASS after the reduction.
+
+The same minimal case exposed one remaining reload-only POST: catalog rows
+without snapshot.updatedAt use the epoch for server CAS, but the client delta
+compared only nonempty literal timestamps. Local display defaults therefore
+requested an upload that did not change any stored row. Match the effective
+CAS clock (epoch for unversioned catalog rows; updatedAt/completedAt/date for
+history). Two regression tests reproduced the failure before this correction.
+Keep explicit newer revisions, other-device conflicts and completed owner
+transitions. Do not change catalog data, score calculations or any database
+permissions. Reuse the one partial smoke card for the final observation.
+
+After this last correction: 29 new tests in total, 210/210 directed PASS;
+4,482 full-suite tests, 4,477 PASS, the same five pre-existing failures,
+zero new failures. Typecheck, whole-repository lint and build PASS.

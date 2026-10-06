@@ -165,6 +165,31 @@ test("normalizing same-device course cache retains the canonical row and real dr
   assert.equal(cloudSyncUploadRequired(edited, remote), true);
 });
 
+test("unversioned catalog display defaults do not create a reload upload", () => {
+  // Built-in/catalog snapshots have no updatedAt; their stored CAS revision is
+  // the epoch. Hydration may add display-only rules, never a new edit clock.
+  const course = { id: "catalog-course", name: "Canonical course" } as CloudDataBundle["courses"][number];
+  const remote = bundle({ deviceId: "iphone", courses: [course] });
+  const local = { ...remote, courses: [{ ...course, localRules: [] }] };
+  assert.equal(cloudUploadDelta(local, remote).courses.length, 0);
+  assert.equal(cloudSyncUploadRequired(local, remote), false);
+  const edited = { ...local, courses: [{ ...local.courses[0], updatedAt: at }] };
+  assert.equal(cloudUploadDelta(edited, remote).courses.length, 1);
+  assert.equal(cloudSyncUploadRequired(edited, remote), true, "an explicit versioned edit still uploads");
+  assert.equal(cloudUploadDelta({ ...local, deviceId: "another-device" }, remote).courses.length, 1,
+    "another installation still passes through the existing conflict preflight");
+});
+
+test("legacy history uses its completion or date revision when updatedAt is absent", () => {
+  const original = { ...round("legacy-display"), updatedAt: undefined, completedAt: at };
+  const remote = bundle({ deviceId: "iphone", history: [original] });
+  const local = { ...remote, history: [{ ...original, presentation: { playMode: "score_only" } } as RoundSnapshot] };
+  assert.equal(cloudUploadDelta(local, remote).history.length, 0);
+  assert.equal(cloudSyncUploadRequired(local, remote), false);
+  const edited = { ...local, history: [{ ...local.history[0], updatedAt: "2026-10-05T12:01:00.000Z" }] };
+  assert.equal(cloudUploadDelta(edited, remote).history.length, 1);
+});
+
 test("conditional private GET returns known bundle using only a small receipt", async () => {
   const original = globalThis.fetch, known = bundle(); let url = "";
   try {

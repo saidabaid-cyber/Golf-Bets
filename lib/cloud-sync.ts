@@ -747,7 +747,14 @@ export function cloudUploadDelta(bundle: CloudDataBundle, base: CloudDataBundle)
         // CAS keeps an equal-clock canonical row. Local display defaults are
         // not a new revision. Never omit the special live→completed transition
         // or suppress another device's conflicting material.
-        if (!closing && localRound.updatedAt && localRound.updatedAt === cloudRound.updatedAt) return false;
+        // Match writeVersionedRow's effective clock, including catalog rows
+        // whose missing timestamp is stored as the epoch and legacy cards
+        // whose revision falls back to completedAt/date. Comparing only the
+        // literal updatedAt left normalized catalog defaults dirty on reload.
+        const revision = (row: RoundSnapshot) => key === "history"
+          ? row.updatedAt || row.completedAt || row.date
+          : row.updatedAt;
+        if (!closing && timestamp(revision(localRound)) === timestamp(revision(cloudRound))) return false;
       }
       return true;
     });
