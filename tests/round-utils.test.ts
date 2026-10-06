@@ -5,6 +5,18 @@ import { buildHoleSummary, ensureHoleScoresAtPar, hasRoundProgress, historicalGo
 import { initialBets } from "../lib/new-round-bets";
 import type { Course, HoleScore, RoundSnapshot } from "../lib/types";
 
+test("frequent guests retain identity through rename and do not collapse equal display names", () => {
+  const first = upsertFrequentPlayers([], [{ id: "guest-stable-a", name: "Carlos QA", handicap: 10 }], "first");
+  const renamed = upsertFrequentPlayers(first, [{ id: "guest-stable-a", name: "Carlos QA renombrado", handicap: 9 }], "second");
+  assert.equal(renamed.length, 1);
+  assert.equal(renamed[0].id, "guest-stable-a");
+  assert.equal(renamed[0].uses, 2);
+  const distinct = upsertFrequentPlayers(renamed, [{ id: "guest-stable-b", name: "Carlos QA renombrado", handicap: 20 }], "third");
+  assert.equal(distinct.length, 2);
+  assert.deepEqual(new Set(distinct.map(player => player.id)), new Set(["guest-stable-a", "guest-stable-b"]));
+  assert.equal(first[0].name, "Carlos QA");
+});
+
 const original: Course = {
   id: "temporal",
   name: "La Vista Temporal",

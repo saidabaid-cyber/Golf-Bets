@@ -7,6 +7,10 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { normalizeRoundDraft } from "../lib/round-utils";
 import { wizardEngineFixture } from "./fixtures/round-wizard-engine";
+import { applyRoundCourseHandicaps } from "../features/handicap/round-player-handicap";
+import { withPlayerCourseCards } from "../lib/player-course-card";
+import { assignTeeToEveryPlayer } from "../lib/player-tee-assignments";
+import type { Course, Player } from "../lib/types";
 
 const page = readFileSync("app/page.tsx", "utf8");
 const ast = ts.createSourceFile("page.tsx", page, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -24,6 +28,63 @@ function execute(name: string, dependencies: Record<string, any>) {
   runInNewContext(js, { exports: exported, ...dependencies });
   return exported.action;
 }
+
+test("reusing a saved guest preserves its stable ID and blocks only that same individual", () => {
+  let added: any[] = [], feedback = "";
+  const deps = { players: [], MAX_ROUND_PLAYERS: 5, ROUND_PLAYER_LIMIT_MESSAGE: "limit", makeId: () => "fresh-runtime",
+    identity: { userId: "owner", mode: "authenticated" }, accountPrimaryPlayerId: (id: string) => `account:${id}`,
+    setFeedback: (message: string) => { feedback = message; }, setPlayers: (updater: any) => { added = updater([]); },
+    setOwnerId() {}, roundPresentation: { playMode: "score_only" } };
+  execute("appendPlayer", deps)("Guest QA", 12, undefined, "frequent-stable");
+  assert.equal(added[0].id, "frequent-stable");
+  added = [];
+  execute("appendPlayer", { ...deps, players: [{ id: "frequent-stable", name: "Renamed", handicap: 12 }] })("Guest QA", 12, undefined, "frequent-stable");
+  assert.equal(added.length, 0); assert.match(feedback, /ya está/);
+  execute("appendPlayer", { ...deps, players: [{ id: "other-person", name: "Guest QA", handicap: 12 }] })("Guest QA", 12, undefined, "frequent-stable");
+  assert.equal(added[0].id, "frequent-stable");
+});
+
+test("an explicit tee edit recalculates HCP and player cards while keeping IDs and scores", () => {
+  const players = [{ id: "account:qa", name: "QA", handicap: 5, handicapIndex: 5.5 }];
+  const assignments = [{ playerId: "account:qa", teeId: "new-tee" }];
+  const scores = { 1: { "account:qa": 4 } };
+  const calculated: any[] = []; let selected: any, appliedPlayers: any, appliedAssignments: any;
+  const apply = execute("applyRoundTeeAssignments", { players, course: { id: "old-tee" },
+    withPlayerCourseCards: (value: any, tees: any) => ({ ...value, playerHoleCards: tees }),
+    applyRoundCourseHandicaps: (current: any, tees: any, selectedCourse: any, _time: string, locked: boolean) => {
+      calculated.push({ current, tees, selectedCourse, locked }); return current.map((p: any) => ({ ...p, handicap: 7 }));
+    }, setCourse: (value: any) => { selected = value; }, setPlayerTeeAssignments: (value: any) => { appliedAssignments = value; },
+    setPlayers: (updater: any) => { appliedPlayers = updater(players); } });
+  apply(assignments, { id: "new-tee" });
+  assert.equal(calculated[0].locked, false, "only the explicit edit bypasses automatic freeze");
+  assert.equal(appliedPlayers[0].id, players[0].id); assert.equal(appliedPlayers[0].handicap, 7);
+  assert.equal(selected.id, "new-tee"); assert.equal(appliedAssignments, assignments);
+  assert.deepEqual(scores, { 1: { "account:qa": 4 } });
+});
+
+test("real tee-selection handler re-freezes new inputs during edit and automatic updates remain locked", () => {
+  const previous: Course = { id: "tee-before", name: "QA", teeName: "Blancas", catalogCourseId: "qa-course", rating: 70.8, slope: 125,
+    holes: Array.from({ length: 18 }, (_, index) => ({ number: index + 1, par: 4, strokeIndex: index + 1 })) };
+  const next = { ...previous, id: "tee-after", teeName: "Doradas", rating: 68.4, slope: 121 };
+  const source: Player = { id: "account:qa", name: "QA", handicap: 5.5, handicapIndex: 5.5, handicapSource: "profile_index" };
+  let players = applyRoundCourseHandicaps([source], assignTeeToEveryPlayer([source], previous, "2026-10-05T12:00:00Z"), previous, "2026-10-05T12:00:00Z");
+  const before = players[0].courseHandicapSnapshot;
+  let selectedCourse: Course = previous, assignments: any[] = [];
+  const applyAssignments = execute("applyRoundTeeAssignments", { course: previous, withPlayerCourseCards, applyRoundCourseHandicaps,
+    setCourse: (value: Course) => { selectedCourse = value; }, setPlayerTeeAssignments: (value: any[]) => { assignments = value; },
+    setPlayers: (update: (current: Player[]) => Player[]) => { players = update(players); } });
+  execute("selectRoundTee", { teeOptions: [next], beginRoundCourseSelection: () => ({ ok: true }), completeRoundTeeSelection: () => ({ ok: true, course: next }),
+    roundTeeSelectionId: () => next.id, course: previous, players, startHole: 1, roundHoles: 18, bets: { foursome: { segmentSize: 6 } },
+    setCourse: (value: Course) => { selectedCourse = value; }, setPlayerTeeAssignments: (value: any[]) => { assignments = value; },
+    applyRoundTeeAssignments: applyAssignments, assignTeeToEveryPlayer, confirmRoundChange: (_message: string, apply: () => void) => apply(),
+    setStartHole() {}, setRoundHoles() {}, setSegments() {}, playOrderForHoles: () => Array.from({ length: 18 }, (_, i) => i + 1), segmentDefinitions: () => [],
+    setCourseSelected() {}, setPendingCourseIdentity() {}, setCourseSelectionError() {}, setCourseSetupStage() {} })(next);
+  assert.equal(players[0].handicap, 2);
+  assert.equal(players[0].courseHandicapSnapshot?.teeId, "tee-after");
+  assert.equal(assignments[0].teeId, "tee-after");
+  assert.notDeepEqual(players[0].courseHandicapSnapshot, before);
+  assert.strictEqual(applyRoundCourseHandicaps(players, assignTeeToEveryPlayer(players, previous, "2026-10-06T12:00:00Z"), selectedCourse, "2026-10-06T12:00:00Z", true), players);
+});
 
 test("active edit passes its real snapshot through existing hydration, preserving the current hole", () => {
   const snapshot = { roundId: "existing", course: { name: "La Vista" }, scores: { 1: { said: 4 } } };

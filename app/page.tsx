@@ -1767,7 +1767,7 @@ function GolfBetsApp() {
     }));
   }
 
-  function appendPlayer(name = "", handicap: number | null = null, accountUserId?: string) {
+  function appendPlayer(name = "", handicap: number | null = null, accountUserId?: string, savedPlayerId?: string) {
     if (players.length >= MAX_ROUND_PLAYERS) {
       setFeedback(ROUND_PLAYER_LIMIT_MESSAGE);
       return;
@@ -1776,7 +1776,11 @@ function GolfBetsApp() {
       setFeedback("Ese jugador principal ya está en la ronda.");
       return;
     }
-    const id = accountUserId ? accountPrimaryPlayerId(accountUserId) : makeId();
+    const id = accountUserId ? accountPrimaryPlayerId(accountUserId) : savedPlayerId || makeId();
+    if (players.some((player) => player.id === id)) {
+      setFeedback("Ese jugador ya está en la ronda.");
+      return;
+    }
     const p: Player = accountUserId === identity.userId && identity.mode === "authenticated"
       ? accountPrimaryRoundPlayer(identity, accountIndex)!
       // A legacy saved peer HCP has no verified Index source. Keep it as a
@@ -2927,6 +2931,15 @@ function GolfBetsApp() {
     else confirmRoundChange("Cambiar campo modifica el Par/SI aplicado a los scores existentes.", apply);
   }
 
+  /** Explicit setup/review edits update the frozen tee inputs together. The
+   * automatic profile/catalog effect stays locked after the round starts. */
+  function applyRoundTeeAssignments(assignments: PlayerTeeAssignmentSnapshot[], selectedCourse = course) {
+    const nextCourse = withPlayerCourseCards(selectedCourse, assignments);
+    setCourse(nextCourse);
+    setPlayerTeeAssignments(assignments);
+    setPlayers((current) => applyRoundCourseHandicaps(current, assignments, nextCourse, new Date().toISOString(), false));
+  }
+
   function selectRoundTee(nextTee: Course) {
     const pending = beginRoundCourseSelection(teeOptions);
     if (!pending.ok) { setCourseSelectionError(true); return; }
@@ -2937,8 +2950,7 @@ function GolfBetsApp() {
       const playableHoles = [...new Set(selectedTee.holes.map((hole) => hole.number).filter((hole) => Number.isInteger(hole) && hole > 0 && hole <= 18))].sort((left, right) => left - right);
       const nextStartHole = playableHoles.includes(startHole) ? startHole : playableHoles[0] ?? 1;
       const nextRoundHoles: 9 | 18 = playableHoles.length >= 18 ? roundHoles : 9;
-      setCourse(selectedTee);
-      setPlayerTeeAssignments(assignTeeToEveryPlayer(players, selectedTee, new Date().toISOString()));
+      applyRoundTeeAssignments(assignTeeToEveryPlayer(players, selectedTee, new Date().toISOString()), selectedTee);
       setStartHole(nextStartHole);
       setRoundHoles(nextRoundHoles);
       setSegments(segmentDefinitions(playOrderForHoles(playableHoles, nextStartHole).slice(0, nextRoundHoles), bets.foursome.segmentSize));
@@ -4137,14 +4149,14 @@ function GolfBetsApp() {
         {courseSelected && players.length > 0 && <details className="playerTeeAssignments optionalTeeSetup">
           <summary><span><b>Ajustar tee y HCP de juego</b><small>Opcional · abre sólo si necesitas otro tee o datos de Rating/Slope.</small></span></summary>
           <div className="optionalTeeSetupBody">
-          <div className="row between"><div><b>TEES</b><small>Se guarda un snapshot por jugador para esta ronda.</small></div><button type="button" className="secondary" onClick={() => setPlayerTeeAssignments(assignTeeToEveryPlayer(players, course, new Date().toISOString()))}>TODOS IGUAL</button></div>
+          <div className="row between"><div><b>TEES</b><small>Se guarda un snapshot por jugador para esta ronda.</small></div><button type="button" className="secondary" onClick={() => confirmRoundChange("Cambiar tees recalcula el HCP de juego de esta ronda.", () => applyRoundTeeAssignments(assignTeeToEveryPlayer(players, course, new Date().toISOString())))}>TODOS IGUAL</button></div>
           <div className="playerTeeGrid">{players.map((player) => {
             const assignment = playerTeeAssignments.find((item) => item.playerId === player.id);
             const selectedTee = teeOptions.find((option) => (option.catalogTeeId || option.id) === assignment?.teeId) || course;
             return <div key={player.id}><label><span>{player.name || "Jugador"}</span><select aria-label={`Tee de ${player.name || "jugador"}`} value={selectedTee.id} onChange={(event) => {
               const nextTee = teeOptions.find((option) => option.id === event.target.value);
-              if (nextTee) setPlayerTeeAssignments((current) => updatePlayerTeeAssignment(current, player.id, nextTee, new Date().toISOString()));
-            }}>{teeOptions.map((option) => <option key={option.id} value={option.id}>{option.teeName}{option.catalogReview?' · Catálogo en revisión':''}{typeof option.rating === "number" ? ` · ${option.rating}/${option.slope ?? "—"}` : ""}</option>)}</select></label>{assignment&&<ManualTeeRating key={assignment.teeId} assignment={assignment} onSave={value=>setPlayerTeeAssignments(current=>current.map(item=>item.playerId===player.id?value:item))}/>}</div>;
+              if (nextTee) confirmRoundChange("Cambiar tee recalcula el HCP de juego de este jugador.", () => applyRoundTeeAssignments(updatePlayerTeeAssignment(playerTeeAssignments, player.id, nextTee, new Date().toISOString())));
+            }}>{teeOptions.map((option) => <option key={option.id} value={option.id}>{option.teeName}{option.catalogReview?' · Catálogo en revisión':''}{typeof option.rating === "number" ? ` · ${option.rating}/${option.slope ?? "—"}` : ""}</option>)}</select></label>{assignment&&<ManualTeeRating key={assignment.teeId} assignment={assignment} onSave={value=>confirmRoundChange("Cambiar Rating/Slope recalcula el HCP de juego de este jugador.", () => applyRoundTeeAssignments(playerTeeAssignments.map(item=>item.playerId===player.id?value:item)))}/>}</div>;
           })}</div>
           <p className="hint">EDITAR POR JUGADOR está siempre disponible. Para una cuenta con Index, el tee calcula y congela su HCP de juego; un invitado conserva captura manual.</p>
           </div>
@@ -4175,7 +4187,7 @@ function GolfBetsApp() {
             <NumericCaptureInput aria-label="HCP frecuente" className="hcpInput" inputMode="decimal" step={0.1} min={-15} max={36} placeholder="HCP" value={frequentPlayerDraft.handicap} emptyWhenZero={false} onValueChange={(handicap) => setFrequentPlayerDraft((draft) => ({ ...draft, handicap }))} />
             <div className="templateActions"><button className="primary" disabled={!frequentPlayerDraft.name.trim()} onClick={saveFrequentPlayerEdit}>Guardar</button><button className="secondary" onClick={() => setEditingFrequentPlayerId(null)}>Cancelar</button></div>
           </div> : <div className="templateRow" key={saved.id}>
-            <button className="templateLoad" onClick={() => appendPlayer(saved.name, saved.handicap, saved.accountUserId)}><b>{saved.name}</b><span>HCP {saved.handicap ?? "—"} · + Agregar</span></button>
+            <button className="templateLoad" onClick={() => appendPlayer(saved.name, saved.handicap, saved.accountUserId, saved.id)}><b>{saved.name}</b><span>HCP {saved.handicap ?? "—"} · + Agregar</span></button>
             <div className="templateActions"><button className="secondary" onClick={() => beginEditFrequentPlayer(saved)}>✏ Editar</button><button className="dangerGhost" onClick={() => setFrequentPlayerToDelete(saved)}>🗑 Eliminar</button></div>
           </div>)}</div></details>}
         </div>}

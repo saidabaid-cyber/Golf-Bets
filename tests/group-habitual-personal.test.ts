@@ -24,6 +24,20 @@ function fixture() {
 let sequence = 0;
 const id = () => `runtime-${++sequence}`;
 
+test("personal member assignment survives rename and two equal names without changing the opponent", () => {
+  const group = fixture();
+  group.players.find(member => member.memberId === "carlos")!.name = "QA Mismo Nombre";
+  group.players.find(member => member.memberId === "diego")!.name = "QA Mismo Nombre";
+  const first = instantiateGroupGameTemplate(group, id, ["said", "carlos", "diego"]);
+  const firstBet = first.supplementalBets[0] as IndividualNassauBet;
+  assert.equal(firstBet.playerBId, first.origin.roundPlayerIdByMemberId.carlos);
+  assert.notEqual(firstBet.playerBId, first.origin.roundPlayerIdByMemberId.diego);
+  group.players.find(member => member.memberId === "carlos")!.name = "QA Renombrado";
+  const next = instantiateGroupGameTemplate(parseFrequentGroups(serializeFrequentGroups([group]))[0], id, ["said", "carlos", "diego"]);
+  assert.equal((next.supplementalBets[0] as IndividualNassauBet).playerBId, next.origin.roundPlayerIdByMemberId.carlos);
+  assert.deepEqual(group.gameTemplate!.personalBets[0].memberAssignment, { principalMemberId: "said", rivalMemberId: "carlos" });
+});
+
 test("habitual personal persists stable member identities and all rules, without runtime IDs", () => {
   const group = fixture(), bet = group.gameTemplate!.personalBets[0];
   assert.deepEqual(bet.memberAssignment, { principalMemberId: "said", rivalMemberId: "carlos" });

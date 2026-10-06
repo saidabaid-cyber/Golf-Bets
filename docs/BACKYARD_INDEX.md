@@ -4,6 +4,8 @@
 
 ## Elegibilidad
 
+Atest es una métrica independiente. Una tarjeta Backyard sin Atest sí cuenta para el Índice si cumple los requisitos de elegibilidad de esta versión; no se exige una atestación ni se utiliza la confirmación de participación como sustituto. Las rondas live, canceladas e incompletas no cuentan. Agregar Atest posteriormente no cambia el diferencial ni la elegibilidad de una tarjeta ya válida.
+
 La versión 1 admite sólo 18 hoyos cerrados con score real de los 18 hoyos, par y stroke index válidos, tee congelado del jugador, adjusted gross calculable, Rating/Slope **acreditados para ese tee**, y PCC publicado o una declaración explícita de “PCC 0 sólo para cálculo local”. Nunca presume que el PCC desconocido sea cero.
 
 El catálogo interno `BACKYARD_INTERNAL` y un `verifiedAt` del club no prueban por sí solos la acreditación del Course Rating/Slope. La evidencia `BackyardIndexRatedTeeEvidence` debe proceder de un proveedor/autoridad autorizados y coincidir con el `PlayerTeeAssignmentSnapshot` guardado. Sin esa evidencia el snapshot queda `NO ELEGIBLE` con motivo; las rondas antiguas sin snapshot tampoco se convierten retroactivamente en elegibles. No se inventan tees, ratings, pendientes PCC ni scores.

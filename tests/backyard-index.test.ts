@@ -199,6 +199,17 @@ function eligibleRound(id: string, date: string, differential: number): RoundSna
   });
 }
 
+test("unattested eligible Backyard cards count for Index; cancelled and live cards do not", () => {
+  const cards = [eligibleRound("unattested-a", "2026-01-01", 14), eligibleRound("unattested-b", "2026-01-02", 12), eligibleRound("unattested-c", "2026-01-03", 10)];
+  assert.equal(calculateBackyardIndex(cards, accountUserId).value, 8);
+  assert.equal(calculateBackyardIndex(cards, accountUserId).eligibleRoundCount, 3);
+  for (const lifecycleState of ["live", "cancelled"] as const) {
+    const partial = { ...cards[2], id: `${lifecycleState}-unattested`, lifecycleState };
+    assert.equal(calculateBackyardIndex([cards[0], cards[1], partial], accountUserId).value, null);
+    assert.equal(calculateBackyardIndex([cards[0], cards[1], partial], accountUserId).eligibleRoundCount, 2);
+  }
+});
+
 for (const [count, used, value] of [
   [0, 0, null], [1, 0, null], [2, 0, null], [3, 1, -1], [4, 1, 0], [5, 1, 1],
   [6, 2, 0.5], [8, 2, 1.5], [10, 3, 2], [14, 4, 2.5], [16, 5, 3],

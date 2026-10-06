@@ -299,10 +299,9 @@ export function pushUndoState<T>(stack: T[], state: T, limit = 15) {
 export function upsertFrequentPlayers(current: FrequentPlayer[], players: Player[], updatedAt: string) {
   const next = [...current];
   for (const player of players.filter((item) => item.name.trim())) {
-    const nameKey = player.name.trim().toLocaleLowerCase("es-MX");
     const index = player.accountUserId
       ? next.findIndex((candidate) => candidate.accountUserId === player.accountUserId)
-      : next.findIndex((candidate) => !candidate.accountUserId && candidate.name.trim().toLocaleLowerCase("es-MX") === nameKey);
+      : next.findIndex((candidate) => !candidate.accountUserId && candidate.id === player.id);
     const previous = index >= 0 ? next[index] : undefined;
     const value: FrequentPlayer = {
       id: previous?.id || player.id,
