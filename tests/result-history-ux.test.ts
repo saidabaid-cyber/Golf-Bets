@@ -91,7 +91,7 @@ test("UI dinámica oculta apuestas apagadas, separa Pollas y cierra la ronda act
   assert.match(page, /\{\(bets\.rabbits\.enabled \|\| bets\.skins\.enabled\) && <section className="card compact priorBetStatus"/);
   assert.match(page, /<details className="playerResultCard" key=\{p\.id\}>/);
   assert.match(page, /polla\.details\.filter\(\(detail\) => Object\.hasOwn\(detail\.totals, p\.id\)\)\.map/);
-  assert.match(page, /clearActiveRoundStorage\(window\.localStorage\);[\s\S]{0,120}setRoundClosed\(true\)/);
+  assert.match(page, /onLocalCommitted:[\s\S]*?clearActiveRoundStorage\(localStorage\);[\s\S]*?setRoundClosed\(true\)/);
   assert.match(page, /draftAvailable && !roundClosed/);
   assert.match(page, /priorOrder = useMemo\(\(\) => order\.slice\(0, currentIndex\)/);
 });

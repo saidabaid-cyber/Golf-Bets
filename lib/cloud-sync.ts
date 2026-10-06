@@ -793,8 +793,10 @@ export function cloudSyncUploadReasons(bundle: CloudDataBundle, remote: CloudDat
     .filter(key => cloudSyncPayloadFingerprint({ ...remote, [key]: effective[key] }) !== canonical);
 }
 
+type CloudTransportDiagnostic = { method: "GET" | "POST"; requestBytes: number; responseBytes: number; durationMs: number; success: boolean; httpStatus?: number; stage?: string };
+
 export async function uploadCloudData(bundle: CloudDataBundle, accessToken: string, base?: CloudDataBundle,
-  trace?: (event: { method: "GET" | "POST"; requestBytes: number; responseBytes: number; durationMs: number; success: boolean }) => void) {
+  trace?: (event: CloudTransportDiagnostic) => void) {
   if (!accessToken?.trim()) throw new Error("Inicia sesión para sincronizar con Supabase.");
   const submitted = base ? cloudUploadDelta(bundle, base) : bundle;
   const body = JSON.stringify({ data: submitted, fingerprint: cloudDataFingerprint(submitted) });
@@ -806,19 +808,26 @@ export async function uploadCloudData(bundle: CloudDataBundle, accessToken: stri
   });
   const payload = await parseCloudResponse(response).catch(error => {
     trace?.({ method: "POST", requestBytes: new TextEncoder().encode(body).byteLength,
-      responseBytes: Number(response.headers.get("content-length")) || 0, durationMs: Date.now() - started, success: response.ok });
+      responseBytes: Number(response.headers.get("content-length")) || 0, durationMs: Date.now() - started, success: false, httpStatus: response.status, stage: "sync:upload:http-failure" });
     throw error;
   });
-  if (payload.ok !== true || payload.fingerprint !== cloudDataFingerprint(submitted)) throw new Error("La nube no confirmó todos los datos. Reintenta la sincronización.");
-  if (payload.data && (!payload.canonicalFingerprint || payload.canonicalFingerprint !== cloudSyncPayloadFingerprint(payload.data)))
-    throw new Error("La nube no confirmó la versión canónica. Tu copia local se conserva.");
+  try {
+    if (payload.ok !== true || payload.fingerprint !== cloudDataFingerprint(submitted)) throw new Error("La nube no confirmó todos los datos. Reintenta la sincronización.");
+    if (payload.data && (!payload.canonicalFingerprint || payload.canonicalFingerprint !== cloudSyncPayloadFingerprint(payload.data)))
+      throw new Error("La nube no confirmó la versión canónica. Tu copia local se conserva.");
+  } catch (error) {
+    trace?.({ method: "POST", requestBytes: new TextEncoder().encode(body).byteLength,
+      responseBytes: new TextEncoder().encode(JSON.stringify(payload)).byteLength, durationMs: Date.now() - started,
+      success: false, httpStatus: response.status, stage: "sync:upload:validation-failure" });
+    throw error;
+  }
   trace?.({ method: "POST", requestBytes: new TextEncoder().encode(body).byteLength,
-    responseBytes: new TextEncoder().encode(JSON.stringify(payload)).byteLength, durationMs: Date.now() - started, success: true });
+    responseBytes: new TextEncoder().encode(JSON.stringify(payload)).byteLength, durationMs: Date.now() - started, success: true, httpStatus: response.status, stage: "sync:upload:validation-success" });
   return payload;
 }
 
 export async function downloadCloudData(accessToken: string, known?: CloudDataBundle,
-  trace?: (event: { method: "GET" | "POST"; requestBytes: number; responseBytes: number; durationMs: number; success: boolean }) => void) {
+  trace?: (event: CloudTransportDiagnostic) => void) {
   if (!accessToken?.trim()) throw new Error("Inicia sesión para sincronizar con Supabase.");
   const started = Date.now();
   const query = known ? `?fingerprint=${encodeURIComponent(cloudSyncPayloadFingerprint(known))}` : "";
@@ -828,7 +837,7 @@ export async function downloadCloudData(accessToken: string, known?: CloudDataBu
   });
   const payload = await parseCloudResponse(response);
   trace?.({ method: "GET", requestBytes: 0, responseBytes: new TextEncoder().encode(JSON.stringify(payload)).byteLength,
-    durationMs: Date.now() - started, success: true });
+    durationMs: Date.now() - started, success: true, httpStatus: response.status, stage: "sync:download:success" });
   if (payload.unchanged && known && payload.fingerprint === cloudSyncPayloadFingerprint(known)) {
     // Receipt metadata is refreshed independently of canonical golf data. Keep
     // the existing hash compatible with older clients and avoid downloading

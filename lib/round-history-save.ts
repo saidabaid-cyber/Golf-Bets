@@ -28,6 +28,8 @@ export type SaveRoundHistoryOptions = {
   queueForCloud: boolean;
   persistOffline?: PersistOffline;
   preserveActiveDraft?: boolean;
+  /** Runs synchronously after verified local history, before IndexedDB yields. */
+  onLocalCommitted?: (history: RoundSnapshot[]) => void;
 };
 
 export type SaveRoundHistoryResult = {
@@ -54,6 +56,7 @@ export async function saveRoundHistoryLocalFirst({
   queueForCloud,
   persistOffline = persistOfflineBundle,
   preserveActiveDraft = false,
+  onLocalCommitted,
 }: SaveRoundHistoryOptions): Promise<SaveRoundHistoryResult> {
   const stored = readStoredJson<unknown>(storage, STORAGE_KEYS.history, []);
   const latestHistory = Array.isArray(stored) ? stored as RoundSnapshot[] : [];
@@ -78,6 +81,7 @@ export async function saveRoundHistoryLocalFirst({
     storage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(liveTombstones));
   }
 
+  onLocalCommitted?.(verifiedHistory);
   const bundle = collectLocalCloudData(storage, defaultHandicap, hasLocalPreferenceState);
   bundle.deviceId = deviceId;
   bundle.history = verifiedHistory;

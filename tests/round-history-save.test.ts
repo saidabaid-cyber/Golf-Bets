@@ -268,23 +268,45 @@ test("un almacenamiento que conserva el ID pero corrompe el contenido no se cons
   assert.ok(storage.getItem(STORAGE_KEYS.draft));
 });
 
-test("el botón finaliza solo después de persistir local/IndexedDB y nunca pide confirmar el estado cloud", () => {
+test("el botón finaliza tras readback local verificado sin esperar IndexedDB ni confirmar el estado cloud", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const saveStart = page.indexOf("async function saveConfirmedRound");
   const saveEnd = page.indexOf("function editHistoricalRound", saveStart);
   const flow = page.slice(saveStart, saveEnd);
   const persist = flow.indexOf("await saveRoundHistoryLocalFirst");
-  const clearDraft = flow.indexOf("clearActiveRoundStorage(window.localStorage)");
+  const checkpoint = flow.indexOf("onLocalCommitted:");
+  const clearDraft = flow.indexOf("clearActiveRoundStorage(localStorage)");
   const closeRound = flow.indexOf("setRoundClosed(true)");
   const closeReviewNotice = flow.indexOf("setShowRoundFinishedNotice(false)");
   const queueCloud = flow.indexOf("requestCloudSync.current?.()");
 
   assert.ok(persist >= 0 && persist < clearDraft);
+  assert.ok(checkpoint > persist && checkpoint < clearDraft);
   assert.ok(clearDraft < closeRound);
   assert.ok(closeRound < closeReviewNotice);
   assert.ok(closeReviewNotice < queueCloud);
   assert.ok(closeRound < queueCloud);
   assert.doesNotMatch(page.slice(page.indexOf("function saveRound("), saveEnd), /cloudStatus\s*!==\s*["']synced["']/);
+});
+
+test("checkpoint runs after exact history readback, before offline await; failed verification never closes", async () => {
+  const storage = new MemoryStorage();
+  let release!: (value: string) => void;
+  const offline = new Promise<string>(resolve => { release = resolve; });
+  let checkpoint = false;
+  const saving = saveRoundHistoryLocalFirst({ storage, ownerId: "fixture", snapshot: snapshot(), deviceId: "local",
+    defaultHandicap: null, hasLocalPreferenceState: false, queueForCloud: true,
+    onLocalCommitted: history => {
+      assert.deepEqual(history, JSON.parse(storage.getItem(STORAGE_KEYS.history)!));
+      checkpoint = true;
+    }, persistOffline: () => { assert.equal(checkpoint, true); return offline; },
+  });
+  assert.equal(checkpoint, true); release("ack"); await saving;
+  const failed = { getItem: () => null, setItem: () => {} };
+  await assert.rejects(saveRoundHistoryLocalFirst({ storage: failed, ownerId: "fixture", snapshot: snapshot(), deviceId: "local",
+    defaultHandicap: null, hasLocalPreferenceState: false, queueForCloud: true,
+    onLocalCommitted: () => assert.fail("an unverified save cannot clear the draft"),
+  }), /comprobar la ronda/);
 });
 
 test("Guardar → nube atrasada → aplicar respuesta → Histórico → reload nunca pierde la ronda", async () => {

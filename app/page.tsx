@@ -189,7 +189,8 @@ import { actionableCloudConflicts, CLOUD_TOMBSTONES_KEY, cloudDataFingerprint, c
 import { describeCloudConflict } from "../lib/cloud-conflict-display";
 import { ownsLocalWorkspace, preserveDataConflicts, preserveDraftConflict } from "../lib/account-workspace";
 import { accountPrimaryPlayerId, accountPrimaryRoundPlayer, syncAccountPrimaryFrequentPlayer, syncLinkedRoundPlayerName } from "../lib/account-primary-player";
-import { runCloudSyncCycle } from "../lib/cloud-sync-cycle";
+import { cloudCycleErrorFields, runCloudSyncCycle } from "../lib/cloud-sync-cycle";
+import { CloudCanonicalSession } from "../lib/cloud-canonical-session";
 import { CloudConflictResolutionBuffer } from "../lib/cloud-conflict-resolution";
 import { CloudRetryBudget, CloudSyncGate, cloudSyncErrorMessage, syncStatusAfterSkip, type CloudSyncTrigger } from "../lib/cloud-sync-gate";
 import { cloudSyncDiagnostic } from "../lib/cloud-sync-diagnostics";
@@ -699,6 +700,8 @@ function GolfBetsApp() {
   const flushLocalState = useRef<(() => boolean) | null>(null);
   const localPersistRevision = useRef(0);
   const requestCloudSync = useRef<(() => void) | null>(null);
+  const cloudCanonicalSession = useRef(new CloudCanonicalSession());
+  const cloudEffectGeneration = useRef(0);
   const cloudConflictResolution = useRef(new CloudConflictResolutionBuffer());
   const latestSaveAndAdvance = useRef<() => void>(() => undefined);
   const latestSaveRound = useRef<(options?: { prepareReview?: boolean }) => void>(() => undefined);
@@ -1261,13 +1264,16 @@ function GolfBetsApp() {
   }, [applyCloudPreferences, applyDraft]);
 
   useEffect(() => {
+    cloudCanonicalSession.current.select(identity.mode === "authenticated" && cloudLinked ? identity.userId : null);
     if (!hydrated || identity.mode !== "authenticated" || !cloudLinked) return;
     const userId = identity.userId;
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let scheduledTrigger: CloudSyncTrigger = "mount";
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
-    let knownCloud: CloudDataBundle | undefined;
+    let knownCloud = cloudCanonicalSession.current.select(userId);
+    const effectGeneration = ++cloudEffectGeneration.current;
+    cloudSyncDiagnostic({ trigger: "mount", stage: "sync:effect-create", reason: "sync:effect-create", result: "performed", knownCloud: Boolean(knownCloud), effectGeneration });
     const retryBudget = new CloudRetryBudget();
     const gate = new CloudSyncGate();
     const debug = (event: string, trigger?: CloudSyncTrigger) => {
@@ -1319,6 +1325,7 @@ function GolfBetsApp() {
         let appliedFingerprint = "";
         const completed = await runCloudSyncCycle({
           read, current, status: setCloudStatus,
+          trace: event => cloudSyncDiagnostic({ ...event, trigger, reason: event.stage, knownCloud: Boolean(knownCloud), effectGeneration }),
           merge: mergeLocalAndCloud,
           shouldUpload: (_local, remote, merged) => {
             const required = cloudSyncUploadRequired(merged, remote);
@@ -1330,13 +1337,14 @@ function GolfBetsApp() {
             const data = await withCloudAuthRetry(token => downloadCloudData(token, knownCloud, event => cloudSyncDiagnostic({ ...event,
               trigger, fingerprint, endpoint: "/api/cloud/sync", reason: "canonical-read", result: event.success ? "success" : "failure" })),
               liveIdentity.current.accessToken || "", refreshCloudSession);
-            knownCloud = data; return data;
+            if (current()) { knownCloud = data; cloudCanonicalSession.current.remember(userId, data); }
+            return data;
           },
           upload: async (data, remote) => {
             const receipt = await withCloudAuthRetry(token => uploadCloudData(data, token, remote, event => cloudSyncDiagnostic({ ...event,
               trigger, fingerprint, endpoint: "/api/cloud/sync", reason: "local-change", result: event.success ? "success" : "failure" })),
               liveIdentity.current.accessToken || "", refreshCloudSession);
-            if (receipt.data) knownCloud = receipt.data;
+            if (receipt.data && current()) { knownCloud = receipt.data; cloudCanonicalSession.current.remember(userId, receipt.data); }
             return receipt;
           },
           conflicts: (local, cloud) => {
@@ -1385,6 +1393,7 @@ function GolfBetsApp() {
         if (completed) {
           const confirmedFingerprint = appliedFingerprint || cloudSyncPayloadFingerprint(read());
           queued = gate.success(confirmedFingerprint);
+          cloudSyncDiagnostic({ trigger, reason: "sync:gate-success", stage: "sync:gate-success", result: "success", knownCloud: Boolean(knownCloud), effectGeneration });
           // The gate compares only server-visible payload. The durable outbox
           // uses the complete snapshot fingerprint, so acknowledge exactly the
           // mutation that entered this cycle and never a newer local write.
@@ -1398,6 +1407,7 @@ function GolfBetsApp() {
         }
       } catch (error) {
         gate.failure(fingerprint);
+        cloudSyncDiagnostic({ trigger, reason: "sync:gate-failure", stage: "sync:gate-failure", result: "failure", knownCloud: Boolean(knownCloud), effectGeneration, ...cloudCycleErrorFields(error) });
         const retryDelay = retryBudget.failure();
         if (isCloudFieldConflict(error) && current()) {
           try {
@@ -1427,7 +1437,13 @@ function GolfBetsApp() {
             if (current()) reportCloudSyncError(recoveryError);
           }
         }
-        if (retryDelay !== null && current()) retryTimer = setTimeout(() => schedule("retry"), retryDelay);
+        if (retryDelay !== null && current()) {
+          cloudSyncDiagnostic({ trigger, reason: "sync:retry-scheduled", stage: "sync:retry-scheduled", result: "performed", knownCloud: Boolean(knownCloud), effectGeneration });
+          retryTimer = setTimeout(() => {
+            cloudSyncDiagnostic({ trigger: "retry", reason: "sync:retry-executed", stage: "sync:retry-executed", result: "performed", knownCloud: Boolean(knownCloud), effectGeneration });
+            schedule("retry");
+          }, retryDelay);
+        }
         const message = cloudSyncErrorMessage(error);
         if (current() && message) reportCloudSyncError(error);
         if (current()) void markOfflineAttempt(userId, message || "Sincronización cancelada");
@@ -1451,6 +1467,7 @@ function GolfBetsApp() {
     document.addEventListener("visibilitychange", onVisible);
     schedule("mount");
     return () => {
+      cloudSyncDiagnostic({ trigger: "local", reason: "sync:effect-dispose", stage: "sync:effect-dispose", result: "performed", knownCloud: Boolean(knownCloud), effectGeneration });
       cancelled = true; gate.cancel(); clearTimeout(timer); clearTimeout(retryTimer); requestCloudSync.current = null;
       window.removeEventListener("online", onOnline); window.removeEventListener("offline", onOffline);
       window.removeEventListener("backyard-sync-retry", onRetry);
@@ -2335,7 +2352,6 @@ function GolfBetsApp() {
   async function saveConfirmedRound(snapshot: RoundSnapshot) {
     if (roundSaveInFlight.current) return;
     roundSaveInFlight.current = true;
-    localPersistRevision.current += 1;
     setSaveStatus("saving");
     const queueForCloud = identity.mode === "authenticated" && cloudLinked;
     try {
@@ -2347,13 +2363,22 @@ function GolfBetsApp() {
         defaultHandicap: identity.defaultHandicap,
         hasLocalPreferenceState: hadLocalPreferences.current,
         queueForCloud,
+        onLocalCommitted: (verifiedHistory) => {
+          // The old render is fenced only after exact history readback. During
+          // the IndexedDB await, sync reads this durable closeout instead of
+          // invoking a stale persistence closure that returns false.
+          localPersistRevision.current += 1;
+          flushLocalState.current = () => true;
+          const previousDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
+          clearActiveRoundStorage(localStorage);
+          trackLocalCloudCheckpoint(localStorage, null, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap }, previousDraft);
+          setHistory(verifiedHistory.map(normalizeHistorySnapshot));
+          setRoundClosed(true);
+          setRoundReviewPending(false);
+          setShowRoundFinishedNotice(false);
+          setDraftAvailable(false);
+        },
       });
-      clearActiveRoundStorage(window.localStorage);
-      setHistory(() => saved.history.map(normalizeHistorySnapshot));
-      setRoundClosed(true);
-      setRoundReviewPending(false);
-      setShowRoundFinishedNotice(false);
-      setDraftAvailable(false);
       updateBackyardAiMetrics(localStorage, identity.userId, (current) => recordRoundCompletionMetric(current, true));
       void recordProductEvent({ eventId: `round-complete-${snapshot.id}`, eventName: "round_completed", accessToken: identity.accessToken, occurredAt: snapshot.completedAt, metadata: { source: "history", roundHoles: snapshot.roundHoles || snapshot.order?.length || 18, playerCount: snapshot.players?.length || 0 } });
       const timestamp = new Date().toISOString();

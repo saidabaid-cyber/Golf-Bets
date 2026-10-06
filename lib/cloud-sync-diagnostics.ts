@@ -5,6 +5,9 @@ export type CloudSyncDiagnostic = {
   endpoint?: "/api/cloud/sync" | "/api/cloud/rounds";
   fingerprint?: string; requestBytes?: number; responseBytes?: number;
   durationMs?: number; reason: string;
+  stage?: string; persisted?: boolean; knownCloud?: boolean;
+  category?: string; errorName?: string; errorCode?: string; httpStatus?: number;
+  effectGeneration?: number; retryNumber?: number;
   result: "skipped" | "coalesced" | "performed" | "success" | "failure";
 };
 export function cloudSyncDiagnostic(event: CloudSyncDiagnostic) {
