@@ -152,6 +152,7 @@ import { FoursomeLive } from "./components/foursome-live";
 import { ResultAccordion } from "./components/result-accordion";
 import { HistoricalRoundDetail } from "./components/historical-round-detail";
 import { OwnerRoundSync } from "./components/owner-round-sync";
+import { ownerLiveTransportAllowed } from "../lib/owner-round-sync";
 import { RoundScorekeepingChoice } from "./components/round-scorekeeping-choice";
 import { RoundSavedConfirmation } from "./components/round-saved-confirmation";
 import { FullScorecard } from "./components/full-scorecard";
@@ -4386,7 +4387,7 @@ function GolfBetsApp() {
         <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={() => { flushLocalState.current?.(); setTab("welcome"); }}>Salir y continuar después</button>
         <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={requestNewRound}>Nueva ronda</button>
       </nav>
-      {roundStartedAt && !roundClosed && !editingRound && (() => { const snapshot = currentSnapshot(); return snapshot && <OwnerRoundSync key={`${identity.userId}:${roundId}`} userId={identity.userId} accessToken={identity.accessToken || undefined} snapshot={snapshot} pausedBase={history.find(round => round.id === roundId && round.lifecycleState === 'live')} />; })()}
+      {roundStartedAt && !roundClosed && !editingRound && ownerLiveTransportAllowed(roundId, history) && (() => { const snapshot = currentSnapshot(); return snapshot && <OwnerRoundSync key={`${identity.userId}:${roundId}`} userId={identity.userId} accessToken={identity.accessToken || undefined} snapshot={snapshot} pausedBase={history.find(round => round.id === roundId && round.lifecycleState === 'live')} />; })()}
       <RoundCaptureV2
         initialGpsOpen={roundGpsIntent}
         captureContext={captureContext}

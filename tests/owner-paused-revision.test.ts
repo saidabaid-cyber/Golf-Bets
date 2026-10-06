@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ownerRoundTransportPayload, syncOwnerRound } from "../lib/owner-round-sync";
+import { ownerRoundTransportPayload, ownerLiveTransportAllowed, syncOwnerRound } from "../lib/owner-round-sync";
+import { readFileSync } from "node:fs";
 import type { RoundSnapshot } from "../lib/types";
 
 const base = () => ({ id: "paused-qa", lifecycleState: "live", startedAt: "2026-10-06T12:00:00Z",
@@ -48,4 +49,18 @@ test("a superseded account/effect never adopts the read revision or writes", asy
   assert.equal(await syncOwnerRound(ownerRoundTransportPayload(base()), "qa-owner", "qa-token", s.storage, () => current, request, true, base()), null);
   assert.equal(s.calls.filter(c => c.method).length, 0);
   assert.equal(s.storage.getItem("backyard-owner-round-revision:qa-owner:paused-qa"), "1");
+});
+
+test("live-to-completed-to-correction retains history transport and never reopens a closed card", () => {
+  const original = base();
+  assert.equal(ownerLiveTransportAllowed(original.id, []), true);
+  assert.equal(ownerLiveTransportAllowed(original.id, [original]), true);
+  const completed = { ...original, lifecycleState: "completed", completedAt: "2026-10-06T13:00:00Z" } as RoundSnapshot;
+  assert.equal(ownerLiveTransportAllowed(original.id, [completed]), false);
+  const correction = { ...completed, scores: { 1: { qa: 6 } } };
+  assert.equal(ownerLiveTransportAllowed(correction.id, [completed]), false);
+  assert.equal(ownerLiveTransportAllowed("another-active", [completed]), true);
+  assert.equal(ownerLiveTransportAllowed(original.id, [{ ...completed, lifecycleState: undefined }]), false);
+  const page = readFileSync("app/page.tsx", "utf8");
+  assert.match(page, /ownerLiveTransportAllowed\(roundId, history\) &&[\s\S]*?<OwnerRoundSync/);
 });

@@ -2,6 +2,13 @@ import { stableValue } from "./cloud-sync";
 import { cloudSyncDiagnostic, jsonBytes } from "./cloud-sync-diagnostics";
 import type { RoundSnapshot } from "./types";
 
+/** Completed-card corrections use history's existing versioned write path.
+ * They must never be sent through the live owner endpoint, which deliberately
+ * rejects reopening a closed canonical card. Legacy history is completed too. */
+export function ownerLiveTransportAllowed(roundId: string, history: readonly RoundSnapshot[]) {
+  return !history.some(round => round.id === roundId && (round.lifecycleState === "completed" || !round.lifecycleState));
+}
+
 export function ownerRoundTransportPayload(snapshot: RoundSnapshot, live = true) {
   const { completedAt, updatedAt, ...rest } = snapshot;
   void updatedAt;
