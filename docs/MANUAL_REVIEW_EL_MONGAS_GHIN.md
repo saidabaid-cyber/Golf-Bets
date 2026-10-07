@@ -4,7 +4,14 @@ Entrar exclusivamente en **https://dev.thebackyard.com.mx** con
 **el_mongas@yahoo.com.mx**. Introducir personalmente OTP/credenciales si se
 solicitan. No enviar códigos por chat. No borrar evidencia ni cerrar QA24.
 
-**Posting, provider verify y round-trip PASS. Login privado final pendiente.**
+**Posting, provider verify y round-trip QA25 certificados previamente.**
+
+La regla vigente de fuente de índice cambió en el cierre link/unlink/relink.
+Con GHIN VERIFIED, GHIN es el único índice activo. El antiguo Backyard Index
+5.5 quedó cerrado mediante un reset persistente: no es un índice alternativo
+ni se reactiva al desvincular. Las rondas y sus HCP congelados se conservan.
+Consultar el reporte de transición al final para distinguir pruebas ejecutadas
+de las pendientes.
 
 1. Abrir una ventana privada **nueva** de Safari. La sesión original del agente
    ya fue cerrada por UI después de todas las confirmaciones canónicas.
@@ -42,9 +49,13 @@ solicitan. No enviar códigos por chat. No borrar evidencia ni cerrar QA24.
 9. Carrera → Resumen:23rondas,promedio83.7,mejor71,birdies18. Historial combinado
    cuenta23con gross; QA25 vinculada una vez. GHIN adjusted-only no inventa gross
    ni birdies/putts/GIR/rivalidades/bets. Torneos continúa vacío legítimo.
-10. Índice: GHIN principal30.8; **Backyard Index conservado5.5** separado.
-    QA25 tiene Index interno desactivado por preferencia existente,
-    `INDEX_NOT_ENABLED`; no se forzó elegibilidad ni se mezclaron índices.
+10. Índice con GHIN VERIFIED: **GHIN es la única fuente activa**; el último
+    valor certificado antes de esta transición es30.8. No debe aparecer
+    “Backyard Index conservado5.5” ni un segundo índice activo. QA25 conserva
+    su snapshot original `INDEX_NOT_ENABLED`; no se recalculan rondas viejas.
+    Tras unlink debe verse **Sin índice activo**, manteniendo las tarjetas
+    GHIN guardadas. Un nuevo ciclo Backyard sólo puede usar rondas iniciadas
+    después de la frontera de reset; no incluye tarjetas GHIN-only.
 11. Atest últimas20: **10/20=50%**, antes11/20=55%. La nueva QA25 pendiente
     desplaza una atestada fuera de esa ventana. Las11atestaciones previas siguen
     guardadas; importar GHIN no cambió Atest ni auto-atestó QA25.
@@ -60,6 +71,13 @@ Mapping: [GHIN_QA25_ROJAS_EVIDENCE.json](qa/GHIN_QA25_ROJAS_EVIDENCE.json).
 [Historial](qa/evidence/qa25-unified-history.jpg),
 [QA24H2](qa/evidence/qa24-restored-h2.jpg).
 
-Pendiente: confirmación física de sesión privada nueva. El browser automatizado
-comparte storage y no se presenta como contexto limpio. Nueve fallos baseline
-ajenos permanecen; cero nuevos. main,beta,Production y su dominio no fueron tocados.
+Reporte de la regla vigente y evidencias de link/unlink/relink:
+[GHIN_INDEX_TRANSITION_EL_MONGAS_REPORT.md](qa/GHIN_INDEX_TRANSITION_EL_MONGAS_REPORT.md).
+Manifest de la transición:
+[GHIN_INDEX_TRANSITION_EL_MONGAS.json](qa/GHIN_INDEX_TRANSITION_EL_MONGAS.json).
+
+El browser automatizado comparte storage y no se presenta como contexto limpio.
+La verificación privada debe hacerse en una ventana privada nueva y capturando
+personalmente el código. No enviar OTP ni contraseñas por chat. Nueve fallos
+baseline ajenos permanecen; cero nuevos. main,beta,Production y su dominio no
+fueron tocados.

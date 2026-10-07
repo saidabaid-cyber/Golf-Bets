@@ -1,0 +1,464 @@
+{
+  "task": "GHIN source reset, unlink retention and relink",
+  "account": "el_mongas@yahoo.com.mx",
+  "environment": "preview DEV",
+  "url": "https://dev.thebackyard.com.mx",
+  "branch": "integration/backyard-current",
+  "status": "USER_REAUTH_REQUIRED",
+  "checkpoint": "Unlink completed; waiting for independent private-session verification before relink.",
+  "initialSha": "5c72b134a85a16b70c272cdc12782f7a0470617a",
+  "preservedGpsSha": "9016d5cd0de488be64d619f8f67a489f5d4f7307",
+  "implementationSha": "de7eb6ce0fca4a9f684d5742d2564e720ee67afd",
+  "testedDeploymentSha": "f369b73ee373b5b12684d271ec68b4750f30df63",
+  "model": {
+    "table": "player_handicap_source_state",
+    "reset": "server-owned epoch on confirmed VERIFIED link",
+    "refreshResets": false,
+    "unlinkResetsBoundary": false,
+    "oldBackyardIndex": 5.5,
+    "oldIndexActive": false,
+    "futureIndex": "Explicit Backyard activation and eligible rounds started strictly after canonical reset; GHIN-only excluded."
+  },
+  "migration": {
+    "file": "supabase/migrations/20261007012847_ghin_index_epoch_retained_history.sql",
+    "appliedDev": true,
+    "projectRef": "bymeopxkxapfizeeqeyb",
+    "branch": "phase2-full-platform-qa",
+    "sourceRls": true,
+    "ownerReadOnly": true,
+    "newSecurityAdvisorFindings": 0
+  },
+  "before": {
+    "counts": {
+      "completed": 23,
+      "cancelled": 1,
+      "live": 3,
+      "total": 27,
+      "providerScores": 7,
+      "ghinOnly": 6,
+      "backyardPlusGhin": 1,
+      "backyardOnlyCompleted": 22
+    },
+    "ghinVerified": true,
+    "ghinIndex": 30.8,
+    "atest": {
+      "valid": 10,
+      "slots": 20,
+      "percent": 50
+    },
+    "qa24": {
+      "id": "rrouggse",
+      "hash": "563673a39d7c3a9790f515a3fda26069",
+      "version": 494
+    },
+    "roundIntegrity": [
+      {
+        "id": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
+        "state": "live",
+        "localId": "rrouggse",
+        "version": 5,
+        "scoreHash": "66e1869c4a4a09292175d295235e2762",
+        "snapshotHash": "079e6b51336b515286ae849984608582"
+      },
+      {
+        "id": "19bfd6a6-5808-4d8e-9432-4a8a9911dfa8",
+        "state": "completed",
+        "localId": "uud3jzr4",
+        "version": 21,
+        "scoreHash": "4369eea0fdcb0afae5bb7e952e36fd43",
+        "snapshotHash": "e7b5e66b4d198f172baca8ee4fa8fc75"
+      },
+      {
+        "id": "19c03579-423d-4521-9eb1-c7e61110e143",
+        "state": "completed",
+        "localId": "gboenefn",
+        "version": 19,
+        "scoreHash": "ec60d4b2e6e8e712b0599521706cc168",
+        "snapshotHash": "89e5c2576bcbd8384dea88cb5252756b"
+      },
+      {
+        "id": "19e2d57c-bd49-4e37-b3f5-bb56d3f72eb0",
+        "state": "completed",
+        "localId": "0hul3yua",
+        "version": 20,
+        "scoreHash": "b8182d45c5a8472421c7901e39b246d9",
+        "snapshotHash": "3d8da2ba0943fd8bcb6b5a7b80c65eca"
+      },
+      {
+        "id": "1c5abff5-a02c-4a45-b151-0b2f5ac9bb55",
+        "state": "completed",
+        "localId": "5fgb1a39",
+        "version": 20,
+        "scoreHash": "0b63a683d1b96e988c45b0331870ca22",
+        "snapshotHash": "b945e73aa10b72f9e2a5d5ba97d6f4a9"
+      },
+      {
+        "id": "1cc2c7cc-3c0f-4d93-9f25-9698216700ae",
+        "state": "completed",
+        "localId": "uk0v5gmp",
+        "version": 19,
+        "scoreHash": "443566bdafb05687e07521346386b086",
+        "snapshotHash": "b694ce3c605412f7067af38d73b00dca"
+      },
+      {
+        "id": "24493b70-a2ef-456b-8060-aa5d69bb02ea",
+        "state": "completed",
+        "localId": "z082rref",
+        "version": 11,
+        "scoreHash": "2960e5c76ebf5fe5b2888aeebc699cf5",
+        "snapshotHash": "1ffc4f0db13ba5354a67b1988243f9c0"
+      },
+      {
+        "id": "3c8d6add-5e5d-4002-ac00-164e1ab21257",
+        "state": "completed",
+        "localId": "2dsahjll",
+        "version": 19,
+        "scoreHash": "d63ca6265700e57081e9191e85b6a8bf",
+        "snapshotHash": "59119da235bc2e0f71bf1fc60f0de111"
+      },
+      {
+        "id": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b",
+        "state": "completed",
+        "localId": "3sygtta5",
+        "version": 21,
+        "scoreHash": "29b48286f2320afb1ea5dd97286e796e",
+        "snapshotHash": "c97b0cd231e1f6406d543ef64646e39c"
+      },
+      {
+        "id": "4d004e21-fb27-489d-8081-0e38d6cc2733",
+        "state": "completed",
+        "localId": "fz2xs46i",
+        "version": 21,
+        "scoreHash": "8e26517a2e6067a1ab5b270e9c79bfa8",
+        "snapshotHash": "3a4a5935c4dd62565b9a189d4c3c48aa"
+      },
+      {
+        "id": "4db8c485-fbd4-4a7b-90d0-816786ec7462",
+        "state": "completed",
+        "localId": "1phhh8px",
+        "version": 20,
+        "scoreHash": "a748ce9e58bff2b6f97c7277553c8dac",
+        "snapshotHash": "91b1a2e60c5e5209e3c368a54df0a9c3"
+      },
+      {
+        "id": "4dbafd9d-dccd-4e23-83bf-6a7638e2821e",
+        "state": "completed",
+        "localId": "o3iwbjfy",
+        "version": 20,
+        "scoreHash": "201d1ba96137f677a3fd3232113cde1d",
+        "snapshotHash": "6236ed1a4348feabea15e57592499e17"
+      },
+      {
+        "id": "4ede402e-0eca-442a-9335-31f7d9d44ebb",
+        "state": "completed",
+        "localId": "p3lna28k",
+        "version": 20,
+        "scoreHash": "9efe0a5b70ec6ea00701d5b9c6f79786",
+        "snapshotHash": "a0503cf9821678279f02f23089697326"
+      },
+      {
+        "id": "570c3a9f-03ca-4238-89fc-46ad039d25ba",
+        "state": "completed",
+        "localId": "2r8lnvh2",
+        "version": 20,
+        "scoreHash": "21e23680c3714db00b12ec6f1af006d2",
+        "snapshotHash": "09be3a19b0aa6875f859bd50aa070ecb"
+      },
+      {
+        "id": "59031561-6934-4cd0-b3cd-0181e5c76aa2",
+        "state": "completed",
+        "localId": "vq7oerek",
+        "version": 20,
+        "scoreHash": "6b13276e010a9d6a95d9bb73998fb3d7",
+        "snapshotHash": "fdc4fa66971aab315bc9379d9847c86a"
+      },
+      {
+        "id": "60d444f6-f550-4496-a535-b6a559511954",
+        "state": "completed",
+        "localId": "9zonng6p",
+        "version": 19,
+        "scoreHash": "b2a31226f39501c5414d51afd2130f7a",
+        "snapshotHash": "10efb3c2dab43e0f9da04cfdc763068e"
+      },
+      {
+        "id": "697e4c3f-42cf-4c95-9c3f-7c57ddfcbf58",
+        "state": "completed",
+        "localId": "8t9l8dma",
+        "version": 21,
+        "scoreHash": "c803f597f7dad6949922c780c910c1f1",
+        "snapshotHash": "990f2ac738342d5df411210132aa8b31"
+      },
+      {
+        "id": "75fcbd06-804a-4508-bc34-ea0f23eb1895",
+        "state": "completed",
+        "localId": "k1932hf8",
+        "version": 21,
+        "scoreHash": "7d1301aacf25f3196a9d4da01431a942",
+        "snapshotHash": "711cb72037ab20c9e0ca4cce1346572b"
+      },
+      {
+        "id": "7d13f9fb-4e93-49b3-b2d7-b20a5427e4ae",
+        "state": "completed",
+        "localId": "fzkvtuec",
+        "version": 23,
+        "scoreHash": "564fe5c4c261027300c63cb158c2c8e9",
+        "snapshotHash": "4713940b382971525ec488f9df418817"
+      },
+      {
+        "id": "8b512844-eee5-4c34-95d1-877470b19361",
+        "state": "cancelled",
+        "localId": "hho9yjs8",
+        "version": 3,
+        "scoreHash": "da0be7cc59306a53fc422ff7be71509e",
+        "snapshotHash": "83168e5eda848fad550650f538abaed0"
+      },
+      {
+        "id": "a1bfd195-9fd5-49f3-82ed-2c12e51ca5b0",
+        "state": "completed",
+        "localId": "8flnuur6",
+        "version": 19,
+        "scoreHash": "152443c54fd07f14e4841f764e3b31da",
+        "snapshotHash": "4a1ecdcfbaf69548716b6c5e21f275d3"
+      },
+      {
+        "id": "abf43e91-d09d-499e-beaa-ec76f0ca0c7e",
+        "state": "completed",
+        "localId": "z36etwrb",
+        "version": 20,
+        "scoreHash": "165572bcd7bfd32adfd6ddbc83474559",
+        "snapshotHash": "eaa3c02044b7751992d63aa6f57a86a5"
+      },
+      {
+        "id": "ad727513-d19e-45f5-9b3b-6cba094f6544",
+        "state": "completed",
+        "localId": "oonshxl8",
+        "version": 23,
+        "scoreHash": "ffbd5e044d39f73202877ce58b200bcf",
+        "snapshotHash": "b8fd155f9a7cdd50d65e5fd4461cc9cd"
+      },
+      {
+        "id": "aec5071d-0011-49ff-92df-fbebcf9b5f95",
+        "state": "live",
+        "localId": "s6h4mk2d",
+        "version": 1,
+        "scoreHash": "99914b932bd37a50b983c5e7c90ae93b",
+        "snapshotHash": "213d74817c4f342a5e927a42b2caed34"
+      },
+      {
+        "id": "c250c150-8694-46f8-bba9-07472e1eb7bc",
+        "state": "completed",
+        "localId": "gys71iow",
+        "version": 21,
+        "scoreHash": "ebc8605d10baa9ebb8923a6f90f85a06",
+        "snapshotHash": "c220ef36073417f54c8c6537199747e1"
+      },
+      {
+        "id": "d1562db7-b37f-4e6b-b3f5-76a511c85fe6",
+        "state": "live",
+        "localId": "408e4png",
+        "version": 5,
+        "scoreHash": "87157cc4d3a77613c9eacef88229f768",
+        "snapshotHash": "08cbae4a42db49653777c0d5a36974a7"
+      },
+      {
+        "id": "fee4ab11-9650-4f3b-99b3-8af0bd0eebde",
+        "state": "completed",
+        "localId": "a9sro2vv",
+        "version": 21,
+        "scoreHash": "d6480f8441ec31c9f994f47097f42062",
+        "snapshotHash": "d03201080ccb438347b2bca305108443"
+      }
+    ],
+    "providerIntegrity": [
+      {
+        "id": "1208915748",
+        "date": "2026-10-06",
+        "hash": "236f9c1f37bb540fdb1a5c0a4460da6a",
+        "linkedRound": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b"
+      },
+      {
+        "id": "902029046",
+        "date": "2023-06-07",
+        "hash": "82306baff8cfb9f3fd15af4573d88bee",
+        "linkedRound": null
+      },
+      {
+        "id": "899647834",
+        "date": "2023-06-01",
+        "hash": "3b978f3ec55d77a6bbec47e78643e7fe",
+        "linkedRound": null
+      },
+      {
+        "id": "888298526",
+        "date": "2023-05-01",
+        "hash": "9fee302a4abfe3af9e51c83589bc4db0",
+        "linkedRound": null
+      },
+      {
+        "id": "853907291",
+        "date": "2022-10-06",
+        "hash": "f20c937871048134c454d2fdf681807e",
+        "linkedRound": null
+      },
+      {
+        "id": "819244193",
+        "date": "2022-06-21",
+        "hash": "94bd400df79fa6884ef9e8e7ed59a0c6",
+        "linkedRound": null
+      },
+      {
+        "id": "816066271",
+        "date": "2022-06-12",
+        "hash": "eece8f8f0dfd94acccbde247e0225e07",
+        "linkedRound": null
+      }
+    ],
+    "receipt": [
+      {
+        "id": "106216c7-cdbb-4e30-824c-ebf35139c039",
+        "status": "SUCCEEDED",
+        "roundId": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b",
+        "fingerprint": "5a940101e675cdc613b76e11764e57fdde0ac7788484283f8e69f24464ae413c",
+        "providerScoreId": "1208915748"
+      }
+    ]
+  },
+  "linked": {
+    "verified": true,
+    "soleActiveSource": "GHIN",
+    "value": 30.8,
+    "backyardActiveValue": null,
+    "source": {
+      "source_revision": 1,
+      "ghin_unlinked_at": null,
+      "source_changed_at": "2026-10-07T01:48:57.501033+00:00",
+      "backyard_index_reset_at": "2026-10-07T01:48:57.501033+00:00",
+      "retained_ghin_score_ids": []
+    },
+    "profileUi": "GHIN linked active; no second Backyard Index",
+    "careerUi": "GHIN 30.8 sole active Index",
+    "screenshot": "evidence/index-transition-linked-career.jpg"
+  },
+  "unlink": {
+    "executed": true,
+    "ghinLinked": false,
+    "activeIndex": null,
+    "oldBackyardIndexRevived": false,
+    "source": {
+      "source_revision": 2,
+      "ghin_unlinked_at": "2026-10-07T01:58:14.627314+00:00",
+      "source_changed_at": "2026-10-07T01:58:14.627314+00:00",
+      "backyard_index_reset_at": "2026-10-07T01:48:57.501033+00:00",
+      "retained_ghin_score_ids": [
+        "1208915748",
+        "902029046",
+        "899647834",
+        "888298526",
+        "853907291",
+        "819244193",
+        "816066271"
+      ]
+    },
+    "retainedCount": 7,
+    "retainedIds": [
+      "1208915748",
+      "902029046",
+      "899647834",
+      "888298526",
+      "853907291",
+      "819244193",
+      "816066271"
+    ],
+    "all27RoundsUnchanged": true,
+    "activeDraftUnchanged": true,
+    "receiptUnchanged": true,
+    "qa25ProviderLinkUnchanged": true,
+    "ui": "Sin índice activo; seven retained cards; one QA25 BACKYARD + GHIN",
+    "career": {
+      "completed": 23,
+      "birdies": 18,
+      "best": 71,
+      "average": 83.7,
+      "atestPercent": 50
+    },
+    "screenshots": [
+      "evidence/index-transition-unlinked-career.jpg",
+      "evidence/index-transition-unlinked-home.jpg"
+    ]
+  },
+  "cleanSessionUnlinked": {
+    "status": "USER_REAUTH_REQUIRED",
+    "executed": false,
+    "reason": "Original browser was logged out. User asked to verify from a NEW Safari private window; awaiting answer."
+  },
+  "relink": {
+    "status": "USER_REAUTH_REQUIRED",
+    "executed": false
+  },
+  "reimport": {
+    "executed": false,
+    "importedNew": null
+  },
+  "qa25IdempotenceAfterRelink": {
+    "realPreflightExecuted": false,
+    "localRegression": "PASS",
+    "providerPostsThisTask": 0
+  },
+  "tests": {
+    "directed": {
+      "total": 81,
+      "pass": 81,
+      "fail": 0
+    },
+    "full": {
+      "total": 4705,
+      "pass": 4696,
+      "preexistingFail": 9,
+      "newFail": 0
+    },
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "build": "PASS",
+    "localPostgres": true
+  },
+  "requestBudget": {
+    "cloudSyncGet": 2,
+    "cloudSyncPost": 0,
+    "cloudRoundsObserved": 0,
+    "cloudRetries": 0,
+    "cloudFailures": 0,
+    "fullBundles": 2,
+    "unexpectedFullBundles": 0,
+    "maxResponseBytes": 535006,
+    "maxCloudUploadBytes": 0,
+    "reasonForFullBundles": "Initial owned-account hydration and one deliberate reload to adopt the new deployment; mount/knownCloud=false. No POST follows.",
+    "ghinImportRead": 3,
+    "ghinImportWrite": 0,
+    "unlink": 1,
+    "relink": 0,
+    "providerScorePost": 0,
+    "maxImportResponseBytes": 4551,
+    "profileGhinTotal": null,
+    "profileGhinTotalReason": "Profile requests are not fully byte-instrumented; do not treat runtime-log absence as a request count.",
+    "idleTwoMinutesCertified": false,
+    "requestStormObserved": false,
+    "pollingObserved": false,
+    "usageGuardTriggered": false
+  },
+  "safety": {
+    "mainTouched": false,
+    "betaTouched": false,
+    "productionTouched": false,
+    "productionDomainTouched": false,
+    "qaDeleted": false,
+    "qa24Closed": false,
+    "qa24ScoresChanged": false
+  },
+  "pending": [
+    "NEW private-session unlink verification",
+    "Manual relink of the SAME GHIN",
+    "Explicit import after relink",
+    "QA25 preflight ALREADY_POSTED without provider POST",
+    "Final authenticated two-minute idle verification"
+  ]
+}
