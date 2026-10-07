@@ -16,6 +16,7 @@ import {
   type GhinPortableSession,
 } from "./client";
 import { resolveGhinPreviewCapabilities } from "./config";
+import { ghinOwnedPostingEnvironment } from "./posting-policy";
 import type { NormalizedGhinGolfer } from "./core";
 import type { GhinServerCredentials } from "./credentials.server";
 import {
@@ -173,7 +174,7 @@ function verifiedTicket(ownerId: string, ticket: string): ConfirmationPayload | 
 function clientFor(credentials: GhinServerCredentials) {
   const capabilities = resolveGhinPreviewCapabilities(process.env);
   if (!capabilities.previewOnly || !capabilities.readOnlyEnabled || !capabilities.golferLookup
-    || capabilities.scorePostingEnabled || !capabilities.apiBaseUrl) {
+    || (capabilities.scorePostingEnabled && !ghinOwnedPostingEnvironment(process.env)) || !capabilities.apiBaseUrl) {
     throw new Error("GHIN_USER_FLOW_DISABLED");
   }
   return new GhinReadOnlyClient({ baseUrl: capabilities.apiBaseUrl, credentials });
@@ -182,7 +183,7 @@ function clientFor(credentials: GhinServerCredentials) {
 function clientForPortableSession(session: GhinPortableSession) {
   const capabilities = resolveGhinPreviewCapabilities(process.env);
   if (!capabilities.previewOnly || !capabilities.readOnlyEnabled || !capabilities.golferLookup
-    || capabilities.scorePostingEnabled || !capabilities.apiBaseUrl) {
+    || (capabilities.scorePostingEnabled && !ghinOwnedPostingEnvironment(process.env)) || !capabilities.apiBaseUrl) {
     throw new Error("GHIN_USER_FLOW_DISABLED");
   }
   return new GhinReadOnlyClient({ baseUrl: capabilities.apiBaseUrl, session });

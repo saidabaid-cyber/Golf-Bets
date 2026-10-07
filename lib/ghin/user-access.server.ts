@@ -6,6 +6,7 @@ import { isCrossSiteRequest } from "../backyard-ai/server/http-security";
 import { authenticatedRequest } from "../server-auth";
 import { resolveGhinPreviewCapabilities } from "./config";
 import { privateGhinJson } from "./qa-access.server";
+import { ghinOwnedPostingEnvironment } from "./posting-policy";
 
 /** Preview-only gate for a signed-in golfer. Unlike the diagnostic QA gate,
  * this deliberately has no admin membership check and grants no access to the
@@ -15,7 +16,7 @@ export async function ghinUserContext(request: NextRequest) {
   if (!capabilities.previewOnly || !capabilities.readOnlyEnabled || !capabilities.golferLookup) {
     return { ok: false as const, response: privateGhinJson({ error: "Ruta no disponible.", code: "FEATURE_DISABLED" }, 404) };
   }
-  if (capabilities.scorePostingEnabled) {
+  if (capabilities.scorePostingEnabled && !ghinOwnedPostingEnvironment(process.env)) {
     return { ok: false as const, response: privateGhinJson({ error: "Configuración de Preview no segura.", code: "SCORE_POSTING_MUST_BE_OFF" }, 503) };
   }
   if (isCrossSiteRequest(request)) {

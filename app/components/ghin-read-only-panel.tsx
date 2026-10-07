@@ -7,6 +7,7 @@ import { ModalShell } from "./modal-shell";
 import styles from "./ghin-read-only-panel.module.css";
 import { GhinImportHistory } from "./ghin-import-history";
 import { GhinCourseLookup } from "./ghin-course-lookup";
+import { GhinPostingPanel } from "./ghin-posting-panel";
 
 function value(value: string | number | null) {
   return value === null || value === "" ? "No disponible" : String(value);
@@ -101,6 +102,7 @@ export function GhinReadOnlyPanel({
       {control.imports?.data?.summary && <p role="status">{control.imports.data.summary.importedNew} nuevas · {control.imports.data.summary.matched} vinculadas · {control.imports.data.summary.ambiguous} requieren revisión.</p>}
       {control.imports && <GhinImportHistory control={control.imports} backyard={[]} title="Tarjetas GHIN guardadas"/>}
       {control.lookupCourse && <GhinCourseLookup key={profile.ghinNumber} lookup={control.lookupCourse} />}
+      {control.postingRequest && <GhinPostingPanel key={`posting-${profile.ghinNumber}`} request={control.postingRequest} onReauthorize={()=>void openReauthorization()} />}
       {control.scores && <section className={styles.scores} aria-label="Scoring record GHIN read-only">
         <p><b>{control.scores.count}</b> scores recuperados · sólo lectura</p>
         <div className={styles.scoreList}>{control.scores.items.map((score, index) => <article key={score.id ?? `${score.playedOn ?? "score"}-${index}`}>

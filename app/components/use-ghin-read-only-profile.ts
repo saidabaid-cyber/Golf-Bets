@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { NormalizedGhinScore } from "../../lib/ghin/core";
 import type { GhinCourseLookupInput, GhinCourseLookupResponse } from "../../lib/ghin/course-lookup";
 import type { GhinImportedScoresController } from "./use-ghin-imported-scores";
+import type { GhinPostingRequest } from "./ghin-posting-panel";
 import { parseGhinProfileResponse, type GhinProfileProjection, type GhinScoresResponse } from "../../lib/ghin/profile";
 
 export type GhinAuthorizationCandidate = {
@@ -17,6 +18,7 @@ export type GhinAuthorizationCandidate = {
 };
 
 export type GhinReadOnlyProfileController = {
+  postingRequest?: GhinPostingRequest;
   lookupCourse?: (input: GhinCourseLookupInput) => Promise<GhinCourseLookupResponse>;
   imports?: GhinImportedScoresController;
   enabled: boolean;
@@ -292,7 +294,19 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
     return body as GhinCourseLookupResponse;
   }, [accessToken, state.featureEnabled]);
 
+  const postingRequest = useCallback<GhinPostingRequest>(async input => {
+    if(!accessToken || !state.featureEnabled) throw new Error("FEATURE_DISABLED");
+    const body=input?JSON.stringify(input):undefined;
+    const response=await fetch("/api/profile/ghin/post",{method:body?"POST":"GET",cache:"no-store",headers:{...bearer(accessToken),...(body?{"content-type":"application/json"}:{})},body,signal:AbortSignal.timeout(90_000)});
+    const raw=await response.text();
+    console.info("BACKYARD_GHIN_REQUEST",JSON.stringify({endpoint:"/api/profile/ghin/post",method:body?"POST":"GET",status:response.status,requestBytes:body?new TextEncoder().encode(body).length:0,responseBytes:new TextEncoder().encode(raw).length}));
+    const payload=JSON.parse(raw) as Record<string,unknown>;
+    if(!response.ok && !payload.code)throw new Error("REQUEST_FAILED");
+    return payload;
+  },[accessToken,state.featureEnabled]);
+
   return {
+    postingRequest,
     lookupCourse,
     enabled: state.featureEnabled && Boolean(accessToken),
     ready: state.ready,
