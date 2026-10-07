@@ -1,4 +1,4 @@
-import { stableValue } from "./cloud-sync";
+import { stableValue, stripLocalRoundUi } from "./cloud-sync";
 import { cloudSyncDiagnostic, jsonBytes } from "./cloud-sync-diagnostics";
 import type { RoundSnapshot } from "./types";
 
@@ -18,16 +18,28 @@ export function ownerRoundTransportPayload(snapshot: RoundSnapshot, live = true)
 }
 export function ownerRoundSyncFingerprint(serialized: string) {
   const round = JSON.parse(serialized) as RoundSnapshot;
-  // Render-generated timestamps do not constitute new capture material, but
-  // remain in the actual payload when a real edit is sent.
-  const material = JSON.stringify(stableValue({ ...round,
-    personalSlidingAdjustments: round.personalSlidingAdjustments?.map(item => {
-      const { updatedAt, ...value } = item; void updatedAt; return value;
-    }),
-  }));
+  const material = ownerRoundCaptureMaterial(round);
   let hash = 0x811c9dc5;
   for (let i = 0; i < material.length; i++) hash = Math.imul(hash ^ material.charCodeAt(i), 0x01000193);
-  return `owner-v1-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+  return `owner-v2-${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
+
+/** Parking clears settlement outputs; opening capture recomputes them. Neither
+ * that read model nor device navigation is a score/configuration mutation.
+ * Keep every capture input (including unknown additive fields) in the exact
+ * comparison. The complete snapshot is still sent with CAS for a real edit. */
+export function ownerRoundCaptureMaterial(round: RoundSnapshot) {
+  const {
+    completedAt, updatedAt, pausedAt, resumeHoleIndex, resumeCourseSelected,
+    betResult, expenseTotal, netResult, categoryResults, playerBalances,
+    categoryBalances, resultDetails, personalResults, personalOpponentResults,
+    personalSlidingAdjustments, backyardIndexSnapshots, ownerBagSnapshot, ...capture
+  } = round;
+  void completedAt; void updatedAt; void pausedAt; void resumeHoleIndex; void resumeCourseSelected;
+  void betResult; void expenseTotal; void netResult; void categoryResults; void playerBalances;
+  void categoryBalances; void resultDetails; void personalResults; void personalOpponentResults;
+  void personalSlidingAdjustments; void backyardIndexSnapshots; void ownerBagSnapshot;
+  return JSON.stringify(stableValue(stripLocalRoundUi(capture)));
 }
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 const flights = new Map<string, Promise<unknown>>();
@@ -89,7 +101,7 @@ export async function syncOwnerRound(serialized: string, userId: string, accessT
           || !Number.isInteger(revision) || revision < 1 || remote.id !== round.id || remote.cloudReadOnly
           || remote.lifecycleState !== "live" || remote.scorekeeping?.mode !== "owner"
           || remote.scorekeeping?.organizerAccountUserId !== userId
-          || ownerRoundTransportPayload(remote) !== serialized)
+          || ownerRoundCaptureMaterial(remote) !== ownerRoundCaptureMaterial(round))
           throw new Error("La tarjeta de nube cambió. Conservamos tu captura; revisa ambas tarjetas antes de continuar.");
         storage.setItem(key, String(revision));
         acknowledgeOwnerRound(storage, key, fingerprint); failed.delete(key);
@@ -97,7 +109,7 @@ export async function syncOwnerRound(serialized: string, userId: string, accessT
       }
       // A parked card can have been committed by history sync after the owner
       // transport's last ACK. A manual retry may adopt that revision only when
-      // its entire canonical snapshot equals the previously parked base, never
+      // its canonical capture material equals the previously parked base, never
       // merely because a fresh GET returned a newer version.
       if (!manual || !pausedBase || pausedBase.id !== round.id || pausedBase.cloudReadOnly
         || pausedBase.lifecycleState !== "live" || pausedBase.scorekeeping?.organizerAccountUserId !== userId)
@@ -111,7 +123,7 @@ export async function syncOwnerRound(serialized: string, userId: string, accessT
       if (!current()) return null;
       const remote = canonical.data?.snapshot as RoundSnapshot | undefined;
       if (!remote || canonical.data.id !== existing.data.id || remote.lifecycleState !== "live"
-        || ownerRoundTransportPayload(remote) !== ownerRoundTransportPayload(pausedBase))
+        || ownerRoundCaptureMaterial(remote) !== ownerRoundCaptureMaterial(pausedBase))
         throw new Error("La tarjeta de nube cambió. Conservamos tu captura; revisa ambas tarjetas antes de continuar.");
       remembered = Number(canonical.data.version);
       if (!Number.isInteger(remembered) || remembered < 1) throw new Error("Revisión canónica inválida.");

@@ -35,8 +35,10 @@ export function pageHydrationHarness(text = readFileSync("app/page.tsx", "utf8")
   scope.preserveDraftConflict = () => {}; scope.applyCloudPreferences = (p: any) => { scope.identity.defaultHandicap = p.defaultHandicap; };
   const nodes: Record<string, ts.Node> = {};
   function visit(n: ts.Node) {
-    if (ts.isFunctionDeclaration(n) && n.name && ["roundDraftPayload", "playersForRoundStart", "persistCommittedHoleBeforeAdvance"].includes(n.name.text)) nodes[n.name.text] = n;
+    if (ts.isFunctionDeclaration(n) && n.name && ["roundDraftPayload", "playersForRoundStart", "persistCommittedHoleBeforeAdvance", "currentSnapshot"].includes(n.name.text)) nodes[n.name.text] = n;
     if (ts.isVariableDeclaration(n) && ["applyDraft", "applyCloudBundle", "setupPlayers"].includes(n.name.getText(page))) nodes[n.name.getText(page)] = (n.initializer as ts.CallExpression).arguments[0];
+    if (ts.isVariableDeclaration(n) && ["openActiveRound", "resumeActiveRound", "continueActiveRound"].includes(n.name.getText(page))) nodes[n.name.getText(page)] = n.initializer!;
+    if (ts.isVariableDeclaration(n) && n.name.getText(page) === "activeRoundSummary") nodes.activeRoundSummary = (n.initializer as ts.CallExpression).arguments[0];
     if (ts.isCallExpression(n) && n.arguments[0]?.getText(page).includes("trackLocalCloudEdits") && n.expression.getText(page) === "useLayoutEffect") nodes.persistEffect = n.arguments[0];
     if (ts.isCallExpression(n) && n.arguments[0]?.getText(page).includes("syncAccountPrimaryFrequentPlayer") && n.expression.getText(page) === "useEffect") nodes.profileEffect = n.arguments[0];
     if (ts.isCallExpression(n) && n.arguments[0]?.getText(page).includes("applyRoundCourseHandicaps") && n.expression.getText(page) === "useEffect") nodes.handicapEffect = n.arguments[0];

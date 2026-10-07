@@ -1004,7 +1004,7 @@ function GolfBetsApp() {
       setStartHole(1); setRoundHoles(18); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(1), 6));
       setCourse(laVista); setCourseSelected(false); setPendingCourseIdentity(null); setCourseSelectionError(false);
       setCourseSetupStage("course");
-      if (!options.preserveLocalUi) setCurrentIndex(0);
+      if (!options.preserveLocalUi) { currentIndexRef.current = 0; setCurrentIndex(0); }
       setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null);
     }
     if (draft && draftCore) {
@@ -1060,6 +1060,10 @@ function GolfBetsApp() {
           const savedContext = readRoundResumeContext(localStorage, identity.userId, restoredRoundId);
           const restoredOrder = playOrderForHoles((draft.course ?? laVista).holes.map((hole: Course["holes"][number]) => hole.number), draftCore.startHole).slice(0, draftRoundHoles);
           const restoredContext = normalizeRoundResumeContext(savedContext || { roundId: restoredRoundId, currentIndex: recoveredRoundResumeIndex(draft, draftPlayerIds, restoredOrder) }, restoredRoundId, draftPlayerIds, draftCore.ownerId, draftRoundHoles);
+          // Canonical apply writes storage synchronously, before React commits
+          // these setters. Publish the recovered device cursor at that boundary.
+          currentIndexRef.current = restoredContext.currentIndex;
+          persistRoundResumeContext(localStorage, identity.userId, restoredContext);
           setRoundResumeContext(restoredContext);
           setCurrentIndex(restoredContext.currentIndex);
         }
@@ -1245,7 +1249,10 @@ function GolfBetsApp() {
     localStorage.setItem(STORAGE_KEYS.frequentPlayers, JSON.stringify(reconciled.frequentPlayers));
     localStorage.setItem(STORAGE_KEYS.frequentGroups, serializeFrequentGroups(reconciled.frequentGroups));
     localStorage.setItem(STORAGE_KEYS.contrast, String(reconciled.preferences.highContrast));
-    const localDraftWithNavigation = restoreLocalRoundUi(reconciled.activeDraft, { currentIndex: currentIndexRef.current });
+    const localDraftWithNavigation = restoreLocalRoundUi(reconciled.activeDraft, {
+      roundId: (reconciled.activeDraft as { roundId?: string } | null)?.roundId,
+      currentIndex: currentIndexRef.current,
+    });
     localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(localDraftWithNavigation));
     localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(reconciled.tombstones));
     persistCloudMetadata(localStorage, reconciled);
