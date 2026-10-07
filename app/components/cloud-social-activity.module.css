@@ -27,8 +27,8 @@
 .highlight{border-color:var(--by-gold-line);background:var(--by-surface-warm)}
 .highlightLabel{display:flex;align-items:center;gap:8px;color:var(--by-gold);font-size:12px;font-weight:600;margin:14px 0}
 .highlight .roundStats{background:var(--by-gold-soft)}
-.achievements{list-style:none;padding:0;margin:12px 0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-.achievements li{border:1px solid #eee4c8;background:var(--by-gold-soft);padding:12px;border-radius:10px;font-size:12px;line-height:1.5;color:var(--by-gold);overflow-wrap:anywhere}
+.achievements{list-style:none;padding:0;margin:10px 0;display:flex;flex-wrap:wrap;gap:6px}
+.achievements li{border:1px solid #eee4c8;background:var(--by-gold-soft);padding:5px 9px;border-radius:20px;font-size:12px;line-height:1.5;color:var(--by-gold);overflow-wrap:anywhere;max-width:100%}
 .bag{margin:16px 0 12px;border:1px solid #e6e9df;border-radius:13px;background:var(--by-surface-warm);overflow:hidden}
 .card h3{font:700 23px/1.2 var(--by-editorial);letter-spacing:-.5px;color:var(--by-forest)}
 .bag h3{margin:16px 14px 5px;font-size:25px}
