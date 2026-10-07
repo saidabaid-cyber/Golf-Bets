@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { careerIndexChart } from "../../lib/career-index-chart";
 export type UINode={type:any;props:Record<string,any>};
-export function uiNodes(node:any):UINode[]{return Array.isArray(node)?node.flatMap(uiNodes):node?.props?[node,...uiNodes(node.props.children)]:[];}
-export function uiText(node:any):string{return Array.isArray(node)?node.map(uiText).join(" ").replace(/\s+/g," ").trim():node?.props?uiText(node.props.children):typeof node==="string"||typeof node==="number"?String(node):"";}
+function presentationNode(node:any){return typeof node?.type==="function"&&["ScoreSummary","HandicapChart","SocialFeedSkeleton"].includes(node.type.name)?node.type(node.props):node;}
+export function uiNodes(node:any):UINode[]{node=presentationNode(node);return Array.isArray(node)?node.flatMap(uiNodes):node?.props?[node,...uiNodes(node.props.children)]:[];}
+export function uiText(node:any):string{node=presentationNode(node);return Array.isArray(node)?node.map(uiText).join(" ").replace(/\s+/g," ").trim():node?.props?uiText(node.props.children):typeof node==="string"||typeof node==="number"?String(node):"";}
 export function uiFind(tree:any,predicate:(n:UINode)=>boolean){const node=uiNodes(tree).find(predicate);assert.ok(node);return node;}
 /** Execute application components and their event handlers; replace only React's scheduler and external boundaries. */
 export function socialUI(file:string,boundaries:Record<string,any>={},globals:Record<string,unknown>={}) {
@@ -27,6 +29,7 @@ export function socialUI(file:string,boundaries:Record<string,any>={},globals:Re
     if(id==="react/jsx-runtime")return{jsx:(type:any,props:any)=>({type,props}),jsxs:(type:any,props:any)=>({type,props}),Fragment:"fragment"};
     if(id.endsWith(".css"))return{__esModule:true,default:new Proxy({},{get:(_t,k)=>String(k)})};
     for(const [key,value]of Object.entries(boundaries))if(id===key||id.endsWith(`/${key}`))return value;
+    if(id.endsWith("/career-index-chart"))return{careerIndexChart};
     if(id.endsWith("/use-visual-content"))return{useVisualContent:()=>[]};
     if(id.endsWith("/account-provider"))return{useBackyardAccount:()=>({retryCloudSync:async()=>{}})};
     return new Proxy({},{get:(_t,k)=>String(k)});

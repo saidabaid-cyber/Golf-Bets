@@ -83,7 +83,7 @@ test("GHIN binds new round player to provider index; unlink never changes alread
 });
 test("Career uses only active GHIN index, keeps retained cards when unlinked and never presents the closed Backyard fallback",()=>{
   const h=socialUI("app/components/career-index-panel.tsx",{"career-index-presentation":{backyardIndexTimeline:()=>({points:[],low:null,average:null,high:null})},"career-statistics":{careerNumber:(n:number|null)=>n??"—"}});
-  const props={index:{source:"GHIN",value:30.8},userId:"owner",rounds:[completed("old")],displayName:"QA",onOpenRound(){}};
+  const props={ghin:{profile:ghin},index:{source:"GHIN",value:30.8},userId:"owner",rounds:[completed("old")],displayName:"QA",onOpenRound(){}};
   const tree=h.render("CareerIndexPanel",{props,detail:null,onDetail(){}});
   assert.match(uiText(tree),/30.8/);assert.doesNotMatch(uiText(tree),/conservado|5\.5/);
   const career=readFileSync("app/components/career-ghin-scores.tsx","utf8");

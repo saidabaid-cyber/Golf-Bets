@@ -39,8 +39,8 @@ test("Mi bolsa abre una ficha limpia por bastón y reserva el borrado para el de
   for (const field of ["Marca", "Modelo", "Generación", "Loft", "Mano", "Varilla", "Flex", "Peso de varilla", "Longitud", "Lie", "Grip", "Notas"]) assert.match(editors, new RegExp(field));
   for (const set of ["4–P", "4–AW", "5–P", "5–AW"]) assert.match(editors, new RegExp(set));
   assert.match(editors, /Personalizar set/);
-  assert.match(panel, /EN MI BOLSA/);
-  assert.match(panel, /AGREGAR EQUIPO/);
+  assert.match(panel, /id="current-equipment-title">Equipo actual/);
+  assert.match(panel, /id="missing-equipment-title">Agrega el resto de tu bolsa/);
   assert.match(panel, /data-equipment-screen="club-detail"/);
   assert.match(panel, /Editar atributos/);
   assert.match(panel, /ELIMINAR BASTÓN/);

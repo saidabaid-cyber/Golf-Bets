@@ -34,12 +34,13 @@ test("Mi Bolsa keeps approved product media while permanent management stays com
   const panel = source("app/components/equipment-profile-panel.tsx");
   const css = source("app/components/equipment.module.css");
 
-  assert.match(panel, /EN MI BOLSA/);
-  assert.match(panel, /AGREGAR EQUIPO/);
+  assert.match(panel, /id="current-equipment-title">Equipo actual/);
+  assert.match(panel, /id="missing-equipment-title">Agrega el resto de tu bolsa/);
   assert.match(panel, /bagManagement\.missing/);
   assert.doesNotMatch(panel, /className=\{styles\.emptyBagCopy\}/);
   assert.doesNotMatch(panel, /Tu juego empieza<br \/>en tu bolsa/);
-  assert.match(css, /\.bagItemMain \{ display:grid;grid-template-columns:156px/);
+  assert.match(css, /\.profileClubButton \{ display:grid;[\s\S]{0,100}grid-template-columns:132px/);
+  assert.match(panel, /<CanonicalCategoryImage category=\{club.category\}/);
   assert.match(css, /backyard-fairway-scene\.svg/);
 });
 

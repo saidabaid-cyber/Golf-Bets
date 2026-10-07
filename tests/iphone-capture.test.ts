@@ -185,7 +185,7 @@ test("Reglas dejan IA/directorio plegables, recursos como accesos directos y vid
   assert.match(rules,/aria-expanded=\{open\}/);
   assert.match(rules,/open \? "▲" : "▼"/);
   const ids = [...rules.matchAll(/<RulesDisclosure id="([^"]+)"/g)].map(match=>match[1]);
-  assert.deepEqual(ids,["preguntar-ia","reglamento-navegable","reglas-locales","codigo-caballeros","documentos-oficiales"]);
+  assert.deepEqual(ids,["rules-more-resources","preguntar-ia","reglamento-navegable","reglas-locales","codigo-caballeros","documentos-oficiales"]);
   assert.match(rules, /className="card rulesResourceShortcut" id="procedimientos-comite"/);
   assert.match(rules, /className="card rulesResourceShortcut" id="aclaraciones"/);
   assert.match(rules, /className="card videosCard" id="videos-reglas"/);

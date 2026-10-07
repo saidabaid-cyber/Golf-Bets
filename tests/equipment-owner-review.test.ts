@@ -56,7 +56,7 @@ test("la UI final usa bolsa premium, selección guiada y modo manual explícito"
     assert.match(`${panel}\n${bagManagement}`, new RegExp(category));
   }
   assert.match(panel, /wedgeLoftSummary/);
-  assert.match(panel, /styles\.bagItemMain/);
+  assert.match(panel, /styles\.profileClubButton/);
   assert.match(panel, /aria-label=\{`Editar \$\{clubName/);
   assert.match(editor, /generationOptions\.length > 1/);
   assert.match(editor, /selectedShaft\.flexOptions\.length/);

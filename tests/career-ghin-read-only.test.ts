@@ -63,7 +63,7 @@ test("0 eligible Backyard cards plus GHIN scores keeps zero percent and the fixe
   const empty=careerAttestSummary([],[],"owner"),before=structuredClone(empty),ghin=control();
   ghin.scores={items:Array.from({length:20},(_,i)=>({...score,id:String(i)})),count:503,truncated:true,fetchedAt:"2026-10-05"};
   const props={userId:"owner",accessToken:"own",index:{source:"GHIN",value:7.9},rounds:[],history:[],insights:buildGolfInsights([]),ghin};
-  const h=socialUI("app/components/career-index-panel.tsx",{"career-attest-client":{readCareerAttestSummary:async()=>empty},"career-index-presentation":presentation,"career-statistics":{careerNumber:(n:any)=>n??"—"},"backyard-index":{calculateBackyardIndex}});
+  const h=socialUI("app/components/career-index-panel.tsx",{"career-attest-client":{readCareerAttestSummary:async()=>empty},"career-index-presentation":presentation,"career-statistics":{careerDate:(s:string)=>s,careerNumber:(n:any)=>n??"—"},"backyard-index":{calculateBackyardIndex}});
   const render=()=>h.render("CareerIndexPanel",{props,detail:"attest",onDetail(){}});
   render();await settleUI();const tree=render();assert.match(uiText(tree),/Atest de tarjetas Backyard 0%/);assert.match(uiText(tree),/Sin tarjetas Backyard elegibles · 0\/20/);
   assert.equal(uiNodes(tree).filter(n=>n.type==="i").length,20);assert.deepEqual(empty,before);
