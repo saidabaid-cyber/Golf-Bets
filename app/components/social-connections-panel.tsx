@@ -8,7 +8,6 @@ import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { PersonalQr, SocialQrScanner, CompactPersonalQr } from "./social-qr";
 import { BackyardIcon } from "./backyard-icon";
 import { useViewScrollReset } from "./use-view-scroll-reset";
-import { useGolfNavigation } from "./golf-object-navigation";
 import styles from "./friends-hub.module.css";
 export type FriendsView = "list" | "add" | "search" | "nearby" | "requests" | "qr" | "scan";
 type Person = SocialPerson & { club_name?: string | null };
@@ -32,7 +31,6 @@ function FriendRequestList({ requests, people, ownerId, sameClubIds, busy, onPro
   })}</ul>;
 }
 export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onChanged, initialView = "list", name = "Jugador", username = "", avatar = "", embedded=false, onViewChange }: Props) {
-  const navigation = useGolfNavigation();
   const [data, setData] = useState<ConnectionPage>(EMPTY), [view, setView] = useState<FriendsView>(initialView);
   const [query, setQuery] = useState(""), [friendQuery, setFriendQuery] = useState(""), [results, setResults] = useState<Person[]>([]);
   const [selected, setSelected] = useState<Person | null>(null), [sent, setSent] = useState<Person | null>(null);
@@ -43,7 +41,6 @@ export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onCh
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useViewScrollReset(`${view}:${selected?.user_id ?? ""}:${sent?.user_id ?? ""}`);
   const refresh = useCallback(async () => { if (accessToken) { const next = await socialRequest<ConnectionPage>("/api/social/connections", accessToken); if (alive.current) setData(next); } }, [accessToken]);
-  useEffect(()=>{const update=()=>{void refresh().catch(()=>{});};window.addEventListener("backyard:notifications-changed",update);return()=>window.removeEventListener("backyard:notifications-changed",update);},[refresh]);
   useEffect(() => {
     const controller = new AbortController();
     if (!accessToken) return;
@@ -83,11 +80,10 @@ export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onCh
   const label = (person: Person) => <><span className={styles.avatar}><ProfileAvatarMedia value={person.avatar_url} fallback={person.display_name[0] || "J"} /></span><span className={styles.identity}><b>{person.display_name}</b><small>@{person.username}</small>{person.club_name&&<small>{person.club_name}</small>}{sameClubIds.has(person.user_id) && <small className={styles.club}>Mismo club</small>}</span></>;
   function open(next: FriendsView) { setSelected(null); setSent(null); setMessage(""); onCloseTarget?.(); setView(next); onViewChange?.(next); }
   const showProfile = useCallback(async (person: Person) => {
-    if (navigation) { navigation.open({kind:"player",id:person.user_id}); return; }
     setSelected(person); setMessage("");
     try { const next = await socialRequest<{ person: Person }>(`/api/social/connections?target=${encodeURIComponent(person.user_id)}`, accessToken!); if (alive.current) setSelected(current => current?.user_id === person.user_id ? next.person : current); }
     catch (e) { if (alive.current) setMessage(socialErrorMessage(e)); }
-  }, [accessToken,navigation]);
+  }, [accessToken]);
   function relationship(person: Person) {
     const state = connectionState(data, ownerId, person.user_id);
     const request = pending.find(item => item.requester_id === person.user_id || item.addressee_id === person.user_id);
@@ -121,7 +117,7 @@ export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onCh
     {sent ? <section className={styles.confirmation}><span className={styles.check} aria-hidden="true">✓</span><h2>¡Solicitud enviada!</h2><p>{sent.display_name} recibirá una notificación y podrá aceptarla.</p><button type="button" className={styles.primary} onClick={() => open("search")}>Buscar más amigos</button><button type="button" className={styles.secondary} onClick={() => { const person = sent; setSent(null); void showProfile(person); }}>Ver perfil</button></section> : selected ? <>
       <button type="button" className={styles.back} onClick={() => { setSelected(null); onCloseTarget?.(); }}>← Amigos</button>
       <section className={styles.profile} aria-label="Perfil del jugador"><span className={styles.profileAvatar}><ProfileAvatarMedia value={selected.avatar_url} fallback={selected.display_name[0] || "J"} /></span><h2>{selected.display_name}</h2><p>@{selected.username}</p>{selected.club_name && <p className={styles.profileClub}>{selected.club_name}</p>}{sameClubIds.has(selected.user_id) && <p className={styles.club}>Mismo club</p>}{relationship(selected)}{connectionState(data, ownerId, selected.user_id) === "PENDING" && <button type="button" className={styles.secondary} disabled={busy} onClick={() => { const request = pending.find(item => item.addressee_id === selected.user_id); if (request) void action({ action: "CANCELLED", id: request.id }); }}>Cancelar solicitud</button>}{connectionState(data, ownerId, selected.user_id) === "FRIEND" && <details className={styles.sensitive}><summary>Administrar conexión</summary><button type="button" disabled={busy} onClick={() => { if (confirm("¿Bloquear esta conexión? Se revocará la amistad y el acceso social entre ambos.")) void action({ action: "block", target: selected.user_id }); }}>Bloquear</button></details>}</section>
-    </> : view === "qr" ? <PersonalQr userId={ownerId} name={name} username={username} avatar={avatar} backLabel="Amigos" onClose={() => open("add")} /> : view === "scan" ? <SocialQrScanner backLabel="Amigos" onFound={id => { if(navigation){setView("add");navigation.open({kind:"player",id});return;} void socialRequest<{ person: Person }>(`/api/social/connections?target=${encodeURIComponent(id)}`, accessToken).then(next => { if (alive.current) { setView("add"); setSelected(next.person); } }).catch(e => { if (alive.current) setMessage(socialErrorMessage(e)); }); }} onClose={() => open("add")} /> : <>
+    </> : view === "qr" ? <PersonalQr userId={ownerId} name={name} username={username} avatar={avatar} backLabel="Amigos" onClose={() => open("add")} /> : view === "scan" ? <SocialQrScanner backLabel="Amigos" onFound={id => { void socialRequest<{ person: Person }>(`/api/social/connections?target=${encodeURIComponent(id)}`, accessToken).then(next => { if (alive.current) { setView("add"); setSelected(next.person); } }).catch(e => { if (alive.current) setMessage(socialErrorMessage(e)); }); }} onClose={() => open("add")} /> : <>
       {view !== "list" && <button type="button" className={styles.back} onClick={() => open(view === "add" || view === "requests" ? "list" : "add")}>← {view === "add" || view === "requests" ? "Mis amigos" : "Agregar amigos"}</button>}
       <header className={styles.heading}><span>TU COMUNIDAD</span><h2>{view === "list" ? "Mis amigos" : view === "add" ? "Agregar amigos" : view === "search" ? "Buscar jugadores" : view === "nearby" ? "Jugadores cerca de ti" : "Solicitudes pendientes"}</h2><p>{view === "list" ? "Conecta con golfistas, encuentra nuevos compañeros de juego y haz crecer tu red en The Backyard." : view === "add" ? "Encuentra golfistas de diferentes formas y amplía tu red." : view === "nearby" ? "Golfistas de tu mismo club. No compartimos ubicación exacta." : view === "search" ? "Encuentra jugadores por nombre, @usuario o correo exacto." : "Administra las invitaciones a tu red de amigos."}</p></header>
       {view === "list" && <><button type="button" className={styles.primary} onClick={() => open("add")}>＋ Agregar amigos</button><button type="button" className={styles.requestLink} onClick={() => open("requests")}>Solicitudes pendientes <b>{pending.length}</b><span aria-hidden="true">›</span></button><label className={styles.search}>Buscar en mis amigos<input type="search" value={friendQuery} onChange={event => setFriendQuery(event.target.value)} placeholder="Buscar en mis amigos…" /></label><h3 className={styles.sectionTitle}>Mis amigos · {data.friends.length}</h3>{loading ? <p role="status">Cargando amigos…</p> : !friends.length ? <section className={styles.empty}><span aria-hidden="true">♧</span><h3>Conecta con golfistas</h3><p>Encuentra y agrega amigos para jugar más golf juntos.</p><button type="button" className={styles.primary} onClick={() => open("search")}>Buscar amigos</button></section> : <>{rows(filterCurrentFriends(friends, friendQuery))}{!filterCurrentFriends(friends, friendQuery).length && <p>No hay amigos que coincidan con tu búsqueda.</p>}</>}<button type="button" className={styles.back} disabled={busy} onClick={() => void refresh().catch(e => setMessage(socialErrorMessage(e)))}>Actualizar amigos</button></>}

@@ -134,14 +134,14 @@ test("Share uses native Web Share with the generated result when available", asy
   assert.equal(h.clipboardWrites.length, 0); assert.match(text(tree), /Resumen compartido/);
 });
 
-test("badge counts received unread events without adding invitation workflow states", async () => {
+test("badge composes unread socials plus only pending incoming invitations and refreshes after acceptance", async () => {
   const now = Date.now(); const invites = [{ id: "incoming", outgoing: false, state: "PENDING", expires_at: new Date(now + 3600000).toISOString() }, { id: "outgoing", outgoing: true, state: "PENDING", expires_at: new Date(now + 3600000).toISOString() }, { id: "expired", outgoing: false, state: "PENDING", expires_at: new Date(now - 1).toISOString() }, { id: "accepted", outgoing: false, state: "ACCEPTED", expires_at: new Date(now + 3600000).toISOString() }];
   const h = harness("app/components/group-invitations.tsx", {
     "presentation":notificationPresentation,
     "client":{unreadNotificationEvents:async()=>[{id:"unread",type:"friend_request",activityId:"request",readAt:null,createdAt:new Date(now).toISOString()}]},
     "social-activity-client": { socialRequest: async () => ({ enabled:true,data:[{type:"group_invite",inApp:true}] }) },
     fetch: async () => ({ ok: true, json: async () => ({ invitations: invites }) }) });
-  assert.equal(h.exports.pendingIncomingGroupInvitations(invites, now).length, 1); h.render("useGroupNotificationsBadge", "QA"); await flush(); let state = h.render("useGroupNotificationsBadge", "QA"); assert.equal(state.unread, 1);
+  assert.equal(h.exports.pendingIncomingGroupInvitations(invites, now).length, 1); h.render("useGroupNotificationsBadge", "QA"); await flush(); let state = h.render("useGroupNotificationsBadge", "QA"); assert.equal(state.unread, 2);
   invites[0].state = "ACCEPTED"; await state.refreshUnread(); state = h.render("useGroupNotificationsBadge", "QA"); assert.equal(state.unread, 1);
   const builder = readFileSync("app/components/group-builder.tsx", "utf8"), social = readFileSync("app/components/social-feed.tsx", "utf8"), page = readFileSync("app/page.tsx", "utf8");
   assert.doesNotMatch(builder, /GroupInvitationInbox|groupDrawTools|role="tab"/); assert.match(social, /view === "notifications"[\s\S]*GroupInvitationInbox/); assert.match(social, /await retryCloudSync\(\); await refreshUnread\(\)/); assert.match(page, /notificationCount=\{groupNotificationsUnread\}/);

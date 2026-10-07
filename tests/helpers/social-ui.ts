@@ -31,7 +31,6 @@ export function socialUI(file:string,boundaries:Record<string,any>={},globals:Re
     for(const [key,value]of Object.entries(boundaries))if(id===key||id.endsWith(`/${key}`))return value;
     if(id.endsWith("/career-index-chart"))return{careerIndexChart};
     if(id.endsWith("/use-visual-content"))return{useVisualContent:()=>[]};
-    if(id.endsWith("/golf-object-navigation"))return{useGolfNavigation:()=>null};
     if(id.endsWith("/account-provider"))return{useBackyardAccount:()=>({retryCloudSync:async()=>{}})};
     return new Proxy({},{get:(_t,k)=>String(k)});
   }});

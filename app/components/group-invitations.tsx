@@ -5,7 +5,8 @@ import type { FrequentGroup, FrequentGroupMember } from "../../lib/types";
 import { invitationStatus, normalizedInvitationEmail, parseGroupInvitationLink, type BackyardGroupUser, type GroupInvitation } from "../../lib/group-invitations";
 import type { SocialPerson } from "../../lib/social-connections";
 import { useBackyardAccount } from "./account-provider";
-import { unreadNotificationEvents, NOTIFICATIONS_CHANGED } from "../../features/notifications/client";
+import { socialRequest } from "../../lib/social-activity-client";
+import { unreadNotificationEvents, NOTIFICATIONS_CHANGED, type EventPreferencePage } from "../../features/notifications/client";
 import { normalizeNotifications, notificationCounts } from "../../features/notifications/presentation";
 import styles from "./group-invitations.module.css";
 
@@ -31,11 +32,17 @@ export function useGroupNotificationsBadge(accessToken?: string | null, active =
   const refreshUnread = useCallback(async (signal?: AbortSignal) => {
     if (!accessToken) return;
     const request = ++revision.current;
-    try {
-      const events=await unreadNotificationEvents(accessToken,signal);
-      if(signal?.aborted||request!==revision.current)return;
-      setCounts({social:notificationCounts(normalizeNotifications(events,[])).Todas,groups:0});
-    } catch { /* Keep the last confirmed unread count until retry. */ }
+    const [social, groups, prefs] = await Promise.allSettled([
+      unreadNotificationEvents(accessToken,signal), api(accessToken, undefined, signal),
+      socialRequest<EventPreferencePage>("/api/social/notification-preferences",accessToken,{signal}),
+    ]);
+    if (signal?.aborted || request !== revision.current) return;
+    if (social.status === "fulfilled" && groups.status === "fulfilled" && prefs.status === "fulfilled") {
+      const enabled = prefs.value.enabled;
+      const invites = enabled && prefs.value.data.find(item => item.type === "group_invite")?.inApp ? groups.value.invitations || [] : [];
+      const total = notificationCounts(normalizeNotifications(enabled ? social.value : [],invites)).Todas;
+      setCounts({social:total,groups:0});
+    }
   }, [accessToken]);
   useEffect(() => {
     setCounts({ social: 0, groups: 0 });

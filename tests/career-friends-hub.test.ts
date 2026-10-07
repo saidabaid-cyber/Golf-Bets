@@ -17,7 +17,7 @@ function harness(path: string, boundaries: Record<string, any> = {}) {
   const exports: any = {};
   const source = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   let sequence = 0;
-  runInNewContext(source, { exports, Set, Promise, AbortController, Event, window:{addEventListener(){},removeEventListener(){},dispatchEvent(){}},setTimeout, clearTimeout, confirm: () => false, crypto: { randomUUID: () => `operation-${++sequence}` }, require: (id: string) => {
+  runInNewContext(source, { exports, Set, Promise, AbortController, setTimeout, clearTimeout, confirm: () => false, crypto: { randomUUID: () => `operation-${++sequence}` }, require: (id: string) => {
     if (id === "react") return react;
     if (id === "react/jsx-runtime") return { jsx: (type: any, props: any) => ({ type, props }), jsxs: (type: any, props: any) => ({ type, props }), Fragment: "fragment" };
     if (id.endsWith(".css")) return { __esModule: true, default: new Proxy({}, { get: (_t, key) => String(key) }) };
@@ -29,7 +29,6 @@ function harness(path: string, boundaries: Record<string, any> = {}) {
     if (id.endsWith("/group-invitations")) return { useGroupNotificationsBadge: () => ({ unread: 2, refreshUnread: async () => {} }), GroupInvitationInbox: "GroupInvitationInbox" };
     if (id.endsWith("/social-qr")) return { SocialQrScanner: "SocialQrScanner", PersonalQr: "PersonalQr" };
     for (const [key, value] of Object.entries(boundaries)) if (id.endsWith(`/${key}`)) return value;
-    if (id.endsWith("/golf-object-navigation")) return {useGolfNavigation:()=>null};
     return new Proxy({}, { get: (_t, key) => String(key) });
   } });
   return { render(name: string, props: any) { cursor = 0; const tree = exports[name](props); const batch = pending; pending = []; batch.forEach(fn => fn()); return tree; } };
@@ -40,7 +39,7 @@ function find(tree: any, predicate: (node: Node) => boolean) { const found = nod
 function click(tree: any, label: string) { return find(tree, node => node.type === "button" && text(node) === label).props.onClick(); }
 const flush = () => new Promise(resolve => setImmediate(resolve));
 const person = (id: string, name = `QA ${id}`, username = `qa_${id}`): connections.SocialPerson => ({ user_id: id, display_name: name, username, avatar_url: null });
-function setup(count = 5, initialView = "list", navigation:any = null) {
+function setup(count = 5, initialView = "list") {
   let data: connections.ConnectionPage = { people: Array.from({ length: count }, (_, i) => person(`friend-${i}`)), friends: Array.from({ length: count }, (_, i) => `friend-${i}`), requests: [], blocked: [] };
   const calls: any[] = [];
   const request = async (path: string, token: string, init?: any) => {
@@ -55,11 +54,10 @@ function setup(count = 5, initialView = "list", navigation:any = null) {
     }
     return data;
   };
-  const h = harness("app/components/social-connections-panel.tsx", { "social-activity-client": { socialRequest: request, socialErrorMessage: String },"golf-object-navigation":{useGolfNavigation:()=>navigation} });
+  const h = harness("app/components/social-connections-panel.tsx", { "social-activity-client": { socialRequest: request, socialErrorMessage: String } });
   const props = { ownerId: "owner", accessToken: "qa-token", initialView, name: "QA Owner", username: "qa_owner" };
   return { render: () => h.render("FriendsHub", props), calls, graph: () => data, setGraph(next: connections.ConnectionPage) { data = next; }, props };
 }
-test("a friend opens the dedicated player and leaves the current list mounted",async()=>{const opened:any[]=[];const h=setup(5,"list",{open:(o:any)=>opened.push(o)});h.render();await flush();const tree=h.render();find(tree,n=>n.type==="button"&&text(n).includes("QA friend-0")).props.onClick();await flush();assert.equal(opened[0].kind,"player");assert.equal(opened[0].id,"friend-0");assert.match(text(h.render()),/Mis amigos/);assert.equal(h.calls.filter(c=>c.path.includes("?target=")).length,0);});
 
 test("Career selects exactly five views; Friends remains its existing independent domain", () => {
   const h = harness("app/components/career-shared.tsx", { "career-navigation": careerNavigation }), views: string[] = [];
@@ -125,10 +123,10 @@ test("ranking prioritizes exact username, exact name and same public club withou
   assert.deepEqual(discovery.filterCurrentFriends([person("d", "QA Diego Green", "qa_diego_green")], "Diego").map(p => p.user_id), ["d"]);
   assert.equal(discovery.filterCurrentFriends([person("d", "QA Diego Green", "qa_diego_green")], "@qa_diego").length, 1);
 });
-test("Home and first nudge retain Friends; preserved QR URL/cache opens the dedicated player", () => {
+test("Home, first nudge and preserved QR URL/cache route explicitly to Carrera Friends", () => {
   const page = readFileSync("app/page.tsx", "utf8");
   const nudge = page.split("async function openFirstExperienceFriends()")[1].split("\n  }")[0]; assert.match(nudge, /resolve\("friendDiscovery", "opened"\)[\s\S]*openCareerFriends\(\)/); assert.doesNotMatch(nudge, /setTab\("social"\)/);
-  assert.match(page, /onOpenFriends=\{\(\) => openCareerFriends\(\)\}/); assert.match(page, /openGolfObject\(\{kind:"player",id\}\)/); assert.match(page, /sessionStorage.getItem\(PENDING_SOCIAL_KEY\)/);
+  assert.match(page, /onOpenFriends=\{\(\) => openCareerFriends\(\)\}/); assert.match(page, /setSocialTarget\(id\); setFriendsInitialView\("list"\); setTab\("friends"\)/); assert.match(page, /sessionStorage.getItem\(PENDING_SOCIAL_KEY\)/);
   assert.match(page, /careerView, setCareerView.*useScreenNavigation/);
 });
 

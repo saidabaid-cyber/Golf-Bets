@@ -67,7 +67,7 @@ function legacyOwnerCategories(round: RoundSnapshot) {
   });
 }
 
-export function HistoricalRoundDetail({ round, priorRounds, accountUserId, accessToken, onParticipantConfirmed, onEdit, onPhoto, optionsOnly=false }: {
+export function HistoricalRoundDetail({ round, priorRounds, accountUserId, accessToken, onParticipantConfirmed, onEdit, onPhoto }: {
   round: RoundSnapshot;
   priorRounds?: readonly RoundSnapshot[];
   accountUserId?: string;
@@ -75,12 +75,10 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
   onParticipantConfirmed?: () => Promise<void> | void;
   onEdit: () => void;
   onPhoto: () => void;
-  optionsOnly?: boolean;
 }) {
   const [leaderboardMode, setLeaderboardMode] = useState<GolfLeaderboardMode>("gross");
   const [scorecardScale, setScorecardScale] = useState(75);
   const [showScorecard, setShowScorecard] = useState(false);
-  const [checkCloud,setCheckCloud] = useState(false);
   const recap = useMemo(() => buildHistoricalRoundRecap(round), [round]);
   const indexRecord = useMemo(() => accountUserId ? calculateBackyardIndex([round], accountUserId).records[0] : undefined, [round, accountUserId]);
   const legacyCategories = useMemo(() => legacyOwnerCategories(round), [round]);
@@ -149,12 +147,12 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
   ].filter((part): part is string => Boolean(part));
 
   return <div className="historicalDetail">
-    {!optionsOnly && accountUserId && attributableHistory([round], accountUserId).length > 0 && <RoundAchievementSummary round={round} priorRounds={priorRounds} accountUserId={accountUserId} />}
+    {accountUserId && attributableHistory([round], accountUserId).length > 0 && <RoundAchievementSummary round={round} priorRounds={priorRounds} accountUserId={accountUserId} />}
     {accountUserId && accessToken && <RoundSharingPanel key={`${accountUserId}:${round.id}`} round={round} userId={accountUserId} accessToken={accessToken} />}
-    {accountUserId && accessToken && round.scorekeeping?.version === 1 && !round.cloudReadOnly && round.lifecycleState === "completed" && (optionsOnly&&!checkCloud?<button type="button" className="secondary" onClick={()=>setCheckCloud(true)}>Comprobar cierre en nube</button>:<OwnerRoundFinalizeSync round={round} userId={accountUserId} accessToken={accessToken} />)}
+    {accountUserId && accessToken && round.scorekeeping?.version === 1 && !round.cloudReadOnly && round.lifecycleState === "completed" && <OwnerRoundFinalizeSync round={round} userId={accountUserId} accessToken={accessToken} />}
     {accountUserId && accessToken && round.scorekeeping?.version === 1 && <RoundParticipationCard key={`participants:${accountUserId}:${round.id}`} accessToken={accessToken} roundId={round.cloudRoundId} localRoundId={round.cloudRoundId ? undefined : round.id} onConfirmed={onParticipantConfirmed} />}
     {indexRecord && <section className="card"><details><summary>{indexRecord.eligible ? `ÍNDICE BACKYARD · Diferencial ${indexRecord.scoreDifferential?.toFixed(1)}` : "NO ELEGIBLE PARA ÍNDICE"}</summary><p>{indexRecord.eligible ? "Evidencia congelada al cerrar la ronda. Estimación local, no oficial." : indexRecord.reasons.map((reason) => BACKYARD_INDEX_REASON_LABELS[reason]).join(" ")}</p>{indexRecord.pccKind === "DECLARED_LOCAL_ZERO" && <p>PCC 0 declarado localmente. No es un PCC oficial publicado.</p>}</details></section>}
-    {!optionsOnly && <section className="card historicalHero">
+    <section className="card historicalHero">
       <div>
         <span className="eyebrow">RONDA GUARDADA</span>
         <h1>{recap.meta.courseName || "Campo no disponible"}</h1>
@@ -164,7 +162,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
         {recap.meta.lifecycleState && <span>{lifecycleLabels[recap.meta.lifecycleState]}</span>}
         {recap.meta.date && <time dateTime={recap.meta.date}>{historicalDate(recap.meta.date)}</time>}
       </div>
-    </section>}
+    </section>
 
     {round.presentation?.playMode !== "score_only" && recap.financials && <section className="card historicalEconomy" aria-labelledby="historical-economy-title">
       <div className="sectionTitle"><div><h2 id="historical-economy-title">Resultado económico guardado</h2><p>Totales persistidos al cerrar la ronda; no se recalculan.</p></div></div>
@@ -175,7 +173,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       </div>
     </section>}
 
-    {!optionsOnly && (recap.golf && scorecard ? <>
+    {recap.golf && scorecard ? <>
       <section className="card historicalGolfResult">
         <GolfLeaderboard rows={leaderboardRows} mode={leaderboardMode} onModeChange={setLeaderboardMode} context="history" />
       </section>
@@ -197,7 +195,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
     </> : <section className="card historicalUnavailable">
       <h2>Resultado de golf no disponible</h2>
       <p>Este registro no contiene campo, jugadores y scores suficientes para reconstruir una clasificación confiable.</p>
-    </section>)}
+    </section>}
 
     {round.presentation?.playMode !== "score_only" && recap.settlement && <section className="card historicalSettlement" aria-labelledby="historical-settlement-title">
       <div className="sectionTitle"><div><h2 id="historical-settlement-title">Balance final por jugador</h2><p>Liquidación exacta guardada con la ronda. Los gastos no están incluidos.</p></div></div>
@@ -234,7 +232,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
     </section> : null}
 
     </>}
-    {!optionsOnly && recap.playerStats?.length ? <section className="card historicalStats" aria-labelledby="historical-stats-title">
+    {recap.playerStats?.length ? <section className="card historicalStats" aria-labelledby="historical-stats-title">
       <div className="sectionTitle"><div><h2 id="historical-stats-title">Estadísticas de la ronda</h2><p>Derivadas de scores validados; las métricas opcionales aparecen solo cuando fueron capturadas.</p></div></div>
       <div className="historicalStatsGrid">{recap.playerStats.map((player) => <article key={player.playerId}>
         <h3>{player.name}</h3>
@@ -255,9 +253,9 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       </article>)}</div>
     </section> : null}
 
-    {!optionsOnly && recap.meta.ownerId && <RoundStatsCard round={round} playerId={recap.meta.ownerId} />}
+    {recap.meta.ownerId && <RoundStatsCard round={round} playerId={recap.meta.ownerId} />}
 
-    {!optionsOnly && round.shots?.length ? <section className="card" aria-labelledby="historical-shots-title"><div className="sectionTitle"><div><h2 id="historical-shots-title">Golpes registrados</h2><p>{round.shots.length} golpe{round.shots.length === 1 ? "" : "s"} opcional{round.shots.length === 1 ? "" : "es"} con snapshot del palo usado.</p></div></div><div className="historicalStatRows">{clubDistances.map((club) => <span key={club.clubLabel}><small>{club.clubLabel}</small><b>{club.averageYards === null ? "Muestra insuficiente" : `${club.averageYards} yd`}</b><em>n={club.sampleCount} · {club.confidence === "RELIABLE" ? "confiable" : club.confidence === "EARLY" ? "temprano" : "sin promedio"}</em></span>)}</div></section> : null}
+    {round.shots?.length ? <section className="card" aria-labelledby="historical-shots-title"><div className="sectionTitle"><div><h2 id="historical-shots-title">Shot Tracking</h2><p>{round.shots.length} golpe{round.shots.length === 1 ? "" : "s"} opcional{round.shots.length === 1 ? "" : "es"} con snapshot del palo usado.</p></div></div><div className="historicalStatRows">{clubDistances.map((club) => <span key={club.clubLabel}><small>{club.clubLabel}</small><b>{club.averageYards === null ? "Muestra insuficiente" : `${club.averageYards} yd`}</b><em>n={club.sampleCount} · {club.confidence === "RELIABLE" ? "confiable" : club.confidence === "EARLY" ? "temprano" : "sin promedio"}</em></span>)}</div></section> : null}
 
     {issueCopy.length > 0 && <section className="card historicalDataWarning" role="status">
       <h2>Datos históricos limitados</h2>

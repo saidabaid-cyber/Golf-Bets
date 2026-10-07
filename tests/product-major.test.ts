@@ -113,7 +113,7 @@ test("Términos aclaran que The Backyard no recibe ni procesa dinero", () => {
 
 test("Inicio connects community and avatar Profile within the five approved destinations", () => {
   assert.match(read("app/components/home-dashboard.tsx"), /onOpenFriends/);
-  assert.match(page, /onProfile=\{\(\)=>identity.mode==="authenticated"\?objectNavigation.open\(\{kind:"player",id:identity.userId\}\):openProfileRoot\(\)\}/);
+  assert.match(page, /onProfile=\{openProfileRoot\}/);
   const navigation = read("lib/app-navigation.ts").match(/BOTTOM_NAV_TARGETS = \{[\s\S]*?\}/)?.[0] || "";
   for (const label of ["Inicio", "Carrera", "Play", "My Coach", "Reglas"]) assert.match(navigation, new RegExp(label));
   assert.doesNotMatch(navigation, /Social|Más|Perfil/);

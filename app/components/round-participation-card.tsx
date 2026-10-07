@@ -3,11 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import type { SharedRoundCard } from "../../lib/shared-round-participants";
 import { socialRequest, socialErrorMessage } from "../../lib/social-activity-client";
 import styles from "./round-participation-card.module.css";
-import { PremiumScorecard } from "./premium-scorecard";
 
 /** Private canonical card; independent of feed publication and friendship. */
-export function RoundParticipationCard({ accessToken, roundId, localRoundId, onConfirmed, premium=false, onHole, onPlayer }: {
-  accessToken: string; roundId?: string; localRoundId?: string; onConfirmed?: () => Promise<void> | void; premium?:boolean; onHole?:(hole:number)=>void; onPlayer?:(id:string)=>void;
+export function RoundParticipationCard({ accessToken, roundId, localRoundId, onConfirmed }: {
+  accessToken: string; roundId?: string; localRoundId?: string; onConfirmed?: () => Promise<void> | void;
 }) {
   const [card, setCard] = useState<SharedRoundCard | null>(null);
   const [reviewConfirmation, setReviewConfirmation] = useState(false);
@@ -37,8 +36,8 @@ export function RoundParticipationCard({ accessToken, roundId, localRoundId, onC
     <h2>{card?.courseName || "Tarjeta de participantes"}</h2>
     {card?.groupName && <p>{card.groupName}</p>}
     {card && <><p>{card.completed ? "Cada jugador vinculado confirma su propia participación antes de incorporar esta tarjeta a sus estadísticas." : "El organizador registra los scores en esta ronda. La captura desde otros teléfonos todavía no está disponible."}</p>
-      <ul className={styles.players}>{card.players.map(player => <li key={player.playerKey}><span>{premium&&player.accountUserId&&onPlayer?<button type="button" className="textButton" onClick={()=>onPlayer(player.accountUserId!)}>{player.name}</button>:<b>{player.name}</b>}<small>{player.status === "GUEST" ? "Sin app" : player.status === "CONFIRMED" ? "Confirmado" : "Pendiente de revisión"}</small></span><strong>{player.score ?? "—"}</strong></li>)}</ul>
-      {premium&&card.myScorecard&&onHole?<PremiumScorecard holes={card.myScorecard} onHole={onHole}/>:card.myPlayerKey&&(premium?<p>No hay captura de par suficiente para una tarjeta visual.</p>:<details><summary>Mi tarjeta hoyo por hoyo</summary><div className={styles.holes}>{card.players.find(player => player.playerKey === card.myPlayerKey)?.scorecard.map(hole => <span key={hole.hole}>H{hole.hole}<b>{hole.score ?? "—"}</b></span>)}</div></details>)}
+      <ul className={styles.players}>{card.players.map(player => <li key={player.playerKey}><span><b>{player.name}</b><small>{player.status === "GUEST" ? "Sin app" : player.status === "CONFIRMED" ? "Confirmado" : "Pendiente de revisión"}</small></span><strong>{player.score ?? "—"}</strong></li>)}</ul>
+      {card.myPlayerKey && <details><summary>Mi tarjeta hoyo por hoyo</summary><div className={styles.holes}>{card.players.find(player => player.playerKey === card.myPlayerKey)?.scorecard.map(hole => <span key={hole.hole}>H{hole.hole}<b>{hole.score ?? "—"}</b></span>)}</div></details>}
       {card.myBalance !== null && <p>Mi balance · {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(card.myBalance)}</p>}
       {card.canConfirm && (reviewConfirmation ? <div role="group" aria-label="Confirmar tarjeta revisada"><p>Confirmo que jugué esta ronda y revisé mi tarjeta.</p><button type="button" className="primary" disabled={busy} onClick={() => void confirm()}>{busy ? "Confirmando…" : "SÍ, CONFIRMAR TARJETA"}</button><button type="button" className="secondary" disabled={busy} onClick={() => setReviewConfirmation(false)}>VOLVER A REVISAR</button></div> : <button type="button" className="primary" disabled={busy} onClick={() => setReviewConfirmation(true)}>CONFIRMAR MI PARTICIPACIÓN</button>)}
       <p className={styles.note}>Guardado en Backyard. La publicación en GHIN no está disponible aquí; cada jugador debe contar con su propia autorización.</p>

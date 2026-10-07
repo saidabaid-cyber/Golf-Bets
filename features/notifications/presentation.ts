@@ -14,7 +14,7 @@ export const NOTIFICATION_COPY: Record<SocialNotification["type"], string> = {
   group_invite: "Tienes una invitación a un grupo.", round_invite: "Te invitaron a una ronda.",
   round_started: "Inició una ronda contigo.", round_finished: "La ronda terminó. Resultados disponibles.",
   scorecard_ready: "Registraron una tarjeta contigo. Revísala y confirma tu participación.",
-  like: "A alguien le gustó tu actividad.", comment: "Hay un nuevo comentario en tu actividad.",
+  like: "Recibiste un like en tu actividad.", comment: "Hay un nuevo comentario en tu actividad.",
   attest: "Un compañero confirmó tu tarjeta.", friend_achievement: "Un amigo consiguió un nuevo logro.", equipment: "Un amigo actualizó su equipo.",
 };
 export function notificationCategory(type: SocialNotification["type"]): NotificationItem["category"] {
@@ -32,7 +32,7 @@ export function normalizeNotifications(events: readonly SocialNotification[], in
     items.set(key, { key, type: event.type, category: notificationCategory(event.type),
       title: event.person?.displayName || (event.type === "friend_request" ? "Solicitud de amistad" : event.type === "group_invite" ? "Invitación a un grupo" : notificationCategory(event.type) === "Rondas" ? "Tu ronda" : "Actividad de tus compañeros"),
       message: `${NOTIFICATION_COPY[event.type]}${event.courseName ? ` · ${event.courseName}` : ""}`, avatar: event.person?.avatarUrl || null,
-      createdAt: event.createdAt, unread: !event.readAt, pending: (event.type === "friend_request" && (!event.requestState || event.requestState === "PENDING")) || Boolean(invitation),
+      createdAt: event.createdAt, unread: !event.readAt, pending: event.type === "friend_request" || Boolean(invitation),
       readIds: [event.id], resourceId: event.activityId, personId: event.person?.userId, ...(invitation ? { invitation } : {}),
     });
   }
@@ -42,11 +42,11 @@ export function normalizeNotifications(events: readonly SocialNotification[], in
       avatar: null, createdAt: existing?.createdAt || null, unread: existing?.unread || false, pending: true,
       readIds: existing?.readIds || [], resourceId: invite.group_id, invitation: invite });
   }
-  return [...items.values()].sort((a,b) => Date.parse(b.createdAt || "1970-01-01") - Date.parse(a.createdAt || "1970-01-01"));
+  return [...items.values()].sort((a,b) => Number(b.pending) - Number(a.pending) || Date.parse(b.createdAt || "1970-01-01") - Date.parse(a.createdAt || "1970-01-01"));
 }
 export function notificationCounts(items: readonly NotificationItem[]) {
   const counts = { Todas: 0, Amigos: 0, Grupos: 0, Rondas: 0 };
-  for (const item of items) if (item.unread) { counts.Todas++; counts[item.category]++; }
+  for (const item of items) if (item.unread || item.invitation) { counts.Todas++; counts[item.category]++; }
   return counts;
 }
 export function notificationTime(value: string | null, now = Date.now()) {

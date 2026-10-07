@@ -538,14 +538,12 @@ async function recoverVisibleSourcesBestEffort(ctx: SocialContext) {
 }
 
 export async function listActivity(
-  ctx: SocialContext, query: { localRoundId?: string; limit?: number; cursor?: string; friendsOnly?: boolean; authorId?: string } = {},
+  ctx: SocialContext, query: { localRoundId?: string; limit?: number; cursor?: string; friendsOnly?: boolean } = {},
 ): Promise<SocialActivityPage> {
   await recoverVisibleSourcesBestEffort(ctx);
   const limit = Math.min(30, Math.max(1, Math.floor(query.limit || 15)));
   let builder = ctx.client.from("social_activities_v3").select("*")
     .eq("active", true).order("created_at", { ascending: false }).order("id", { ascending: false });
-  // Filtering narrows the existing viewer-RLS reader; it never elevates access.
-  if (query.authorId) builder = builder.eq("author_id", query.authorId);
   if (query.friendsOnly) {
     const friends = await ctx.client.from("friendships").select("user_a_id,user_b_id").or(`user_a_id.eq.${ctx.userId},user_b_id.eq.${ctx.userId}`);
     if (friends.error) dbError(friends.error);
@@ -839,7 +837,13 @@ export async function attestRound(
 
 export async function listNotifications(ctx: SocialContext, options: { offset?: number; unreadOnly?: boolean } = {}): Promise<SocialNotificationPage> {
   const {NOTIFICATION_EVENT_TYPES} = await import("../features/notifications/domain");
-  // Delivery preferences govern new events. Received history remains readable under recipient RLS.
+  const [preferences, eventPrefs, master] = await Promise.all([
+    cachedPrefs(ctx, ctx.userId),
+    ctx.client.from("notification_preferences_v2").select("event_type,in_app").eq("user_id",ctx.userId),
+    ctx.client.from("user_preferences").select("notifications_enabled").eq("user_id",ctx.userId).maybeSingle(),
+  ]);
+  if (eventPrefs.error) dbError(eventPrefs.error); if (master.error) dbError(master.error);
+  if (master.data?.notifications_enabled !== true) return {data:[],nextCursor:null};
   const types = [...NOTIFICATION_EVENT_TYPES, "like", "comment", "attest", "friend_achievement", "equipment"];
   let query = ctx.client.from("notification_events_v2").select("id,event_type,resource_type,resource_id,created_at,read_at")
     .eq("recipient_id",ctx.userId).in("event_type",types).order("created_at",{ascending:false}).order("id",{ascending:false});
@@ -868,9 +872,12 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
     })());
     return people.get(id)!;
   };
+  const socialFlags = {like:"notifyLike",comment:"notifyComment",attest:"notifyAttest",friend_achievement:"notifyFriendAchievement",equipment:"notifyEquipment",friend_request:"notifyFriendRequest"} as const;
   const visible: SocialNotificationPage["data"] = [];
   for (const event of events) {
-    let actor: string | undefined, allowed = false, courseName: string | null = null, requestState: SocialNotificationPage["data"][number]["requestState"];
+    if (eventPrefs.data?.some(pref => pref.event_type === event.event_type && !pref.in_app)) continue;
+    const flag = socialFlags[event.event_type as keyof typeof socialFlags]; if (flag && !preferences[flag]) continue;
+    let actor: string | undefined, allowed = false, courseName: string | null = null;
     if (["round_started","round_finished","round_invite","scorecard_ready"].includes(event.event_type)) {
       const round = rounds.data?.find(row => row.id === event.resource_id), snapshot = round?.snapshot as RoundSnapshot | undefined;
       allowed = Boolean(round && (round.owner_id === ctx.userId || snapshot?.players?.filter(player => player.accountUserId === ctx.userId).length === 1)
@@ -878,18 +885,17 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
       actor = round?.owner_id; courseName = snapshot?.courseSnapshot?.name || null;
     } else if (event.event_type === "friend_request" || event.event_type === "friend_accepted") {
       const request = friends.data?.find(row => row.id === event.resource_id);
-      allowed = Boolean(request && (event.event_type === "friend_request" ? request.addressee_id === ctx.userId && ["PENDING","ACCEPTED","REJECTED","CANCELLED"].includes(request.state)
+      allowed = Boolean(request && (event.event_type === "friend_request" ? request.addressee_id === ctx.userId && request.state === "PENDING"
         : request.requester_id === ctx.userId && request.state === "ACCEPTED"));
       actor = event.event_type === "friend_request" ? request?.requester_id : request?.addressee_id;
-      requestState = request?.state as typeof requestState;
     } else if (event.event_type === "group_invite") {
-      allowed = (groups.data?.invitations || []).some((invite: {id:string;group_id:string;outgoing:boolean;state:string;expires_at:string}) => !invite.outgoing && [invite.id,invite.group_id].includes(event.resource_id));
+      allowed = (groups.data?.invitations || []).some((invite: {id:string;group_id:string;outgoing:boolean;state:string;expires_at:string}) => !invite.outgoing && invite.state === "PENDING" && Date.parse(invite.expires_at) > Date.now() && [invite.id,invite.group_id].includes(event.resource_id));
     } else {
       const activity = activities.data?.find(row => row.id === event.resource_id); allowed = Boolean(activity && SHA256.test(activity.material_hash));
       if (event.event_type === "friend_achievement" || event.event_type === "equipment") actor = activity?.author_id;
     }
     if (allowed) visible.push({id:event.id,type:event.event_type as SocialNotificationPage["data"][number]["type"],activityId:event.resource_id,
-      createdAt:event.created_at,readAt:event.read_at,person:await person(actor),courseName,...(requestState?{requestState}:{})});
+      createdAt:event.created_at,readAt:event.read_at,person:await person(actor),courseName});
   }
   return {data:visible,nextCursor:data?.length === 50 ? String(offset+50) : null};
 }

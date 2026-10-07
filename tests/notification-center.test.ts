@@ -18,7 +18,7 @@ const controls=(enabled=true)=>renderCareer("app/components/notification-prefere
   busy:false,onMaster:()=>{},onEvent:()=>{},onSocial:()=>{},
 });
 
-test("bell counts only unique unread received events",()=>{
+test("bell counts unique unread social plus valid incoming operational invitations",()=>{
   const list=normalizeNotifications([event(),event({id:"second",type:"group_invite"})],[invite()],now);
   assert.deepEqual(notificationCounts(list),{Todas:2,Amigos:1,Grupos:1,Rondas:0});
   assert.equal(list.length,2);
@@ -32,7 +32,7 @@ for(const [name,patch] of [
 test("marking an invitation event read never resolves its operational pending state",()=>{
   const item=normalizeNotifications([event({type:"group_invite",readAt:new Date(now).toISOString()})],[invite()],now)[0];
   assert.equal(item.unread,false);assert.equal(item.pending,true);assert.equal(item.invitation?.state,"PENDING");
-  assert.equal(notificationCounts([item]).Grupos,0);
+  assert.equal(notificationCounts([item]).Grupos,1);
 });
 test("read friend requests remain actionable but are excluded from unread badge",()=>{
   const item=normalizeNotifications([event({readAt:new Date(now).toISOString()})],[],now)[0];

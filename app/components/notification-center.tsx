@@ -12,7 +12,6 @@ import { RoundParticipationCard } from "./round-participation-card";
 import { SocialRoundActivityCard } from "./cloud-social-activity";
 import { BackyardIcon } from "./backyard-icon";
 import styles from "./notification-center.module.css";
-import { useGolfNavigation } from "./golf-object-navigation";
 
 type Detail = {kind:"round"|"activity"|"group";id:string};
 function detailFromUrl(): Detail|null {
@@ -28,7 +27,7 @@ export function NotificationRow({item,busy,onOpen,onRead,onFriend,onGroupAccept}
   return <li className={`${styles.row} ${item.unread ? styles.unread : ""}`}>
     <span className={styles.avatar}>{item.avatar ? <ProfileAvatarMedia value={item.avatar} fallback={item.title[0]} /> : <BackyardIcon name={item.category === "Rondas" ? "flag" : item.category === "Grupos" ? "players" : item.type === "friend_achievement" ? "spark" : "players"}/>}</span>
     <div className={styles.rowBody}><button type="button" className={styles.openRow} disabled={busy} onClick={onOpen}><span className={styles.rowTitle}><b title={item.title}>{item.title}</b>{item.unread && <i aria-label="Sin leer" />}{item.createdAt && <time dateTime={item.createdAt}>{notificationTime(item.createdAt)}</time>}</span><span className={styles.message}>{item.message}</span></button>
-      {item.type === "friend_request" && item.pending && <div className={styles.actions}><button type="button" className={styles.primary} disabled={busy} onClick={()=>onFriend("ACCEPTED")}>Aceptar</button><button type="button" className={styles.secondary} disabled={busy} onClick={()=>onFriend("REJECTED")}>Rechazar</button>{item.personId && <button type="button" className={styles.textButton} disabled={busy} onClick={onOpen}>Ver perfil</button>}</div>}
+      {item.type === "friend_request" && <div className={styles.actions}><button type="button" className={styles.primary} disabled={busy} onClick={()=>onFriend("ACCEPTED")}>Aceptar</button><button type="button" className={styles.secondary} disabled={busy} onClick={()=>onFriend("REJECTED")}>Rechazar</button>{item.personId && <button type="button" className={styles.textButton} disabled={busy} onClick={onOpen}>Ver perfil</button>}</div>}
       {item.invitation && <div className={styles.actions}><button type="button" className={styles.primary} disabled={busy} onClick={onGroupAccept}>Unirme</button><button type="button" className={styles.textButton} disabled={busy} onClick={onOpen}>Ver invitación</button></div>}
       {item.category === "Rondas" && <button type="button" className={styles.textButton} disabled={busy} onClick={onOpen}>{item.type === "scorecard_ready" ? "Revisar tarjeta" : item.type === "round_finished" ? "Ver resultados" : "Ver ronda"} ›</button>}
     </div>
@@ -36,12 +35,10 @@ export function NotificationRow({item,busy,onOpen,onRead,onFriend,onGroupAccept}
   </li>;
 }
 export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,onFriend}:{viewerId:string;accessToken?:string;onBack:()=>void;onPreferences:()=>void;onFriend:(id?:string)=>void}) {
-  const navigation=useGolfNavigation();
   const {retryCloudSync}=useBackyardAccount();
   const [events,setEvents]=useState<SocialNotification[]>([]),[prefs,setPrefs]=useState<EventPreferencePage|null>(null),[cursor,setCursor]=useState<string|null>(null);
   const [filter,setFilter]=useState<NotificationFilter>("Todas"),[message,setMessage]=useState(""),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[loadingMore,setLoadingMore]=useState(false);
   const [detail,setDetail]=useState<Detail|null>(null),[activity,setActivity]=useState<SocialActivityCard|null>(null);
-  const loadedPages=useRef(1);
   const live=useRef(true),writing=useRef(false),revision=useRef(0),paging=useRef(false);
   const groups=useGroupInvitationInbox({accessToken,onAccepted:async()=>{await retryCloudSync();notificationsChanged();}});
   const groupReload=groups.reload;
@@ -49,7 +46,7 @@ export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,on
     if(!accessToken){setLoading(false);return;}
     const current=++revision.current;
     const [page,preferences]=await Promise.allSettled([
-      (async()=>{let cursor: string|null=null;const data:SocialNotification[]=[];for(let i=0;i<loadedPages.current;i++){const page:SocialNotificationPage=await socialRequest<SocialNotificationPage>("/api/social/notifications"+(cursor?"?cursor="+encodeURIComponent(cursor):""),accessToken,{signal});data.push(...page.data);cursor=page.nextCursor;if(!cursor)break;}return {data,nextCursor:cursor};})(),
+      socialRequest<SocialNotificationPage>("/api/social/notifications",accessToken,{signal}),
       socialRequest<EventPreferencePage>("/api/social/notification-preferences",accessToken,{signal}),
     ]);
     if(!live.current||signal?.aborted||current!==revision.current)return;
@@ -71,7 +68,7 @@ export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,on
       .then(result=>{if(!controller.signal.aborted)setActivity(result.data);}).catch(error=>{if(!controller.signal.aborted)setMessage(socialErrorMessage(error));});
     return()=>controller.abort();
   },[accessToken,detail]);
-  const items=useMemo(()=>normalizeNotifications(events,prefs?.enabled && prefs.data.find(item=>item.type==="group_invite")?.inApp ? groups.invitations : []),[events,prefs,groups.invitations]);
+  const items=useMemo(()=>normalizeNotifications(prefs?.enabled ? events : [],prefs?.enabled && prefs.data.find(item=>item.type==="group_invite")?.inApp ? groups.invitations : []),[events,prefs,groups.invitations]);
   const shown=filter === "Todas" ? items : items.filter(item=>item.category===filter);
   async function read(item:NotificationItem,read:boolean) {
     if(!accessToken)return;
@@ -86,8 +83,7 @@ export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,on
   async function open(item:NotificationItem) {
     const kind=notificationDestination(item);
     if(item.unread)await read(item,true);
-    if(kind === "friend"){if(navigation&&item.personId)navigation.open({kind:"player",id:item.personId});else onFriend(item.personId);return;}
-    if(navigation && kind!=="group") { navigation.open(kind==="round"?{kind:"round",id:item.resourceId,source:"shared"}:{kind:"activity",id:item.resourceId}); return; }
+    if(kind === "friend"){onFriend(item.personId);return;}
     const next={kind,id:item.invitation?.id || item.resourceId};writeDetail(next);setDetail(next);
   }
   async function friend(item:NotificationItem,action:"ACCEPTED"|"REJECTED") {
@@ -99,8 +95,8 @@ export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,on
   }
   async function loadMore() {
     if(!accessToken || !cursor || paging.current)return;paging.current=true;setLoadingMore(true);
-    try{const page:SocialNotificationPage=await socialRequest<SocialNotificationPage>(`/api/social/notifications?cursor=${encodeURIComponent(cursor)}`,accessToken);
-      if(live.current){loadedPages.current++;setEvents(current=>[...new Map([...current,...page.data].map(item=>[item.id,item])).values()]);setCursor(page.nextCursor);}}
+    try{const page=await socialRequest<SocialNotificationPage>(`/api/social/notifications?cursor=${encodeURIComponent(cursor)}`,accessToken);
+      if(live.current){setEvents(current=>[...new Map([...current,...page.data].map(item=>[item.id,item])).values()]);setCursor(page.nextCursor);}}
     catch(error){if(live.current)setMessage(socialErrorMessage(error));}finally{paging.current=false;if(live.current)setLoadingMore(false);}
   }
   function closeDetail(){writeDetail(null);setDetail(null);setActivity(null);}
@@ -114,9 +110,8 @@ export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,on
     </> : <>
       <nav className={styles.filters} aria-label="Filtros de notificaciones">{NOTIFICATION_FILTERS.map(label=><button type="button" key={label} aria-pressed={filter===label} onClick={()=>setFilter(label)}>{label}</button>)}</nav>
       <div className={styles.toolbar}><button type="button" className={styles.textButton} disabled={busy || !events.some(item=>!item.readAt)} onClick={()=>void act(async()=>{await socialRequest("/api/social/notifications",accessToken,{method:"PATCH",body:{all:true,read:true}});await refresh();notificationsChanged();})}>Marcar todas como leídas</button></div>
-      {(loading || (!groups.loadedAt && !groups.message)) && <div className={styles.skeletonList} role="status" aria-label="Cargando notificaciones">{[0,1,2].map(i=><div key={i}><i/><span><i/><i/></span></div>)}</div>}
-      {!loading && groups.loadedAt>0 && !shown.length && !message && !groups.message && <div className={styles.empty}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0v5l-3 4h18l-3-4V8M10 21h4"/></svg><h2>Todo al día</h2><p>{prefs?.enabled === false ? "Tus avisos están en pausa. Puedes activarlos en Preferencias." : "Aquí aparecerá el historial de tus notificaciones."}</p></div>}
-      {prefs?.enabled===false&&items.length>0&&<p className={styles.pauseNote}>Los avisos nuevos están en pausa. Tu historial se conserva.</p>}
+      {(loading || (!groups.loadedAt && !groups.message)) && <div className={styles.skeleton} role="status" aria-label="Cargando notificaciones"/>}
+      {!loading && groups.loadedAt>0 && !shown.length && !message && !groups.message && <div className={styles.empty}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0v5l-3 4h18l-3-4V8M10 21h4"/></svg><h2>Todo al día</h2><p>{prefs?.enabled === false ? "Tus avisos están en pausa. Puedes activarlos en Preferencias." : "No tienes notificaciones pendientes. Sigue jugando y conectado con tus amigos."}</p></div>}
       <ol className={styles.list}>{shown.map(item=><NotificationRow key={item.key} item={item} busy={busy || groups.busy} onOpen={()=>void act(()=>open(item))} onRead={value=>void act(()=>read(item,value))} onFriend={action=>void act(()=>friend(item,action))} onGroupAccept={()=>void groups.accept(item.invitation!.id)}/>)}</ol>
       {cursor && <button type="button" className={styles.secondary} disabled={loadingMore || busy} onClick={()=>void loadMore()}>{loadingMore ? "Cargando…" : "Ver más notificaciones"}</button>}
     </>}

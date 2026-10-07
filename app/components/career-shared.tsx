@@ -2,13 +2,13 @@
 import { type ReactNode, type KeyboardEvent, useRef } from "react";
 import { CAREER_TABS, type CareerView } from "../../lib/career-navigation";
 import styles from "./career-hub.module.css";
-export function CareerTabs({ view, onView, hidden = false }: { view: CareerView; onView: (view: CareerView) => void; hidden?: boolean }) {
+export function CareerTabs({ view, onView }: { view: CareerView; onView: (view: CareerView) => void }) {
   const navigation = useRef<HTMLElement>(null);
   function onKey(event:KeyboardEvent<HTMLButtonElement>,index:number){
     const next=event.key==="ArrowRight"?(index+1)%CAREER_TABS.length:event.key==="ArrowLeft"?(index+CAREER_TABS.length-1)%CAREER_TABS.length:event.key==="Home"?0:event.key==="End"?CAREER_TABS.length-1:null;
     if(next===null)return;event.preventDefault();onView(CAREER_TABS[next].id);navigation.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus({preventScroll:true});
   }
-  return <nav ref={navigation} hidden={hidden} className={styles.tabs} role="tablist" aria-label="Secciones de Carrera">{CAREER_TABS.map((tab,index) => <button type="button" key={tab.id} role="tab" id={`career-tab-${tab.id}`} aria-controls={`career-panel-${tab.id}`} aria-selected={view===tab.id} tabIndex={view===tab.id?0:-1} aria-current={view === tab.id ? "page" : undefined} onKeyDown={event=>onKey(event,index)} onClick={() => onView(tab.id)}>{tab.label}</button>)}</nav>;
+  return <nav ref={navigation} className={styles.tabs} role="tablist" aria-label="Secciones de Carrera">{CAREER_TABS.map((tab,index) => <button type="button" key={tab.id} role="tab" id={`career-tab-${tab.id}`} aria-controls={`career-panel-${tab.id}`} aria-selected={view===tab.id} tabIndex={view===tab.id?0:-1} aria-current={view === tab.id ? "page" : undefined} onKeyDown={event=>onKey(event,index)} onClick={() => onView(tab.id)}>{tab.label}</button>)}</nav>;
 }
 export function CareerEmptyState({ title, description, action, onAction }: { title: string; description?: string; action?: string; onAction?: () => void }) {
   return <div className={styles.empty}><span className={styles.emptyMark} aria-hidden="true">⚑</span><h3>{title}</h3>{description && <p>{description}</p>}{action && onAction && <button type="button" className={styles.goldButton} onClick={onAction}>{action} <span aria-hidden="true">›</span></button>}</div>;

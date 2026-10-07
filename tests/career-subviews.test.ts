@@ -76,15 +76,14 @@ test("only visited views mount, retain stable panel identities, and do not remou
   assert.equal(uiFind(tree,n=>n.props.id==="career-panel-tournaments").props.hidden,true);
   const before=h.scrollKeys.length;h.render();assert.equal(h.scrollKeys.length,before);
 });
-test("Index/Atest deep links use a dedicated header and return to the preserved five Career tabs",()=>{
+test("existing Index/Atest deep links remain details of Resumen, with tabs always available",()=>{
   for(const detail of ["index","attest"] as const){
     const h=shell(`?screen=career&career=summary&careerDetail=${detail}`);let tree=h.render();
     assert.equal(uiFind(tree,n=>n.type==="CareerIndexPanel").props.detail,detail);
-    assert.equal(uiFind(tree,n=>n.type==="CareerTabs").props.hidden,true);
+    assert.ok(uiNodes(tree).some(n=>n.type==="CareerTabs"));
     assert.equal(uiFind(tree,n=>n.type==="CareerOverview").props.displayName,"QA Owner");
     const summary=uiFind(tree,n=>n.type==="CareerOverview"),container=uiNodes(tree).find(n=>n.props.children===summary);
     assert.equal(container?.props.hidden,true);
-    h.props.onDetail(null);tree=h.render();assert.equal(uiFind(tree,n=>n.type==="CareerTabs").props.hidden,false);
     h.select(tree,"achievements");tree=h.render();assert.equal(new URLSearchParams(h.location.search).has("careerDetail"),false);
     assert.equal(h.selected(tree)[0].props.id,"career-panel-achievements");
     h.pop(`?screen=career&career=summary&careerDetail=${detail}`);tree=h.render();
@@ -110,7 +109,6 @@ test("clearing Summary detail restores the overview without remounting visited p
 });
 test("tab navigation has linked ARIA states, five fixed columns, and no document anchors",()=>{
   const shared=readFileSync("app/components/career-shared.tsx","utf8"),hub=readFileSync("app/components/career-hub.tsx","utf8"),css=readFileSync("app/components/career-hub.module.css","utf8");
-  assert.match(css,/\.tabs\[hidden\]\{display:none\}/);
   assert.match(shared,/role="tablist"/);assert.match(shared,/role="tab"/);assert.match(shared,/aria-selected/);assert.match(shared,/ArrowRight/);assert.match(shared,/ArrowLeft/);assert.match(shared,/preventScroll:true/);
   assert.match(css,/\.tabs\{position:sticky/);assert.match(css,/--career-header-height/);assert.match(css,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);assert.doesNotMatch(css.match(/\.tabs\{[^}]+\}/)?.[0]??"",/overflow-x:auto/);assert.match(css,/white-space:nowrap/);assert.match(css,/min-height:44px/);assert.match(css,/\.content\[hidden\]\{display:none\}/);
   assert.doesNotMatch(shared+hub,/scrollIntoView|href=["']#|getElementById/);
