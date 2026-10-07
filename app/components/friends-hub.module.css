@@ -49,6 +49,10 @@
 .suggestedIdentity small{font-size:11px;line-height:1.5;color:var(--by-muted);overflow-wrap:anywhere}
 .suggestedIdentity .club{color:var(--by-gold);font-size:10px;margin:3px 0}
 .suggestedAdd{display:flex;align-items:center;justify-content:center;gap:6px;width:100%;min-height:44px;border:1px solid var(--by-gold-line);border-radius:25px;background:transparent;color:var(--by-gold);font-size:12px!important;padding:6px 8px;margin-top:10px}
+.suggestedGrid>li:only-child{grid-column:1/-1;flex-direction:row;gap:12px;padding:13px}
+.suggestedGrid>li:only-child .suggestedIdentity{display:grid;grid-template-columns:48px minmax(0,1fr);gap:4px 10px;align-items:center;text-align:left;min-width:0}
+.suggestedGrid>li:only-child .avatar{grid-row:1/4;width:48px;height:48px;margin:0}
+.suggestedGrid>li:only-child .suggestedAdd{width:auto;min-width:88px;flex-shrink:0;margin:0}
 .discoveryEmpty{display:flex;align-items:center;gap:13px;background:var(--by-surface-warm);border:1px solid var(--by-line);border-radius:13px;padding:18px;color:var(--by-muted)}
 .discoveryEmpty svg{flex-shrink:0;color:var(--by-gold)}
 .discoveryEmpty p{font-size:13px;line-height:1.55;margin:0}
