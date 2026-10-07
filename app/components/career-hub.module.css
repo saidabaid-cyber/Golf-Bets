@@ -20,3 +20,4 @@
 @media(max-width:540px){.playerCard{display:grid;grid-template-columns:64px minmax(0,1fr);padding:16px;gap:12px}.index{grid-column:2;margin-left:0;text-align:left;display:flex;max-width:100%;flex-wrap:wrap;align-items:center;gap:10px}.playerIdentity h2{font-size:23px}}
 @media(max-width:600px){.filters label{flex-basis:calc(50% - 6px)}}@media(max-width:360px){.filters label{flex-basis:100%}}.screen a:focus-visible{outline:3px solid #b48b32;outline-offset:3px}
 .tabs[hidden]{display:none}
+.roundViews{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin-bottom:16px;background:#eceee3;border-radius:26px}.roundViews button{min-height:44px;margin:0;border:0;border-radius:22px;background:transparent;color:#4c6050;font-size:13px;box-shadow:none}.roundViews button[aria-pressed=true]{background:var(--forest);color:var(--ivory)}.roundViews button:focus-visible{outline:2px solid #b29146;outline-offset:2px}
