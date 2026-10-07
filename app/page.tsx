@@ -480,7 +480,7 @@ function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
   const ghinControl = useGhinReadOnlyProfile(identity.mode === "authenticated" ? identity.accessToken : null);
-  const ghinImports = useGhinImportedScores(identity.mode === "authenticated" ? identity.accessToken : null,ghinControl.enabled && ghinControl.profile?.associationStatus === "VERIFIED");
+  const ghinImports = useGhinImportedScores(identity.mode === "authenticated" ? identity.accessToken : null,ghinControl.enabled && ghinControl.ready,ghinControl.profile?.ghinNumber ?? "unlinked");
   const unifiedGhinControl = { ...ghinControl, imports:ghinImports };
   const { tab, setTab, goBack, setNavigationGuard, historyDetailId, careerView, setCareerView, careerDetail, setCareerDetail } = useScreenNavigation();
   const { unread: groupNotificationsUnread } = useGroupNotificationsBadge(identity.accessToken, isPrimaryTab(tab));

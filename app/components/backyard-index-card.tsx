@@ -16,9 +16,11 @@ export function BackyardIndexCard({
   error,
   localPccZeroDeclared,
   onDeclareLocalPccZero,
+  resetAt,
 }: {
   history: readonly RoundSnapshot[];
   userId: string;
+  resetAt?: string;
   /** Private opt-in; playing handicaps belong to each round, not this card. */
   enabled: boolean;
   onEnabledChange?: (enabled: boolean) => void | Promise<void>;
@@ -30,7 +32,7 @@ export function BackyardIndexCard({
 }) {
   const [helpOpen, setHelpOpen] = useState(false);
   const helpTitleId = useId();
-  const summary = enabled ? calculateBackyardIndex(history, userId) : null;
+  const summary = enabled ? calculateBackyardIndex(history, userId, resetAt) : null;
   const ineligible = summary?.records.filter((record) => !record.eligible) ?? [];
   const localPccZero = summary?.records.some((record) => record.pccKind === "DECLARED_LOCAL_ZERO");
 

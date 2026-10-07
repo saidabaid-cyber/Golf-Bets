@@ -198,6 +198,7 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
       if (!parsed?.profile) throw new Error("No se confirmó la persistencia GHIN.");
       challenge.current = null;
       setState((current) => ({ ...current, authorizing: false, profile: parsed.profile, candidate: null, reauthorizationRequired: false, error: "" }));
+      window.dispatchEvent(new Event("backyard-handicap-source-changed"));
       return parsed.profile;
     } catch (error) {
       challenge.current = null;
@@ -250,6 +251,7 @@ export function useGhinReadOnlyProfile(accessToken: string | null): GhinReadOnly
     try {
       await post({ operation: "unlink", confirmed: true });
       challenge.current = null;
+      window.dispatchEvent(new Event("backyard-handicap-source-changed"));
       setState((current) => ({ ...current, unlinking: false, profile: null, candidate: null, scores: null, reauthorizationRequired: false, error: "" }));
       return true;
     } catch (error) {

@@ -3,7 +3,7 @@ import type { BackyardIndexPreference } from "./backyard-index-preferences";
 import type { RoundSnapshot } from "./types";
 import type { GhinProfileProjection } from "./ghin/profile";
 
-export type SelectedHandicapIndex = { source: "BACKYARD" | "GHIN" | null; value: number | null };
+export type SelectedHandicapIndex = { source: "BACKYARD" | "GHIN" | null; value: number | null; resetAt?: string };
 
 function usableIndex(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= -20 && value <= 54;
@@ -33,8 +33,8 @@ export function selectedHandicapIndex(preference: BackyardIndexPreference | null
     return { source: "GHIN", value: ghinIndex };
   }
   if (preference.enabled && (preference.handicapSource === undefined || preference.handicapSource === "BACKYARD")) {
-    const value = calculateBackyardIndex(history, userId).value;
-    return { source: "BACKYARD", value: usableIndex(value) ? value : null };
+    const value = calculateBackyardIndex(history, userId, preference.resetAt).value;
+    return { source: "BACKYARD", value: usableIndex(value) ? value : null, ...(preference.resetAt ? {resetAt:preference.resetAt} : {}) };
   }
   return { source: null, value: null };
 }

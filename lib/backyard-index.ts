@@ -362,10 +362,11 @@ function roundStartTime(round: RoundSnapshot): number {
 }
 
 /** Reads only stored frozen evidence; never changes profile manual HCP, Playing HCP, GHIN, or historical rounds. */
-export function calculateBackyardIndex(history: readonly RoundSnapshot[], accountUserId: string): BackyardIndexSummary {
+export function calculateBackyardIndex(history: readonly RoundSnapshot[], accountUserId: string, resetAt?: string): BackyardIndexSummary {
+  const boundary = resetAt ? Date.parse(resetAt) : null;
   const rounds = deduplicateRoundSnapshots(attributableHistory(history.filter(
     (round): round is RoundSnapshot => Boolean(round && typeof round.id === "string" && round.id.trim()),
-  ), accountUserId)).filter((round) => Array.isArray(round.players)
+  ), accountUserId)).filter((round) => (boundary === null || (Number.isFinite(boundary) && Date.parse(round.startedAt || "") > boundary)) && Array.isArray(round.players)
     && round.players.some((player) => player && player.accountUserId === accountUserId))
     .sort((a, b) => playedTime(b) - playedTime(a)
       || roundStartTime(b) - roundStartTime(a));

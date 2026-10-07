@@ -8,7 +8,7 @@ export type GhinImportedScoresController = {
 };
 /** Private server persistence, not browser storage. No interval, foreground
  * polling or automatic provider fetch. Import happens only on explicit tap. */
-export function useGhinImportedScores(accessToken: string | null, enabled: boolean): GhinImportedScoresController {
+export function useGhinImportedScores(accessToken: string | null, enabled: boolean, linkRevision = ""): GhinImportedScoresController {
   const generation=useRef(0),busy=useRef(false);
   const [state,setState]=useState({account:null as string|null,data:null as GhinImportPage|null,loading:false,syncing:false,error:"",reauthorizationRequired:false});
   const data=state.account===accessToken ? state.data : null;
@@ -39,6 +39,6 @@ export function useGhinImportedScores(accessToken: string | null, enabled: boole
     const controller=new AbortController();
     if(accessToken&&enabled)void request("read",controller.signal);
     return()=>{controller.abort();generation.current=run+1;busy.current=false;};
-  },[accessToken,enabled,request]);
+  },[accessToken,enabled,request,linkRevision]);
   return { ...state,data,load:()=>request("read"),sync:()=>request("sync"),next:()=>data?.nextCursor?request("next",undefined,data.nextCursor):Promise.resolve() };
 }

@@ -22,7 +22,7 @@ export function CareerGhinScores({ control, userId, expanded, onOpen, onReauthor
     attempted.current = requestKey;
     void loadScores();
   }, [persisted, expanded, linked, requestKey, loadScores, scores, scoresLoading, reauthorizationRequired, error]);
-  if (!linked) return null;
+  if (!linked && !persisted) return null;
   if(persisted)return expanded?<GhinImportHistory control={control?.imports} backyard={[]} title="Tarjetas GHIN guardadas"/>:<section className={styles.ghinRecords}><h3>Tarjetas GHIN guardadas</h3><p>Registro oficial de sólo lectura. No forma parte del Atest Backyard.</p><button type="button" className={styles.ghinAction} onClick={onOpen}>VER TARJETAS GHIN</button></section>;
   const items = scores?.items.slice(0, 20) ?? [];
   return <section className={styles.ghinRecords} aria-label="Últimas tarjetas GHIN">

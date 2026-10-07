@@ -5,7 +5,7 @@ import type { RoundSnapshot } from "./types";
 import { safeSocialRoundCard } from "./social-round-card";
 import { socialActivityAuthor } from "./social-author-profile";
 import { captureCompletedRoundIndex } from "./backyard-index-auto-capture";
-import { BACKYARD_INDEX_METADATA_KEY, parseIndexPreference } from "./backyard-index-preferences";
+import { BACKYARD_INDEX_METADATA_KEY, parseIndexPreference, applyHandicapSourceState } from "./backyard-index-preferences";
 import { newCoursePlayedEvent } from "./new-course-activity";
 import { INTERNAL_GOLF_COURSE_CATALOG } from "./golf-course-directory";
 import { safeEquipmentSummary } from "./social-feed-presentation";
@@ -776,7 +776,9 @@ export async function confirmParticipant(
   const auth = await ctx.client.auth.getUser();
   if (auth.error || auth.data.user?.id !== ctx.userId)
     throw new SocialServiceError("AUTH_REQUIRED", 401, "Vuelve a iniciar sesión.");
-  const preference = parseIndexPreference(auth.data.user.user_metadata?.[BACKYARD_INDEX_METADATA_KEY], ctx.userId);
+  const sourceState = await ctx.client.from("player_handicap_source_state").select("backyard_index_reset_at,source_changed_at,source_revision").eq("owner_id",ctx.userId).maybeSingle();
+  if (sourceState.error) dbError(sourceState.error);
+  const preference = applyHandicapSourceState(parseIndexPreference(auth.data.user.user_metadata?.[BACKYARD_INDEX_METADATA_KEY], ctx.userId),ctx.userId,sourceState.data);
   for (let attempt = 0; attempt < 3; attempt++) {
     const fresh = await ctx.admin.from("rounds_cloud").select("id,version,snapshot").eq("id", roundId).single();
     if (fresh.error) dbError(fresh.error);

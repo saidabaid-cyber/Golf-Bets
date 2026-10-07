@@ -46,15 +46,19 @@ type ProviderRow = {
   match_status: ProviderScoreRecord["match"]; candidate_round_ids: string[]; imported_at: string; updated_at: string;
 };
 const PROVIDER_COLUMNS = "external_score_id,played_on,provider_course_id,provider_course_name,provider_tee_set_id,provider_tee_name,number_of_holes,gross_score,adjusted_gross_score,score_differential,course_rating,slope_rating,score_type,posting_method,linked_round_id,linked_score_hash,posting_fingerprint,match_status,candidate_round_ids,imported_at,updated_at";
-export async function readImportState(client: SupabaseClient, ownerId: string, golferId: string) {
-  const [provider, rounds, courses, tees, posts] = await Promise.all([
-    client.from("handicap_provider_scores").select(PROVIDER_COLUMNS).eq("owner_id",ownerId).eq("provider","GHIN").eq("external_player_id",golferId).order("played_on",{ascending:false}).order("external_score_id").limit(1000),
+export async function readImportState(client: SupabaseClient, ownerId: string, golferId: string, retainedIds?: readonly string[]) {
+  let query = client.from("handicap_provider_scores").select(PROVIDER_COLUMNS).eq("owner_id",ownerId).eq("provider","GHIN").eq("external_player_id",golferId).order("played_on",{ascending:false}).order("external_score_id").limit(1000);
+  if (retainedIds) query=query.in("external_score_id",[...retainedIds]);
+  const [provider, rounds, courses, tees, posts, archived] = await Promise.all([
+    query,
     client.from("rounds_cloud").select("id,local_id,snapshot").eq("owner_id",ownerId).eq("snapshot->>lifecycleState","completed"),
     client.from("golf_course_provider_links").select("id,course_id,external_course_id,external_facility_id,sync_status").eq("provider","GHIN").eq("sync_status","CONFIRMED"),
     client.from("golf_tee_provider_links").select("id,course_id,tee_id,external_tee_set_id,course_provider_link_id,sync_status").eq("provider","GHIN").eq("sync_status","CONFIRMED"),
     client.from("ghin_score_post_receipts").select("round_id,provider_score_id,fingerprint,status").eq("owner_id",ownerId).eq("golfer_id",golferId).eq("status","SUCCEEDED"),
+    // Linked Backyard evidence remains visible beyond the retained-only window.
+    retainedIds ? client.from("handicap_provider_scores").select(PROVIDER_COLUMNS).eq("owner_id",ownerId).eq("provider","GHIN").eq("external_player_id",golferId).not("linked_round_id","is",null).limit(1000) : Promise.resolve({data:[],error:null}),
   ]);
-  if ([provider,rounds,courses,tees,posts].some(r => r.error)) throw new Error("GHIN_IMPORT_READ_FAILED");
+  if ([provider,rounds,courses,tees,posts,archived].some(r => r.error)) throw new Error("GHIN_IMPORT_READ_FAILED");
   // Two bounded catalog reads for the owner's frozen assignments, not an N+1
   // lookup per card. Public catalog evidence contains no player/private data.
   const sourceCourseIds = [...new Set((rounds.data as RoundRow[]).flatMap(r=>r.snapshot.playerTeeAssignments?.filter(a=>a.playerId===r.snapshot.ownerId).map(a=>a.courseId) ?? []))];
@@ -71,7 +75,7 @@ export async function readImportState(client: SupabaseClient, ownerId: string, g
     const normalized = reconciliationRound(r,golferId,courses.data as CourseLink[],tees.data as TeeLink[],aliases);
     return normalized ? [normalized] : [];
   });
-  const records: ProviderScoreRecord[] = (provider.data as ProviderRow[]).map(p => {
+  const project = (p:ProviderRow):ProviderScoreRecord => {
     const round = candidates.find(r => r.id === p.linked_round_id);
     return { id:p.external_score_id,playedOn:p.played_on,courseId:p.provider_course_id,courseName:p.provider_course_name,
       teeId:p.provider_tee_set_id,teeName:p.provider_tee_name,holes:p.number_of_holes,grossScore:p.gross_score,
@@ -79,8 +83,9 @@ export async function readImportState(client: SupabaseClient, ownerId: string, g
       scoreType:p.score_type,postingMethod:p.posting_method,linkedRoundId:p.linked_round_id,linkedLocalId:round?.localId ?? null,
       match:p.match_status,candidateRoundIds:p.candidate_round_ids,importedAt:p.imported_at,postingFingerprint:p.posting_fingerprint,
       outOfSync:!!p.linked_round_id && (!round || (!!p.linked_score_hash && reconciliationEvidenceHash(round) !== p.linked_score_hash)) };
-  });
-  return { records, candidates, posts: (posts.data ?? []).map(p => ({roundId:p.round_id as string,providerScoreId:p.provider_score_id as string | null,fingerprint:p.fingerprint as string})),
+  };
+  const records = (provider.data as ProviderRow[]).map(project);
+  return { records, candidates, historicalLinks:(archived.data as ProviderRow[]).map(project), posts: (posts.data ?? []).map(p => ({roundId:p.round_id as string,providerScoreId:p.provider_score_id as string | null,fingerprint:p.fingerprint as string})),
     syncedAt: (provider.data as ProviderRow[]).map(r => r.updated_at).sort().at(-1) ?? null };
 }
 export async function importGhinScores(client: SupabaseClient, ownerId: string, golferId: string, scores: readonly NormalizedGhinScore[]): Promise<GhinImportSummary> {
@@ -97,13 +102,14 @@ export async function importGhinScores(client: SupabaseClient, ownerId: string, 
   if (result.error || !result.data || typeof result.data.importedNew !== "number") throw new Error("GHIN_IMPORT_WRITE_FAILED");
   return {...result.data,fetched:scores.length,ignoredInvalid:plan.ignoredInvalid} as GhinImportSummary;
 }
-export function importPage(state: Awaited<ReturnType<typeof readImportState>>, cursor: number): GhinImportPage {
+export function importPage(state: Omit<Awaited<ReturnType<typeof readImportState>>,"historicalLinks"> & {historicalLinks?:ProviderScoreRecord[]}, cursor: number): GhinImportPage {
   const items = state.records.slice(cursor,cursor+20);
+  const links = [...new Map([...state.records,...(state.historicalLinks??[])].filter(r=>!!r.linkedRoundId).map(r=>[r.id,r])).values()];
   const grossTotal = (holes:9|18) => {
     const valid = state.records.filter(r=>r.match==="GHIN_ONLY" && r.holes===holes && r.grossScore!==null);
     return {rounds:valid.length,sum:valid.reduce((s,r)=>s+r.grossScore!,0),best:valid.length?Math.min(...valid.map(r=>r.grossScore!)):null};
   };
-  return {items,links:state.records.filter(r=>!!r.linkedRoundId),grossTotals:{9:grossTotal(9),18:grossTotal(18)},filters:{years:[...new Set(state.records.map(r=>r.playedOn!.slice(0,4)))].sort().reverse(),courses:[...new Set(state.records.flatMap(r=>r.courseName?[r.courseName]:[]))].sort()},total:state.records.length,nextCursor:cursor+20<state.records.length ? String(cursor+20) : null,
+  return {items,links,grossTotals:{9:grossTotal(9),18:grossTotal(18)},filters:{years:[...new Set(state.records.map(r=>r.playedOn!.slice(0,4)))].sort().reverse(),courses:[...new Set(state.records.flatMap(r=>r.courseName?[r.courseName]:[]))].sort()},total:state.records.length,nextCursor:cursor+20<state.records.length ? String(cursor+20) : null,
     summary:state.syncedAt ? {fetched:state.records.length,importedNew:0,matched:state.records.filter(r=>r.linkedRoundId).length,
       ambiguous:state.records.filter(r=>r.match==="MATCH_REVIEW_REQUIRED").length,ignoredInvalid:0,total:state.records.length,
       ghinOnly:state.records.filter(r=>!r.linkedRoundId).length,syncedAt:state.syncedAt} : null};

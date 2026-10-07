@@ -79,6 +79,7 @@ export function GhinReadOnlyPanel({
       <button type="button" className="primary" disabled={control.authorizing} onClick={() => setAuthMode("link")}>
         VINCULAR GHIN <span aria-hidden="true">→</span>
       </button>
+      {control.imports?.data?.total ? <><p>Historial GHIN conservado · Sin vínculo activo. Estas tarjetas no activan un índice ni Atest.</p><GhinImportHistory control={control.imports} backyard={[]} title="Tarjetas GHIN retenidas"/></> : null}
     </> : <>
       <p className={styles.badge}>{profile.associationStatus === "VERIFIED" ? `✓ GHIN VINCULADO${sourceActive ? " · FUENTE ACTIVA" : ""}` : "DATOS CONSULTADOS DESDE GHIN"}</p>
       <dl className={styles.details}>
@@ -146,7 +147,7 @@ export function GhinReadOnlyPanel({
 
     <ModalShell open={confirmUnlink} onClose={() => setConfirmUnlink(false)} closeDisabled={control.unlinking} label="Desvincular GHIN">
       <h2>¿Desvincular GHIN?</h2>
-      <p>Se quitará el vínculo activo. Tus rondas, scores y snapshots históricos de handicap no se borrarán.</p>
+      <p>Se quitará el vínculo y quedarás sin índice activo. Conservaremos tus últimas 20 tarjetas GHIN importadas, tus rondas y sus snapshots históricos. El antiguo Backyard Index no se reactivará.</p>
       {control.error ? <p role="alert" className={styles.warning}>{control.error}</p> : null}
       <div className="dialogActions"><button type="button" className="secondary" disabled={control.unlinking} onClick={() => setConfirmUnlink(false)}>Cancelar</button><button type="button" className="primary" disabled={control.unlinking} onClick={() => void unlink()}>{control.unlinking ? "DESVINCULANDO…" : "DESVINCULAR GHIN"}</button></div>
     </ModalShell>

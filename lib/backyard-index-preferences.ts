@@ -10,6 +10,9 @@ export type BackyardIndexPreference = {
   handicapSource?: "BACKYARD" | "GHIN" | null;
   localPccZeroDeclaredAt: string | null;
   updatedAt: string;
+  /** Server-owned epoch; old cards remain historical, not active Index evidence. */
+  resetAt?: string;
+  sourceRevision?: number;
 };
 export type IndexPreferenceCache = { preference: BackyardIndexPreference; pending: boolean };
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
@@ -25,7 +28,11 @@ export function parseIndexPreference(value: unknown, userId: string): BackyardIn
   if (item.version !== 1 || item.userId !== userId || typeof item.enabled !== "boolean" || !instant(item.updatedAt)
     || !(item.localPccZeroDeclaredAt === null || instant(item.localPccZeroDeclaredAt))) return null;
   if (item.handicapSource !== undefined && item.handicapSource !== null && item.handicapSource !== "BACKYARD" && item.handicapSource !== "GHIN") return null;
+  if (item.resetAt !== undefined && !instant(item.resetAt)) return null;
+  if (item.sourceRevision !== undefined && (!Number.isSafeInteger(item.sourceRevision) || Number(item.sourceRevision) < 1)) return null;
   return { version: 1, userId, enabled: item.enabled, updatedAt: item.updatedAt, localPccZeroDeclaredAt: item.localPccZeroDeclaredAt,
+    ...(item.resetAt !== undefined ? { resetAt: item.resetAt as string } : {}),
+    ...(item.sourceRevision !== undefined ? { sourceRevision: item.sourceRevision as number } : {}),
     ...(item.handicapSource !== undefined ? { handicapSource: item.handicapSource as "BACKYARD" | "GHIN" | null } : {}) };
 }
 
@@ -56,10 +63,21 @@ export function persistIndexPreference(storage: StorageLike, cache: IndexPrefere
 
 export function chooseIndexPreference(local: IndexPreferenceCache | null, remote: BackyardIndexPreference | null): IndexPreferenceCache | null {
   if (!remote) return local;
+  if (remote.sourceRevision !== undefined && (remote.sourceRevision !== local?.preference.sourceRevision || remote.resetAt !== local?.preference.resetAt)) return { preference: remote, pending: false };
   if (!local || Date.parse(remote.updatedAt) >= Date.parse(local.preference.updatedAt)) return { preference: remote, pending: false };
   // A second device can race Auth's last-write-wins metadata update. Repair a
   // newer durable local version on the next sync, including previously synced values.
   return { ...local, pending: true };
+}
+
+export type HandicapSourceState = { backyard_index_reset_at: string; source_changed_at: string; source_revision: number };
+export function applyHandicapSourceState(preference: BackyardIndexPreference | null, userId: string, state: HandicapSourceState | null): BackyardIndexPreference | null {
+  if (!state) return preference;
+  const boundary = new Date(state.backyard_index_reset_at).toISOString();
+  if (preference?.resetAt === boundary && preference.sourceRevision === state.source_revision
+    && Date.parse(preference.updatedAt) > Date.parse(state.source_changed_at)) return preference;
+  return {version:1,userId,enabled:false,handicapSource:null,localPccZeroDeclaredAt:null,
+    updatedAt:new Date(state.source_changed_at).toISOString(),resetAt:boundary,sourceRevision:state.source_revision};
 }
 
 function assertOwner(userId: string, returnedId: unknown): void {
@@ -70,13 +88,16 @@ export async function readCloudIndexPreference(client: SupabaseClient, userId: s
   const read = await client.auth.getUser();
   if (read.error) throw read.error;
   assertOwner(userId, read.data.user?.id);
-  return parseIndexPreference(read.data.user?.user_metadata?.[BACKYARD_INDEX_METADATA_KEY], userId);
+  const state = await client.from("player_handicap_source_state").select("backyard_index_reset_at,source_changed_at,source_revision").eq("owner_id",userId).maybeSingle();
+  if (state.error) throw new Error("No se pudo confirmar el ciclo del Índice.");
+  return applyHandicapSourceState(parseIndexPreference(read.data.user?.user_metadata?.[BACKYARD_INDEX_METADATA_KEY], userId),userId,state.data);
 }
 
 export async function saveCloudIndexPreference(client: SupabaseClient, preference: BackyardIndexPreference): Promise<BackyardIndexPreference> {
   const intended = parseIndexPreference(preference, preference.userId);
   if (!intended) throw new Error("Preferencia del Índice inválida.");
   const current = await readCloudIndexPreference(client, intended.userId);
+  if (current?.sourceRevision !== undefined && (intended.sourceRevision !== current.sourceRevision || intended.resetAt !== current.resetAt)) throw new Error("El ciclo del Índice cambió. Recarga antes de activarlo.");
   if (current && Date.parse(current.updatedAt) >= Date.parse(intended.updatedAt)) {
     if (JSON.stringify(current) === JSON.stringify(intended)) return current;
     throw new Error("Otro dispositivo cambió el Índice. Recarga antes de cambiar la preferencia.");

@@ -30,7 +30,7 @@ export function useBackyardIndexPreference(userId: string, authenticated: boolea
     const current = () => owner.current === userId && operation.current === token;
     try {
       const local = readIndexPreference(localStorage, userId);
-      if (current()) setState({ owner: userId, cache: local, ready: true, saving: true, error: "" });
+      if (current()) setState({ owner: userId, cache: local, ready: false, saving: true, error: "" });
       const client = getSupabaseBrowser();
       if (!client) throw new Error("La sincronización del Índice no está configurada.");
       const remote = await readCloudIndexPreference(client, userId);
@@ -54,7 +54,8 @@ export function useBackyardIndexPreference(userId: string, authenticated: boolea
     const storage = (event: StorageEvent) => { if (event.key?.startsWith("backyard-index-preference-v1:")) void retry(); };
     window.addEventListener("online", online);
     window.addEventListener("storage", storage);
-    return () => { operation.current += 1; flight.current = false; window.removeEventListener("online", online); window.removeEventListener("storage", storage); };
+    window.addEventListener("backyard-handicap-source-changed", online);
+    return () => { operation.current += 1; flight.current = false; window.removeEventListener("online", online); window.removeEventListener("storage", storage); window.removeEventListener("backyard-handicap-source-changed", online); };
   }, [retry]);
 
   const change = useCallback(async (enabled: boolean) => {
@@ -63,6 +64,7 @@ export function useBackyardIndexPreference(userId: string, authenticated: boolea
       const previous = readIndexPreference(localStorage, userId)?.preference;
       const now = new Date(Math.max(Date.now(), Date.parse(previous?.updatedAt || "") + 1 || 0)).toISOString();
       const preference: BackyardIndexPreference = { version: 1, userId, enabled, handicapSource: enabled ? "BACKYARD" : null, updatedAt: now,
+        ...(previous?.resetAt ? {resetAt:previous.resetAt,sourceRevision:previous.sourceRevision} : {}),
         // The activation/reconfirmation UI explicitly explains this local assumption.
         localPccZeroDeclaredAt: enabled ? previous?.localPccZeroDeclaredAt || now : previous?.localPccZeroDeclaredAt || null };
       persistIndexPreference(localStorage, { preference, pending: true });
@@ -85,6 +87,7 @@ export function useBackyardIndexPreference(userId: string, authenticated: boolea
         handicapSource: "GHIN",
         updatedAt: now,
         localPccZeroDeclaredAt: previous?.localPccZeroDeclaredAt ?? null,
+        ...(previous?.resetAt ? {resetAt:previous.resetAt,sourceRevision:previous.sourceRevision} : {}),
       };
       persistIndexPreference(localStorage, { preference, pending: true });
       setState({ owner: userId, cache: { preference, pending: true }, ready: true, saving: false, error: "" });
@@ -95,7 +98,7 @@ export function useBackyardIndexPreference(userId: string, authenticated: boolea
   }, [authenticated, retry, userId]);
 
   const visible = state.owner === userId && authenticated;
-  return { preference: visible ? state.cache?.preference || null : null,
+  return { preference: visible && state.ready && !state.error ? state.cache?.preference || null : null,
     ready: !authenticated || (visible && state.ready), saving: visible && state.saving,
     error: visible ? state.error : "", change, selectGhin, declareLocalZero: () => change(true), retry };
 }

@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 const limiter = new SlidingWindowRateLimiter<string>({limit:4,windowMs:10*60_000});
 
-async function contextFor(request: NextRequest) {
+async function contextFor(request: NextRequest, requireVerified = true) {
   if (process.env.VERCEL_ENV !== "preview" || process.env.VERCEL_GIT_COMMIT_REF !== "integration/backyard-current"
     || !isolatedPreviewDatabaseEnabled()) return {ok:false as const,response:privateGhinJson({code:"DEV_ONLY"},404)};
   const context = await ghinUserContext(request);
@@ -21,24 +21,34 @@ async function contextFor(request: NextRequest) {
   const read = await context.client.from("player_handicap_provider_profiles").select("external_player_id,association_status")
     .eq("owner_id",context.userId).eq("provider","GHIN").maybeSingle();
   if (read.error) return {ok:false as const,response:privateGhinJson({code:"PROFILE_READ_FAILED"},503)};
-  if (!read.data || read.data.association_status !== "VERIFIED") return {ok:false as const,response:privateGhinJson({code:"GHIN_NOT_VERIFIED"},409)};
-  return {...context,golferId:read.data.external_player_id as string};
+  const golferId = read.data?.association_status === "VERIFIED" ? read.data.external_player_id as string : null;
+  if (requireVerified && !golferId) return {ok:false as const,response:privateGhinJson({code:"GHIN_NOT_VERIFIED"},409)};
+  return {...context,golferId};
 }
 
 export async function GET(request: NextRequest) {
-  const context = await contextFor(request);
+  const context = await contextFor(request,false);
   if (!context.ok) return context.response;
   const rawCursor = request.nextUrl.searchParams.get("cursor") ?? "0";
   if (!/^\d{1,4}$/.test(rawCursor) || Number(rawCursor)>1000) return privateGhinJson({code:"INVALID_CURSOR"},400);
   try {
     // RLS ownership on every read; persisted cards need no live GHIN session.
-    return privateGhinJson(importPage(await readImportState(context.client,context.userId,context.golferId),Number(rawCursor)));
+    if (context.golferId) return privateGhinJson(importPage(await readImportState(context.client,context.userId,context.golferId),Number(rawCursor)));
+    const state = await context.client.from("player_handicap_source_state").select("retained_ghin_player_id,retained_ghin_score_ids")
+      .eq("owner_id",context.userId).maybeSingle();
+    if (state.error) throw new Error("GHIN_RETENTION_READ_FAILED");
+    const retained = state.data;
+    const page = retained?.retained_ghin_player_id
+      ? importPage(await readImportState(context.client,context.userId,retained.retained_ghin_player_id,retained.retained_ghin_score_ids),Number(rawCursor))
+      : importPage({records:[],candidates:[],posts:[],syncedAt:null},Number(rawCursor));
+    return privateGhinJson({...page,retainedHistory:true});
   } catch { return privateGhinJson({code:"GHIN_IMPORT_READ_FAILED"},503); }
 }
 
 export async function POST(request: NextRequest) {
   const context = await contextFor(request);
   if (!context.ok) return context.response;
+  if (!context.golferId) return privateGhinJson({code:"GHIN_NOT_VERIFIED"},409);
   const body = await readJsonBodyWithLimit(request,512);
   if (!body.ok) return privateGhinJson({code:"INVALID_REQUEST"},400);
   const input = body.value;

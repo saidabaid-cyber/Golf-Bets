@@ -11,12 +11,12 @@ export function careerAttestSummary(cards:Omit<CareerAttestCard,"attested">[],at
   return {cards:result,count,percent:count*5,slots:Array.from({length:20},(_,i)=>result[i]?.attested===true)};
 }
 /** Historical recalculation reads frozen rated-tee/PCC evidence with the canonical engine. No differential is presented as an index. */
-export function backyardIndexTimeline(rounds:readonly RoundSnapshot[],user:string) {
-  const eligible=new Set(calculateBackyardIndex(rounds,user).records.filter(r=>r.eligible).map(r=>r.roundId));
+export function backyardIndexTimeline(rounds:readonly RoundSnapshot[],user:string,resetAt?:string) {
+  const eligible=new Set(calculateBackyardIndex(rounds,user,resetAt).records.filter(r=>r.eligible).map(r=>r.roundId));
   const ordered=[...new Map(rounds.filter(r=>eligible.has(r.id)).map(r=>[r.id,r])).values()].sort((a,b)=>a.date.localeCompare(b.date)||String(a.startedAt??a.completedAt).localeCompare(String(b.startedAt??b.completedAt))||a.id.localeCompare(b.id));
   const points:Array<{date:string;value:number}>=[];
   for(let i=0;i<ordered.length;i++){
-    const summary=calculateBackyardIndex(ordered.slice(Math.max(0,i-19),i+1),user);
+    const summary=calculateBackyardIndex(ordered.slice(Math.max(0,i-19),i+1),user,resetAt);
     if(!summary.records.some(r=>r.roundId===ordered[i].id&&r.eligible)||summary.value===null)continue;
     const date=ordered[i].date;
     if(points.at(-1)?.date===date)points[points.length-1]={date,value:summary.value};else points.push({date,value:summary.value});
