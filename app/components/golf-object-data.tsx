@@ -20,11 +20,12 @@ export function useRoundObject(object: Extract<GolfObject, { source: string }>) 
   const local = object.source === "history" ? context.history.find(r => r.id === object.id) : undefined;
   const [shared,setShared]=useState<GolfRoundDetail|null>(null);
   useEffect(()=>{
-    if(object.source!=="shared"||object.kind!=="hole"||!context.accessToken)return;
+    if(object.source!=="shared"||!context.accessToken)return;
     const controller=new AbortController();setLoading(true);setFailed(false);
     void socialRequest<{data:SharedRoundCard}>(`/api/social/rounds/card?roundId=${encodeURIComponent(object.id)}`,context.accessToken,{signal:controller.signal}).then(({data:card})=>{
       if(controller.signal.aborted)return;const totals=scorecardTotals(card.myScorecard||[]);
-      setShared({card:{roundId:card.roundId,localRoundId:card.localRoundId,date:card.date,courseName:card.courseName,teeName:null,holesPlayed:card.myScorecard?.length||0,ownerScore:totals.score,coursePar:card.myScorecard?.length?totals.par:null,scorecard:card.myScorecard},shots:[]});
+      const mine=card.players.find(player=>player.playerKey===card.myPlayerKey);
+      setShared({card:{roundId:card.roundId,localRoundId:card.localRoundId,date:card.date,courseName:card.courseName,teeName:null,holesPlayed:card.myScorecard?.length||mine?.scorecard.length||0,ownerScore:totals.score??mine?.score??null,coursePar:card.myScorecard?.length?totals.par:null,scorecard:card.myScorecard,...(totals.toPar!==null?{toPar:totals.toPar}:{}),...(totals.putts!==null?{puttsTotal:totals.putts}:{})},playerName:mine?.name,shots:[]});
     }).catch(()=>{if(!controller.signal.aborted)setFailed(true);}).finally(()=>{if(!controller.signal.aborted)setLoading(false);});
     return()=>controller.abort();
   },[object.source,object.kind,object.id,context.accessToken,attempt]);

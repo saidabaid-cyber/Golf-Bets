@@ -35,3 +35,12 @@ test("saved GHIN history uses a separate flexible course layout from latest-20 n
   const css=readFileSync("app/components/ghin-import-history.module.css","utf8"),component=readFileSync("app/components/ghin-import-history.tsx","utf8");
   assert.match(css,/\.backyardCard\s*\{[^}]*minmax\(0, 1fr\)/);assert.match(component,/className=\{importedStyles.backyardCard\}/);assert.doesNotMatch(component,/className=\{styles.row\}/);
 });
+
+test("shared rounds open a summary and retain review controls behind their own participation view",()=>{
+  const detail={card:{date:"2026-09-04",courseName:"Actual course",teeName:null,holesPlayed:1,coursePar:4,ownerScore:3,scorecard:[{hole:1,par:4,score:3,putts:1}]},playerName:"Actual participant",shots:[]};
+  const h=socialUI("app/components/golf-round-detail.tsx",{"golf-object-data":{useRoundObject:()=>({detail,activity:null,loading:false,failed:false,retry:()=>{},context:{accessToken:"local-test-only"}})},"golf-detail-ui":{golfDate:(value:string)=>value},"golf-scorecard-presentation":scorecard});
+  const props={object:{kind:"round",id:"existing-round",source:"shared"},onStats:()=>{},onManage:()=>{},onRules:()=>{}};
+  let tree=h.render("GolfRoundDetailView",props);assert.match(uiText(tree),/Resumen Tarjeta Participación/);assert.equal(uiNodes(tree).some(n=>n.type==="RoundParticipationCard"),false);
+  uiFind(tree,n=>n.type==="button"&&uiText(n)==="Participación").props.onClick();tree=h.render("GolfRoundDetailView",props);assert.equal(uiNodes(tree).some(n=>n.type==="RoundParticipationCard"),true);
+  uiFind(tree,n=>n.type==="button"&&uiText(n)==="Tarjeta").props.onClick();tree=h.render("GolfRoundDetailView",props);assert.equal(uiNodes(tree).some(n=>n.type==="RoundParticipationCard"),false);assert.equal(uiNodes(tree).find(n=>n.type==="PremiumScorecard")?.props.holes,detail.card.scorecard);
+});
