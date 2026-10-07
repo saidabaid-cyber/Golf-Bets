@@ -149,6 +149,7 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
 const notificationLabels: Record<SocialNotification["type"], string> = { like: "Recibiste un like", comment: "Nuevo comentario", attest: "Un compañero atestó tu tarjeta", friend_achievement: "Un amigo consiguió un logro", equipment: "Un amigo actualizó su bolsa", friend_request: "Nueva solicitud de amistad", friend_accepted:"Solicitud aceptada",group_invite:"Invitación a un grupo",round_invite:"Invitación a una ronda",round_finished:"Resultados de ronda disponibles", round_started: "Un compañero inició una ronda contigo · Ver ronda", scorecard_ready: "Registraron tu tarjeta · Revisar tarjeta" };
 
 export function CloudSocialNotifications({ viewerId, accessToken, onFriends, onReadChange }: { viewerId: string; accessToken?: string; onFriends?: () => void; onReadChange?: () => void }) {
+  const navigation=useGolfNavigation();
   const { retryCloudSync } = useBackyardAccount();
   const [selectedRound, setSelectedRound] = useState<string | null>(null);
   const [items, setItems] = useState<SocialNotification[]>([]);
@@ -171,6 +172,12 @@ export function CloudSocialNotifications({ viewerId, accessToken, onFriends, onR
       void (async () => {
         const read = await socialRequest<SocialNotificationPage>("/api/social/notifications", accessToken, { method: "PATCH", body: { id: item.id, read: true } });
         if (live.current) { setItems(read.data); onReadChange?.(); }
+        if(navigation&&item.type!=="group_invite") {
+          if(item.type==="friend_request"||item.type==="friend_accepted"){if(item.person?.userId)navigation.open({kind:"player",id:item.person.userId});else onFriends?.();}
+          else if(["round_started","round_finished","round_invite","scorecard_ready"].includes(item.type))navigation.open({kind:"round",id:item.activityId,source:"shared"});
+          else navigation.open({kind:"activity",id:item.activityId});
+          return;
+        }
         if (item.type === "friend_request") { onFriends?.(); return; }
         if (item.type === "round_started" || item.type === "scorecard_ready") { if (live.current) { setSelected(null); setSelectedRound(item.activityId); } return; }
         const result = await socialRequest<{ data: SocialActivityCard }>(`/api/social/activity/${encodeURIComponent(item.activityId)}`, accessToken);

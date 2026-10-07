@@ -350,4 +350,5 @@ input,textarea,select{scroll-margin-block:80px calc(100px + env(safe-area-inset-
 
 /* Keep existing module layout and state while a dedicated golf object is open. */
 .golfModuleContent:not([hidden]){display:contents}
+.primaryHeader .editorialWordmark{font-size:clamp(21px,6.3vw,28px);white-space:nowrap}
 .golfModuleContent[hidden],[data-golf-object-active][hidden]{display:none}

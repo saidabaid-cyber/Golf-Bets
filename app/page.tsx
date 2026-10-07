@@ -488,6 +488,7 @@ function GolfBetsApp() {
   const unifiedGhinControl = { ...ghinControl, imports:ghinImports };
   const { tab, setTab, goBack, setNavigationGuard, historyDetailId, careerView, setCareerView, careerDetail, setCareerDetail } = useScreenNavigation();
   const objectNavigation = useGolfObjectNavigation(identity.userId);
+  const openGolfObject = objectNavigation.open;
   const { unread: groupNotificationsUnread } = useGroupNotificationsBadge(identity.accessToken, isPrimaryTab(tab));
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const [profileCompletionTarget, setProfileCompletionTarget] = useState<CompletionSection | null>(null);
@@ -511,9 +512,9 @@ function GolfBetsApp() {
     if (id && /^[0-9a-f-]{36}$/i.test(id)) {
       const url=new URL(location.href);url.searchParams.delete("friend");window.history.replaceState(window.history.state,"",url);
       try{sessionStorage.removeItem(PENDING_SOCIAL_KEY);}catch{/* The public URL remains sufficient. */}
-      setTab("welcome");objectNavigation.open({kind:"player",id});
+      setTab("welcome");openGolfObject({kind:"player",id});
     }
-  }, [identity.mode, identity.userId, setTab, objectNavigation.open]);
+  }, [identity.mode, identity.userId, setTab, openGolfObject]);
   const ownerClubChoices = useMemo(() => {
     if (typeof window === "undefined" || tab !== "round") return [];
     const loaded = loadEquipmentProfile(localStorage, identity.userId);
