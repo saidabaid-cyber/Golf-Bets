@@ -7,6 +7,7 @@ import "../../lib/gps-pilot-la-vista-1/pilot.css";
 import { getSupabaseBrowser } from "../../lib/supabase/client";
 import { GPS_PILOT_LOGIN_PATH, gpsReturnStorage, rememberGpsPilotReturn } from "../../lib/gps-pilot-la-vista-1/auth-return";
 import { watchGpsPilotSession, type PilotSessionState } from "../../lib/gps-pilot-la-vista-1/session";
+import imageReference from "../../lib/gps-pilot-la-vista-1/image-reference.json";
 
 type Access = { session: PilotSessionState; target: PilotTarget | null; status: "ready" | "denied" | "login" | "error"; message: string };
 export function GpsLaVistaPilot() {
@@ -49,7 +50,7 @@ export function GpsLaVistaPilot() {
   const target = currentAccess?.status === "ready" ? currentAccess.target : null;
   useEffect(() => {
     if (!root.current || !target) return;
-    return mountPilot(root.current, { target, imageUrl: "/gps-pilot-la-vista-1/reference.png" });
+    return mountPilot(root.current, { target, imageUrl: imageReference.imageUrl, imageReference });
   }, [target]);
   const needsLogin = session.status === "anonymous" || currentAccess?.status === "login";
   const hasError = session.status === "error" || currentAccess?.status === "error";

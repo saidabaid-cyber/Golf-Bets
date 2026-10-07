@@ -15,6 +15,12 @@ test("GPS provisional pilot: all 25 portable geodesic/location regressions", () 
   assert.match(output, /(?:#|ℹ) tests 25/); assert.match(output, /(?:#|ℹ) fail 0/);
 });
 
+test("GPS image: source georeferencing, camera alignment and local-only rendering", () => {
+  const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
+  const output = execFileSync(process.execPath, ["--test", "scripts/gps-la-vista-image.test.mjs"], { cwd: process.cwd(), encoding: "utf8", env });
+  assert.match(output, /(?:#|ℹ) tests 10/); assert.match(output, /(?:#|ℹ) fail 0/);
+});
+
 const nativeImport = new Function("specifier", "return import(specifier)") as (specifier: string) => Promise<{ pilotHostEnabled: (config: Record<string, unknown>) => boolean }>;
 const pilot = nativeImport(pathToFileURL(resolve("lib/gps-pilot-la-vista-1/pilot.mjs")).href);
 const target = JSON.parse(readFileSync("lib/gps-pilot-la-vista-1/target.json", "utf8"));
