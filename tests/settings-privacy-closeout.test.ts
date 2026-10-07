@@ -64,7 +64,7 @@ test("social header stays focused on player actions; admin remains accessible th
   const actions = nodes(tree).find((node) => node.props.className === "primaryHeaderActions")!;
   assert.equal(nodes(actions).filter((node) => node.type === "details").length,0);
   assert.match(readFileSync("app/components/profile-account-panel.tsx","utf8"),/adminAccess.hasAccess && <a[^>]*href="\/manage"[^>]*>Modo administrador/);
-  const menu = admin.AdminModeMenu();
+  const menu = admin.AdminModeMenu({});
   assert.match(text(menu), /Administrador/);
   assert.deepEqual(nodes(menu).filter((node) => node.type === "a").map((node) => [node.props.href, text(node)]), [["/", "Modo jugador"], ["/manage", "Modo administrador"]]);
   const logout = nodes(menu).find((node) => node.type === "button")!;
