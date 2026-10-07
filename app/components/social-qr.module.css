@@ -11,3 +11,12 @@
 .qr { max-width:310px;border-radius:var(--by-radius);background:#fff;box-shadow:var(--by-shadow-raised);border:1px solid var(--by-line); }
 .panel>h2 { font:400 30px/1.1 var(--by-editorial);color:var(--by-forest); }
 .panel>p { font-size:13px;line-height:1.6;color:var(--by-muted); }
+
+.compactCard{display:flex;align-items:center;gap:12px;width:100%;min-width:0;padding:13px 12px;border:1px solid var(--by-gold-line);border-radius:13px;background:var(--by-surface-warm);color:var(--by-forest);text-align:left;cursor:pointer;font:inherit}
+.compactCard>span:nth-child(2){display:grid;gap:3px;min-width:0;flex:1}.compactCard b{font:700 19px/1.2 var(--by-editorial);letter-spacing:-.3px}
+.compactCard strong{font:700 15px/1.2 var(--by-editorial);margin-top:2px;overflow-wrap:anywhere}.compactCard small{font-size:11px;line-height:1.4;color:var(--by-muted);overflow-wrap:anywhere}
+.compactCard>svg{flex-shrink:0}
+.compactCode{width:72px;height:72px;display:grid;place-items:center;flex-shrink:0;color:var(--by-gold)}
+.compactCode canvas{width:72px;height:72px}
+.compactCard:focus-visible{outline:2px solid var(--by-gold-line);outline-offset:3px}
+@media(max-width:360px){.compactCode,.compactCode canvas{width:62px;height:62px}.compactCard{gap:9px}.compactCard b{font-size:18px}}

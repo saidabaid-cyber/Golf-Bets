@@ -5,7 +5,8 @@ import { connectionState, type ConnectionPage, type SocialPerson } from "../../l
 import { filterCurrentFriends, rankFriendResults } from "../../lib/friends-discovery";
 import { socialRequest, socialErrorMessage } from "../../lib/social-activity-client";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
-import { PersonalQr, SocialQrScanner } from "./social-qr";
+import { PersonalQr, SocialQrScanner, CompactPersonalQr } from "./social-qr";
+import { BackyardIcon } from "./backyard-icon";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import styles from "./friends-hub.module.css";
 export type FriendsView = "list" | "add" | "search" | "nearby" | "requests" | "qr" | "scan";
@@ -22,11 +23,11 @@ function FriendRequestList({ requests, people, ownerId, sameClubIds, busy, onPro
     const person = people.find(p => p.user_id === (received ? request.requester_id : request.addressee_id));
     return <li key={request.id}>{person ? <button type="button" className={styles.person} onClick={() => void onProfile(person)}>
       <span className={styles.avatar}><ProfileAvatarMedia value={person.avatar_url} fallback={person.display_name[0] || "J"} /></span>
-      <span className={styles.identity}><b>{person.display_name}</b><small>@{person.username}</small>{sameClubIds.has(person.user_id) && <small className={styles.club}>Mismo club</small>}</span>
+      <span className={styles.identity}><b>{person.display_name}</b><small>@{person.username}</small>{person.club_name&&<small>{person.club_name}</small>}{sameClubIds.has(person.user_id) && <small className={styles.club}>Mismo club</small>}</span>
     </button> : <p>Jugador no disponible</p>}<div className={styles.actions}>{received ? <>
       <button className={styles.primary} type="button" disabled={busy} onClick={() => void onAction({ action: "ACCEPTED", id: request.id })}>Aceptar</button>
-      <button className={styles.secondary} type="button" disabled={busy} onClick={() => void onAction({ action: "REJECTED", id: request.id })}>Rechazar</button>
-    </> : <><span className={styles.state}>Pendiente</span><button className={styles.secondary} type="button" disabled={busy} onClick={() => void onAction({ action: "CANCELLED", id: request.id })}>Cancelar solicitud</button></>}</div></li>;
+      <button className={styles.secondary} type="button" disabled={busy} onClick={() => void onAction({ action: "REJECTED", id: request.id })}>Ignorar</button>
+    </> : <><span className={styles.state}><BackyardIcon name="clock" size={16}/>Pendiente</span><button className={styles.cancel} type="button" disabled={busy} onClick={() => void onAction({ action: "CANCELLED", id: request.id })}>Cancelar solicitud</button></>}</div></li>;
   })}</ul>;
 }
 export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onChanged, initialView = "list", name = "Jugador", username = "", avatar = "", embedded=false, onViewChange }: Props) {
@@ -35,6 +36,7 @@ export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onCh
   const [selected, setSelected] = useState<Person | null>(null), [sent, setSent] = useState<Person | null>(null);
   const [nearby, setNearby] = useState<Nearby[]>([]), [nearbyLabel, setNearbyLabel] = useState(""), [nearbyBusy, setNearbyBusy] = useState(true);
   const [message, setMessage] = useState(""), [loading, setLoading] = useState(true), [searching, setSearching] = useState(false), [busy, setBusy] = useState(false);
+  const [allSuggestions,setAllSuggestions]=useState(false);
   const lock = useRef(false), alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   useViewScrollReset(`${view}:${selected?.user_id ?? ""}:${sent?.user_id ?? ""}`);
@@ -75,7 +77,7 @@ export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onCh
   const ranked = rankFriendResults(results, query, sameClubIds, ownerId, data.blocked);
   const friends = data.friends.flatMap(id => { const person = data.people.find(item => item.user_id === id); return person ? [person] : []; });
   const pending = data.requests.filter(request => request.state === "PENDING");
-  const label = (person: Person) => <><span className={styles.avatar}><ProfileAvatarMedia value={person.avatar_url} fallback={person.display_name[0] || "J"} /></span><span className={styles.identity}><b>{person.display_name}</b><small>@{person.username}</small>{sameClubIds.has(person.user_id) && <small className={styles.club}>Mismo club</small>}</span></>;
+  const label = (person: Person) => <><span className={styles.avatar}><ProfileAvatarMedia value={person.avatar_url} fallback={person.display_name[0] || "J"} /></span><span className={styles.identity}><b>{person.display_name}</b><small>@{person.username}</small>{person.club_name&&<small>{person.club_name}</small>}{sameClubIds.has(person.user_id) && <small className={styles.club}>Mismo club</small>}</span></>;
   function open(next: FriendsView) { setSelected(null); setSent(null); setMessage(""); onCloseTarget?.(); setView(next); onViewChange?.(next); }
   const showProfile = useCallback(async (person: Person) => {
     setSelected(person); setMessage("");
@@ -96,18 +98,18 @@ export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onCh
   if(embedded && !selected && !sent && !["qr","scan"].includes(view)) return <section className={styles.screen} aria-label={view==="list"||view==="requests"?"Mis amigos":"Agregar amigos"}>
     {message&&<p className={styles.notice} role="status">{message}</p>}
     {view==="list"||view==="requests"?<>
-      <label className={styles.search}><span><input type="search" aria-label="Buscar entre mis amigos" placeholder="Buscar entre mis amigos" value={friendQuery} onChange={e=>setFriendQuery(e.target.value)} /></span></label>
-      <div className={styles.counts}><span><b>{data.friends.length}</b> amigos</span><span><b>{incoming.length}</b> solicitudes</span>{nearby.length>0&&<span><b>{nearby.length}</b> mismo club</span>}</div>
+      <label className={styles.search}><span><BackyardIcon name="search" size={21}/><input type="search" aria-label="Buscar entre mis amigos" placeholder="Buscar entre mis amigos" value={friendQuery} onChange={e=>setFriendQuery(e.target.value)} /></span></label>
+      <div className={styles.counts}><span><BackyardIcon name="players" size={25}/><span><b>{loading||message&&!friends.length?"—":data.friends.length}</b><small>amigos</small></span></span><span><BackyardIcon name="personAdd" size={25}/><span><b>{loading||message&&!friends.length?"—":incoming.length}</b><small>solicitudes</small></span></span>{nearby.length>0&&<span><BackyardIcon name="flag" size={25}/><span><b>{nearby.length}</b><small>en tu club</small></span></span>}</div>
       {incoming.length>0&&<section className={styles.panel}><h3>Solicitudes ({incoming.length})</h3><FriendRequestList requests={incoming} people={data.people} ownerId={ownerId} sameClubIds={sameClubIds} busy={busy} onProfile={showProfile} onAction={action} /></section>}
-      <section className={styles.panel}><h3>Mis amigos ({friends.length})</h3>{loading?<p role="status">Cargando amigos…</p>:friends.length?rows(filterCurrentFriends(friends,friendQuery)):<div className={styles.empty}><h3>Conecta con golfistas</h3><p>Encuentra compañeros para tu próxima ronda.</p><button type="button" className={styles.primary} onClick={()=>open("add")}>Buscar amigos</button></div>}</section>
-      {suggestions.length>0&&<section className={`${styles.panel} ${styles.coarse}`}><h3>Cerca de ti</h3><p className={styles.caption}>Golfistas de tu mismo club.</p>{rows(suggestions.slice(0,4),true)}</section>}
+      <section className={styles.panel}><h3>Mis amigos{!loading&&friends.length>0?` (${friends.length})`:""}</h3>{loading?<div className={styles.skeletonList} role="status" aria-label="Cargando amigos">{[0,1,2].map(i=><span key={i}/>)}</div>:message&&!friends.length?<div className={styles.empty}><p>No pudimos cargar tu comunidad.</p><button type="button" className={styles.secondary} onClick={()=>void refresh().then(()=>setMessage("")).catch(e=>setMessage(socialErrorMessage(e)))}>Reintentar</button></div>:friends.length?<>{rows(filterCurrentFriends(friends,friendQuery))}{!filterCurrentFriends(friends,friendQuery).length&&<p className={styles.caption}>No hay amigos que coincidan con tu búsqueda.</p>}</>:<div className={styles.empty}><BackyardIcon name="players" size={34}/><h3>El golf se disfruta juntos</h3><p>Encuentra compañeros para tu próxima ronda.</p><button type="button" className={styles.primary} onClick={()=>open("add")}>Buscar amigos</button></div>}</section>
+      {suggestions.length>0&&<section className={`${styles.panel} ${styles.coarse}`}><h3>En tu club</h3><p className={styles.caption}>Golfistas de tu mismo club.</p>{rows(suggestions.slice(0,4),true)}</section>}
     </>:<>
-      <label className={styles.search}>Buscar jugador<span><input type="search" placeholder="Nombre, @usuario o correo exacto" value={query} onChange={e=>setQuery(e.target.value)} /></span></label>
+      <label className={styles.search}><span><BackyardIcon name="search" size={21}/><input type="search" aria-label="Buscar jugador" placeholder="Busca por nombre, @usuario o email" value={query} onChange={e=>{setQuery(e.target.value);setMessage("");}} />{query&&<button type="button" aria-label="Limpiar búsqueda" onClick={()=>setQuery("")}>×</button>}</span></label>
       {query.trim().length>=2&&(searching?<p role="status">Buscando jugadores…</p>:ranked.length?rows(ranked,true):<p>No encontramos jugadores para esta búsqueda.</p>)}
-      <nav className={styles.qrOptions} aria-label="Agregar con QR"><button type="button" onClick={()=>open("scan")}><span aria-hidden="true">▦</span><b>Escanear QR</b><small>Cámara o galería</small></button><button type="button" onClick={()=>open("qr")}><span aria-hidden="true">▦</span><b>Mi QR</b><small>Comparte tu perfil</small></button></nav>
-      <section className={styles.panel}><h3>Sugeridos para ti</h3>{nearbyBusy?<p role="status">Consultando tu comunidad…</p>:suggestions.length?rows(suggestions.slice(0,6),true):<p className={styles.caption}>{nearbyLabel||"Encuentra jugadores por nombre o @usuario."}</p>}</section>
-      {suggestions.length>0&&<section className={`${styles.panel} ${styles.coarse}`}><h3>Cerca de ti</h3><p className={styles.caption}>Mismo club · sin ubicación exacta.</p>{rows(suggestions.slice(0,2),true)}</section>}
+      <nav className={styles.qrOptions} aria-label="Agregar con QR"><button type="button" onClick={()=>open("scan")}><BackyardIcon name="scan" size={32}/><span><b>Escanear QR</b><small>Escanea el código de otro golfista</small></span></button><button type="button" onClick={()=>open("qr")}><BackyardIcon name="qr" size={32}/><span><b>Mi QR</b><small>Comparte tu código para que te agreguen</small></span></button></nav>
+      <section className={styles.suggestions}><header className={styles.sectionHeader}><h3>Sugeridos para ti</h3>{suggestions.length>6&&<button type="button" aria-expanded={allSuggestions} onClick={()=>setAllSuggestions(v=>!v)}>{allSuggestions?"Ver menos":"Ver todos"}<BackyardIcon name="chevron" size={15}/></button>}</header>{nearbyBusy?<div className={styles.skeletonList} role="status" aria-label="Consultando tu comunidad"><span/><span/></div>:suggestions.length?<ul className={styles.suggestedGrid}>{(allSuggestions?suggestions:suggestions.slice(0,6)).map(person=><li key={person.user_id}><button type="button" className={styles.suggestedIdentity} onClick={()=>void showProfile(person)}><span className={styles.avatar}><ProfileAvatarMedia value={person.avatar_url} fallback={person.display_name[0]||"G"}/></span><b>{person.display_name}</b><small>@{person.username}</small>{sameClubIds.has(person.user_id)&&<small className={styles.club}>Mismo club</small>}</button><button type="button" className={styles.suggestedAdd} disabled={busy||loading} onClick={()=>void action({action:"request",target:person.user_id},person)}><BackyardIcon name="personAdd" size={18}/>Agregar</button></li>)}</ul>:<div className={styles.discoveryEmpty}><BackyardIcon name="players" size={26}/><p>{nearbyLabel||"Busca jugadores por nombre o @usuario para ampliar tu comunidad."}</p></div>}</section>
       <section className={styles.panel}><h3>Solicitudes enviadas</h3>{outgoing.length?<FriendRequestList requests={outgoing} people={data.people} ownerId={ownerId} sameClubIds={sameClubIds} busy={busy} onProfile={showProfile} onAction={action} />:<p className={styles.caption}>Tus solicitudes pendientes aparecerán aquí.</p>}</section>
+      <CompactPersonalQr userId={ownerId} name={name} username={username} onOpen={()=>open("qr")}/>
     </>}
   </section>;
   return <section className={styles.screen} aria-label="Amigos de Inicio">

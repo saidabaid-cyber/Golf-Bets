@@ -4,9 +4,16 @@ import QRCode from "qrcode";
 import { socialIdFromQr, socialOriginForBrowser, socialProfileLink } from "../../lib/social-connections";
 import { BottomBackAction } from "./bottom-back-action";
 import { ProfileAvatarMedia } from "./profile-avatar-media";
+import { BackyardIcon } from "./backyard-icon";
 import styles from "./social-qr.module.css";
 export const PENDING_SOCIAL_KEY="backyard-pending-social-profile-v1";
 export function CaptureSocialProfileLink(){useEffect(()=>{const id=socialIdFromQr(location.href,location.origin,process.env.NEXT_PUBLIC_APP_ORIGIN);if(id){try{sessionStorage.setItem(PENDING_SOCIAL_KEY,id);}catch{/* Keep URL available. */}}},[]);return null;}
+/** Same canonical profile link as the full QR card; no generated/demo identity. */
+export function CompactPersonalQr({userId,name,username,onOpen}:{userId:string;name:string;username:string;onOpen:()=>void}) {
+ const canvas=useRef<HTMLCanvasElement>(null),[ready,setReady]=useState(false),[failed,setFailed]=useState(false);
+ useEffect(()=>{let live=true;setReady(false);setFailed(false);try{const url=socialProfileLink(userId,socialOriginForBrowser(location.origin,process.env.NEXT_PUBLIC_APP_ORIGIN));if(canvas.current)void QRCode.toCanvas(canvas.current,url,{width:100,margin:1,color:{dark:"#103e2d",light:"#fcfcf8"},errorCorrectionLevel:"M"}).then(()=>{if(live)setReady(true);}).catch(()=>{if(live)setFailed(true);});}catch{setFailed(true);}return()=>{live=false;};},[userId]);
+ return <button type="button" className={styles.compactCard} onClick={onOpen} aria-label="Abrir tu QR de Backyard"><span className={styles.compactCode}><canvas ref={canvas} aria-label={`QR real del perfil de ${name}`} hidden={!ready}/>{!ready&&<BackyardIcon name="qr" size={38}/>}</span><span><b>Tu QR de Backyard</b><strong>{name}</strong>{username&&<small>@{username.replace(/^@/,"")}</small>}<small>{failed?"Abre Mi QR para reintentar.":"Compártelo para que te agreguen rápido."}</small></span><BackyardIcon name="chevron" size={20}/></button>;
+}
 export function PersonalQr({userId,name,username,avatar,onClose,backLabel="Social"}:{userId:string;name:string;username:string;avatar:string;onClose:()=>void;backLabel?:string}){
  const canvas=useRef<HTMLCanvasElement>(null),avatarElement=useRef<HTMLDivElement>(null),[link,setLink]=useState(""),[ready,setReady]=useState(false),[message,setMessage]=useState("");
  useEffect(()=>{let live=true;setReady(false);setMessage("");let url:string;try{url=socialProfileLink(userId,socialOriginForBrowser(location.origin,process.env.NEXT_PUBLIC_APP_ORIGIN));setLink(url);}catch{setLink("");setMessage("No pudimos crear un enlace estable para este entorno.");return()=>{live=false;};}
