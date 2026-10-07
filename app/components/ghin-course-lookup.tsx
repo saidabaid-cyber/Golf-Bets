@@ -18,6 +18,7 @@ export function GhinCourseLookup({ lookup }: { lookup: (input: GhinCourseLookupI
   const pending = useRef(false);
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("La Vista");
+  const [courseId, setCourseId] = useState("");
   const [error, setError] = useState("");
   const [data, setData] = useState<GhinCourseLookupResponse | null>(null);
   async function read(input: GhinCourseLookupInput) {
@@ -36,6 +37,10 @@ export function GhinCourseLookup({ lookup }: { lookup: (input: GhinCourseLookupI
     <form className={styles.authForm} onSubmit={event => { event.preventDefault(); void read({ operation: "search", name }); }}>
       <label>Campo GHIN<input value={name} maxLength={100} minLength={2} onChange={event => setName(event.target.value)} required /></label>
       <button type="submit" className="secondary" disabled={busy}>{busy ? "CONSULTANDO…" : "BUSCAR CAMPO GHIN"}</button>
+    </form>
+    <form className={styles.authForm} onSubmit={event => { event.preventDefault(); void read({ operation: "course", courseId }); }}>
+      <label>ID de campo GHIN<input value={courseId} inputMode="numeric" pattern="[0-9]{1,12}" maxLength={12} onChange={event => setCourseId(event.target.value)} required /></label>
+      <button type="submit" className="secondary" disabled={busy}>CONSULTAR POR ID</button>
     </form>
     <button type="button" className="textButton" disabled={busy} onClick={() => void read({ operation: "posting-profile" })}>VERIFICAR PERFIL PARA POSTING</button>
     {error && <p role="alert">{error}</p>}
