@@ -110,6 +110,7 @@ test("clearing Summary detail restores the overview without remounting visited p
 });
 test("tab navigation has linked ARIA states, five fixed columns, and no document anchors",()=>{
   const shared=readFileSync("app/components/career-shared.tsx","utf8"),hub=readFileSync("app/components/career-hub.tsx","utf8"),css=readFileSync("app/components/career-hub.module.css","utf8");
+  assert.match(css,/\.tabs\[hidden\]\{display:none\}/);
   assert.match(shared,/role="tablist"/);assert.match(shared,/role="tab"/);assert.match(shared,/aria-selected/);assert.match(shared,/ArrowRight/);assert.match(shared,/ArrowLeft/);assert.match(shared,/preventScroll:true/);
   assert.match(css,/\.tabs\{position:sticky/);assert.match(css,/--career-header-height/);assert.match(css,/grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/);assert.doesNotMatch(css.match(/\.tabs\{[^}]+\}/)?.[0]??"",/overflow-x:auto/);assert.match(css,/white-space:nowrap/);assert.match(css,/min-height:44px/);assert.match(css,/\.content\[hidden\]\{display:none\}/);
   assert.doesNotMatch(shared+hub,/scrollIntoView|href=["']#|getElementById/);
