@@ -1,0 +1,74 @@
+{
+  "id": "gps-pilot-la-vista-1-provisional-inegi-2010",
+  "type": "Point",
+  "description": "Punto interior candidato del green de La Vista, hoyo 1; no bandera ni centro medido.",
+  "coordinates": [
+    -98.2575688288626,
+    19.011854052471797
+  ],
+  "coordinateOrder": "longitude,latitude",
+  "status": "PROVISIONAL_NOT_FIELD_VERIFIED",
+  "candidate": true,
+  "isFlag": false,
+  "fieldVerifiedAt": null,
+  "absoluteAccuracyMeters": null,
+  "source": {
+    "provider": "INEGI",
+    "product": "E14B43d4",
+    "upc": "889463190707",
+    "imageryDate": "2010-01",
+    "url": "https://www.inegi.org.mx/app/biblioteca/ficha.html?upc=889463190707",
+    "sourceFrame": "ITRF92, epoch 1988.0; UTM zone 14 North; GRS80",
+    "pixelSizeMeters": 1,
+    "absoluteAccuracyMeters": null,
+    "zipSha256": "422f64b5f4058fcc2edb270a35e67781930c41765e181561f866c057de835493",
+    "bilSha256": "9e628c4efe8b747554c672ed00ea18879ed7f96bf240b6b825b6af10b93cbad1",
+    "cropPixelCenter": [
+      155,
+      631
+    ],
+    "originalPixelCenter": [
+      2175,
+      5645
+    ],
+    "utmMeters": [
+      578137.0,
+      2102304.0
+    ],
+    "sourceGeographicLongitudeLatitude": [
+      -98.2575688288626,
+      19.011854052471797
+    ],
+    "coordinateTransfer": "GRS80 inverse UTM. Approximate identity transfer of source geographic coordinates to device WGS84; NO datum/epoch correction or absolute precision claimed.",
+    "datumTransferUncertaintyMeters": null,
+    "attribution": "Fuente: INEGI, Ortofoto E14B43d4, enero de 2010. Recorte y señalamiento propios.",
+    "license": "INEGI Términos de Libre Uso; preserve source and metadata; original research retains terms evidence."
+  },
+  "documentaryIdentity": {
+    "status": "DOCUMENTARY_CANDIDATE",
+    "pdfSha256": "5c414b78492bf948187cd4014b559146f00b27c88f8d019b298b080e0cc1077e",
+    "pdfHolePanel": {
+      "page": 5,
+      "bbox": [
+        0,
+        396,
+        306,
+        792
+      ]
+    },
+    "basis": [
+      "asymmetric paired greenside bunkers",
+      "isolated mid-fairway bunker",
+      "lake beside tee",
+      "cart-path bends",
+      "surrounding residential road context"
+    ],
+    "evidence": "geographic-reference-search-20261006/la-vista-1-documentary-correspondence.png",
+    "osmFairwayAssigned": null,
+    "method": "Manual interior-pixel selection on georeferenced ortho after documentary correspondence review; NOT a transformation of PDF coordinates."
+  },
+  "referenceImage": "/gps-pilot-la-vista-1/reference.png",
+  "referenceImageSha256": "fbe7a831b0a2ba2d21d12f31da272977096c2f8806f30e0e76ee1ddff7590034",
+  "selectedAt": "2026-10-06T23:30:49.777462+00:00",
+  "warning": "Objetivo provisional; pendiente de comprobar en campo"
+}
