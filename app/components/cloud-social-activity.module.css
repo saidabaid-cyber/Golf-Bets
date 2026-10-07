@@ -90,3 +90,10 @@
 @media(max-width:360px){.card{padding:12px}.author{grid-template-columns:44px minmax(0,1fr) 24px;gap:8px}.avatar{width:44px;height:44px}.author b,.authorLink{font-size:18px}.roundStats{padding:10px}.roundStats>div{padding:0 4px}.roundStats b{font-size:21px}.roundStats .mainScore{min-width:80px}.mainScore strong{font-size:35px}.mainScore>span{margin-left:4px;padding:4px}.bagItem{grid-template-columns:42px 56px minmax(0,1fr);gap:6px}.bagItem b{font-size:12px}.bagItem small{font-size:11px}.leaderboard header{flex-wrap:wrap}}
 @media(min-width:600px){.card{padding:20px}.author b,.authorLink{font-size:22px}.roundStats{padding:16px}.roundStats b{font-size:27px}.mainScore strong{font-size:46px}.bagItem{grid-template-columns:58px 85px minmax(0,1fr);min-height:74px}.bagItem b{font-size:15px}}
 @media(prefers-reduced-motion:reduce){.skeletonPost span{animation:none}.actions button{transition:none}}
+.avatarButton{border:0;background:transparent;padding:0;border-radius:50%;cursor:pointer;flex:none}
+.scoreOpen{display:block;width:100%;border:0;background:transparent;padding:0;cursor:pointer;text-align:left;color:inherit}
+.leaderboardPlayer{flex:1;min-width:0;text-align:left;font:inherit;font-weight:600;color:inherit;border:0;background:transparent;min-height:44px;padding:0;cursor:pointer}
+.bagItem{width:100%;text-align:left;color:inherit;border:0;border-bottom:1px solid var(--by-line);background:transparent;cursor:pointer;grid-template-columns:50px 65px minmax(0,1fr) 16px}
+.highlightLabel{border:0;background:transparent;width:100%;text-align:left;cursor:pointer}
+.achievements li>button{border:0;background:transparent;color:inherit;font:inherit;padding:0;min-height:30px;cursor:pointer}
+@media(max-width:360px){.bagItem{grid-template-columns:42px 50px minmax(0,1fr) 14px;gap:6px}}

@@ -125,6 +125,10 @@ import { useGhinReadOnlyProfile } from "./components/use-ghin-read-only-profile"
 import { useGhinImportedScores } from "./components/use-ghin-imported-scores";
 import { selectedHandicapIndex } from "../lib/handicap-source";
 import { HomeDashboard, type ActiveRoundSummary } from "./components/home-dashboard";
+import { GolfNavigationContext, useGolfObjectNavigation } from "./components/golf-object-navigation";
+import { PremiumGolfStatistics, GolfCoachMetricContext } from "./components/premium-golf-statistics";
+import { GolfDetailSkeleton } from "./components/golf-detail-ui";
+const GolfObjectViews = dynamic(() => import("./components/golf-object-views").then(m => m.GolfObjectViews), { loading: () => <GolfDetailSkeleton/> });
 import { CareerHub } from "./components/career-hub";
 import { MyCoach } from "./components/my-coach";
 
@@ -483,6 +487,7 @@ function GolfBetsApp() {
   const ghinImports = useGhinImportedScores(identity.mode === "authenticated" ? identity.accessToken : null,ghinControl.enabled && ghinControl.ready,ghinControl.profile?.ghinNumber ?? "unlinked");
   const unifiedGhinControl = { ...ghinControl, imports:ghinImports };
   const { tab, setTab, goBack, setNavigationGuard, historyDetailId, careerView, setCareerView, careerDetail, setCareerDetail } = useScreenNavigation();
+  const objectNavigation = useGolfObjectNavigation(identity.userId);
   const { unread: groupNotificationsUnread } = useGroupNotificationsBadge(identity.accessToken, isPrimaryTab(tab));
   const [profileFocus, setProfileFocus] = useState<"profile" | "equipment">("profile");
   const [profileCompletionTarget, setProfileCompletionTarget] = useState<CompletionSection | null>(null);
@@ -503,8 +508,12 @@ function GolfBetsApp() {
     if (identity.mode !== "authenticated") return;
     let id = socialIdFromQr(location.href, location.origin);
     try { id ||= sessionStorage.getItem(PENDING_SOCIAL_KEY); } catch { /* URL remains usable. */ }
-    if (id && /^[0-9a-f-]{36}$/i.test(id)) { setSocialTarget(id); setFriendsInitialView("list"); setTab("friends"); }
-  }, [identity.mode, identity.userId, setTab]);
+    if (id && /^[0-9a-f-]{36}$/i.test(id)) {
+      const url=new URL(location.href);url.searchParams.delete("friend");window.history.replaceState(window.history.state,"",url);
+      try{sessionStorage.removeItem(PENDING_SOCIAL_KEY);}catch{/* The public URL remains sufficient. */}
+      setTab("welcome");objectNavigation.open({kind:"player",id});
+    }
+  }, [identity.mode, identity.userId, setTab, objectNavigation.open]);
   const ownerClubChoices = useMemo(() => {
     if (typeof window === "undefined" || tab !== "round") return [];
     const loaded = loadEquipmentProfile(localStorage, identity.userId);
@@ -1855,6 +1864,7 @@ function GolfBetsApp() {
   }
 
   function navigateFromBottomBar(target: AppTab) {
+    objectNavigation.clear();
     setFeedback("");
     if (target === "profile") setProfileFocus("profile");
     if (target === "social") setSocialInitialView("activity");
@@ -1885,7 +1895,7 @@ function GolfBetsApp() {
   }
 
   function openHistoricalRound(roundToOpenId: string) {
-    setTab("historyDetail", { roundId: roundToOpenId });
+    objectNavigation.open({kind:"round",id:roundToOpenId,source:"history"});
   }
 
   function newManualBet() {
@@ -3950,13 +3960,22 @@ function GolfBetsApp() {
 
   };
 
-  return <main className={`app backyardApp ${tab === "career" ? "careerModule" : ""} ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
+  return <GolfNavigationContext.Provider value={objectNavigation}><main className={`app backyardApp ${tab === "career" ? "careerModule" : ""} ${highContrast ? "highContrast" : ""} ${tab === "results" ? "compactResults" : ""}`}>
+    {objectNavigation.frames.length > 0 && <GolfObjectViews frames={objectNavigation.frames} viewerId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} history={history}
+      ownProfile={{user_id:identity.userId,display_name:identity.displayName,username:identity.username || "",avatar_url:identity.avatarUrl || null,club_name:identity.homeClub,city:identity.city,index:{value:accountIndex.source==="GHIN"&&unifiedGhinControl.profile?.associationStatus!=="VERIFIED"?null:accountIndex.value,label:accountIndex.source==="BACKYARD"?"BACKYARD INDEX":accountIndex.source==="GHIN"&&unifiedGhinControl.profile?.associationStatus==="VERIFIED"?"GHIN":"SIN ÍNDICE"}}}
+      onEditProfile={()=>{objectNavigation.clear();openProfileRoot();}} onStats={()=>objectNavigation.open({kind:"statistics",id:"mine"})} onManageRound={id=>{objectNavigation.clear();setTab("historyDetail",{roundId:id});}} onRules={()=>objectNavigation.open({kind:"rules",id:"mine"})}
+      statistics={statisticsReady?<PremiumGolfStatistics rounds={statisticsHistory} onBack={objectNavigation.back} onMore={()=>objectNavigation.open({kind:"analysis",id:"mine"})}/>:<GolfDetailSkeleton/>}
+      analysis={statisticsReady?<StatsDashboard insights={betaGolfInsights} rounds={statisticsHistory} consentOwnerId={identity.userId || undefined} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode==="authenticated"} onOpenHistory={()=>{objectNavigation.clear();setTab("history");}} onOpenRound={openHistoricalRound}/>:<GolfDetailSkeleton/>}
+      coach={context=><><GolfCoachMetricContext context={context} rounds={statisticsHistory} ready={statisticsReady}/><MyCoach availableOnly insights={betaGolfInsights} ready={statisticsReady} onBallFit={()=>{objectNavigation.clear();openCoachFitting(false);}} onLaunchMonitor={()=>{objectNavigation.clear();openCoachFitting(true);}} onProgress={objectNavigation.back} onEquipment={()=>{objectNavigation.clear();setProfileFocus("equipment");setTab("profile");}}/></>}
+      rules={<RulesPanel active courseName="" onBack={objectNavigation.back}/>}
+    />}
+    <div className="golfModuleContent" hidden={Boolean(objectNavigation.active)}>
     <FirstSocialExperience prompt={(tab === "welcome" && firstSocialExperience.prompt !== "roundGroup") || (tab === "setup" && !editingRound && firstSocialExperience.prompt === "roundGroup") ? firstSocialExperience.prompt : null} busy={firstSocialExperience.busy} error={firstSocialExperience.error}
       scoreOnly={roundPresentation.playMode === "score_only"} canBet={bettingConsentGranted} onFriends={() => void openFirstExperienceFriends()}
       onCreateGroup={() => void openFirstExperienceGroup()} onSkip={() => void skipFirstSocialExperience()} />
     <FeedbackDialog key={`feedback:${identity.userId}`} token={identity.accessToken} email={identity.email} screen={tab} />
-    {(isPrimaryTab(tab) || tab === "friends") && <PrimaryHeader tab={tab === "friends" ? "welcome" : tab} notificationCount={groupNotificationsUnread} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => setTab("welcome")} onNotifications={() => setTab("notifications")} />}
-    {!isPrimaryTab(tab) && tab !== "friends" && tab !== "round" && <header className="topbar">
+    {(isPrimaryTab(tab) || tab === "friends") && <PrimaryHeader tab={tab === "friends" ? "welcome" : tab} notificationCount={groupNotificationsUnread} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={()=>identity.mode==="authenticated"?objectNavigation.open({kind:"player",id:identity.userId}):openProfileRoot()} onHome={() => setTab("welcome")} onNotifications={() => setTab("notifications")} />}
+    {!isPrimaryTab(tab) && tab !== "friends" && tab !== "round" && tab !== "stats" && tab !== "notifications" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BackyardWordmark /></button>
       <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><ProfileNavigationButton avatarUrl={identity.avatarUrl} displayName={identity.displayName} onClick={openProfileRoot} /></div>
     </header>}
@@ -3971,11 +3990,11 @@ function GolfBetsApp() {
       onOpenFriends={() => openCareerFriends()}
       onPrivacy={() => openAccountSettings("privacy")}
       onOpenAchievements={() => { setCareerView("achievements"); }}
-      onOpenSocialProfile={id => openCareerFriends("list",id)}
+      onOpenSocialProfile={id => objectNavigation.open({kind:"player",id})}
       activeRound={globalRoundAvailable ? activeRoundSummary : null}
       onContinueRound={globalRoundAvailable ? resumeActiveRound : undefined}
     />}
-    {showPageBack && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
+    {showPageBack && tab !== "stats" && <button className="secondary pageBack" onClick={handlePageBack}>← Regresar</button>}
 
     {tab === "career" && <CareerHub displayName={identity.displayName} avatarUrl={identity.avatarUrl} userId={identity.userId} index={accountIndex} insights={betaGolfInsights} rounds={statisticsHistory} ready={statisticsReady} history={history} error={statisticsAuthority.state === "unavailable"} view={careerView} onView={setCareerView} detail={careerDetail} onDetail={setCareerDetail} onOpenStats={() => setTab("stats")} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} onCreateRound={requestNewRound} activeRoundId={roundClosed ? undefined : roundId} onResumeRound={row => {
       if (identity.mode !== "authenticated" || row.snapshot.scorekeeping?.organizerAccountUserId !== identity.userId) return;
@@ -4074,7 +4093,7 @@ function GolfBetsApp() {
     {tab === "notifications" && <NotificationCenter key={identity.userId} viewerId={identity.userId || "guest"} accessToken={identity.accessToken || undefined} onBack={handlePageBack} onPreferences={() => setTab("notificationPreferences")} onFriend={id => { if(id){const url=new URL(location.href);url.searchParams.set("friend",id);window.history.replaceState(window.history.state,"",url);} openCareerFriends(id ? "list" : "requests",id); }} />}
     {tab === "notificationPreferences" && <NotificationPreferences key={identity.userId} accessToken={identity.accessToken || undefined} onBack={() => setTab("notifications")} onMasterChange={changeNotifications} />}
     {tab === "balances" && <BalanceLedgerPanel history={history} currentUserId={identity.mode === "authenticated" ? identity.userId : undefined} />}
-    {tab === "stats" && (statisticsReady ? <StatsDashboard insights={betaGolfInsights} rounds={statisticsHistory} consentOwnerId={identity.userId || undefined} accessToken={identity.accessToken} requiresRemoteConsent={identity.mode === "authenticated"} onOpenHistory={() => setTab("history")} onOpenRound={openHistoricalRound} /> : <section className="card" role="status"><h1>Estadísticas</h1><p>{statisticsAuthority.state === "unavailable" ? statisticsAuthority.error : "Verificando tus estadísticas…"}</p><p>Tu histórico permanece intacto. No mostramos métricas anteriores hasta verificar la fecha de reinicio.</p><button type="button" className="secondary" onClick={() => setStatisticsRetry((value) => value + 1)}>Reintentar</button><button type="button" className="textButton" onClick={() => setTab("history")}>Ver Histórico</button></section>)}
+    {tab === "stats" && (statisticsReady ? <PremiumGolfStatistics rounds={statisticsHistory} onBack={handlePageBack} onMore={()=>objectNavigation.open({kind:"analysis",id:"mine"})}/> : <section className="card" role="status"><h1>Estadísticas</h1><p>{statisticsAuthority.state === "unavailable" ? statisticsAuthority.error : "Verificando tus estadísticas…"}</p><p>Tu histórico permanece intacto. No mostramos métricas anteriores hasta verificar la fecha de reinicio.</p><button type="button" className="secondary" onClick={() => setStatisticsRetry((value) => value + 1)}>Reintentar</button><button type="button" className="textButton" onClick={() => setTab("history")}>Ver Histórico</button></section>)}
     {tab === "courseLibrary" && <CourseLibrary key={`course-library-${identity.userId}`} permissionOwnerId={identity.userId} accessToken={identity.accessToken} courses={courses} favoriteCourseIds={favoriteCourseIds} recentCourseIds={recentCourseIds} selectedCourseId={courseSelected ? course.id : null} onToggleFavorite={(courseId) => setFavoriteCourseIds((current) => toggleFavoriteCourse(current, courseId))} onSelectCourse={(nextCourse) => selectRoundCourse(nextCourse, true)} onCreateCourse={startNewCourse} onEditCourse={editCourseFromLibrary} />}
 
     {feedback && <div className="notice" role="status">{roundSaveNotice(feedback, cloudStatus)}<button className="textButton" aria-label="Cerrar mensaje" onClick={() => setFeedback("")}>×</button></div>}
@@ -4672,7 +4691,7 @@ function GolfBetsApp() {
 
     {(rulesVisited || tab === "rules") && <div hidden={tab !== "rules"}><RulesPanel active={tab === "rules"} courseName={rulesCourseContext} localRules={isLaVistaCourse(rulesCourseContext) ? course.localRules : undefined} localRulesUpdatedAt={isLaVistaCourse(rulesCourseContext) ? course.localRulesUpdatedAt : undefined} onBack={goBack} /></div>}
     {tab === "pollaLive" && <PollaLivePanel courses={courses} privateRound={{ active: draftAvailable && players.length > 0, players }} />}
-    {showPageBack && tab !== "courses" && <BottomBackAction label="← Regresar" onBack={handlePageBack} />}
+    {showPageBack && tab !== "courses" && tab !== "stats" && <BottomBackAction label="← Regresar" onBack={handlePageBack} />}
 
     {groupRoundSelection && <GroupRoundSelector group={groupRoundSelection} onCancel={() => setGroupRoundSelection(null)} onConfirm={(selectedMemberIds) => confirmFrequentGroupRoundSelection(groupRoundSelection, selectedMemberIds)} />}
 
@@ -4715,8 +4734,9 @@ function GolfBetsApp() {
 
     {savedRivalToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-rival-title" aria-describedby="delete-rival-description"><ModalCloseButton onClose={() => setSavedRivalToDelete(null)} /><h2 id="delete-rival-title">¿Eliminar rival guardado?</h2><p id="delete-rival-description">Esto solamente lo eliminará de tu lista de rivales para futuras apuestas personales. No afectará rondas ni resultados anteriores.</p><div className="dialogActions"><button className="secondary" onClick={() => setSavedRivalToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={() => { recordCloudDeletion(localStorage, "rival", savedRivalToDelete.id); setSavedPersonalRivals((templates) => removeSavedPersonalRivalTemplate(templates, savedRivalToDelete.id)); if (editingSavedRivalId === savedRivalToDelete.id) { setEditingSavedRivalId(null); setSavedRivalDraft(null); } setSavedRivalToDelete(null); }}>Eliminar</button></div></section></div>}
 
-    {tab !== "round" && <AppBottomNav activeTab={tab} onNavigate={navigateFromBottomBar} onResumeRound={globalRoundAvailable ? resumeActiveRound : undefined} />}
-  </main>;
+    </div>
+    {(tab !== "round" || objectNavigation.active) && <AppBottomNav activeTab={objectNavigation.active?.kind==="coach"?"coach":objectNavigation.active?.kind==="rules"?"rules":tab} onNavigate={navigateFromBottomBar} onResumeRound={globalRoundAvailable ? resumeActiveRound : undefined} />}
+  </main></GolfNavigationContext.Provider>;
 }
 
 export default function Page() {

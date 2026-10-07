@@ -12,6 +12,7 @@ import { RoundParticipationCard } from "./round-participation-card";
 import { SocialRoundActivityCard } from "./cloud-social-activity";
 import { BackyardIcon } from "./backyard-icon";
 import styles from "./notification-center.module.css";
+import { useGolfNavigation } from "./golf-object-navigation";
 
 type Detail = {kind:"round"|"activity"|"group";id:string};
 function detailFromUrl(): Detail|null {
@@ -35,6 +36,7 @@ export function NotificationRow({item,busy,onOpen,onRead,onFriend,onGroupAccept}
   </li>;
 }
 export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,onFriend}:{viewerId:string;accessToken?:string;onBack:()=>void;onPreferences:()=>void;onFriend:(id?:string)=>void}) {
+  const navigation=useGolfNavigation();
   const {retryCloudSync}=useBackyardAccount();
   const [events,setEvents]=useState<SocialNotification[]>([]),[prefs,setPrefs]=useState<EventPreferencePage|null>(null),[cursor,setCursor]=useState<string|null>(null);
   const [filter,setFilter]=useState<NotificationFilter>("Todas"),[message,setMessage]=useState(""),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[loadingMore,setLoadingMore]=useState(false);
@@ -83,7 +85,8 @@ export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,on
   async function open(item:NotificationItem) {
     const kind=notificationDestination(item);
     if(item.unread)await read(item,true);
-    if(kind === "friend"){onFriend(item.personId);return;}
+    if(kind === "friend"){if(navigation&&item.personId)navigation.open({kind:"player",id:item.personId});else onFriend(item.personId);return;}
+    if(navigation && kind!=="group") { navigation.open(kind==="round"?{kind:"round",id:item.resourceId,source:"shared"}:{kind:"activity",id:item.resourceId}); return; }
     const next={kind,id:item.invitation?.id || item.resourceId};writeDetail(next);setDetail(next);
   }
   async function friend(item:NotificationItem,action:"ACCEPTED"|"REJECTED") {
