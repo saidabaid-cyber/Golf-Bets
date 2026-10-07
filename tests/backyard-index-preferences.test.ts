@@ -11,7 +11,7 @@ function store() {
 function authClient(userId = preference.userId, initial: unknown = undefined) {
   let metadata: Record<string, unknown> = { unrelated: "preserved", [BACKYARD_INDEX_METADATA_KEY]: initial };
   let writes = 0;
-  return { get writes() { return writes; }, get metadata() { return metadata; }, client: { auth: {
+  return { get writes() { return writes; }, get metadata() { return metadata; }, client: { from() { const query = { select() { return query; }, eq() { return query; }, maybeSingle: async () => ({data:null,error:null}) }; return query; }, auth: {
     getUser: async () => ({ data: { user: { id: userId, user_metadata: metadata } }, error: null }),
     updateUser: async ({ data }: { data: Record<string, unknown> }) => { writes += 1; metadata = { ...metadata, ...data }; return { data: { user: { id: userId, user_metadata: metadata } }, error: null }; },
   } } as unknown as SupabaseClient };

@@ -20,7 +20,7 @@ test("Backyard Index card shows actual eligible-record and differential counts w
   assert.match(card, /summary\?\.recentRoundCount \?\? 0\} \/ 20/);
   assert.match(card, /summary\?\.usedCount \?\? 0/);
   assert.match(card, /mejores diferenciales/);
-  assert.match(card, /calculateBackyardIndex\(history, userId\)/);
+  assert.match(card, /calculateBackyardIndex\(history, userId, resetAt\)/);
 });
 
 test("Index opt-in explains local PCC and does not treat older enabled preference as a declaration", () => {

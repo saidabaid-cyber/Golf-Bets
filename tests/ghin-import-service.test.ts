@@ -46,6 +46,16 @@ test("private server pages bound provider data, preserve all links and aggregate
   const page=s.importPage({records,syncedAt:"2026-10-06"},0);assert.equal(page.items.length,20);assert.equal(page.nextCursor,"20");assert.equal(page.grossTotals[18].rounds,43);assert.equal(page.grossTotals[18].sum,43*82);
   assert.equal(s.importPage({records,syncedAt:"2026-10-06"},40).items.length,5);
 });
+test("retained latest-20 presentation preserves linked Backyard provenance even if its provider card is older",()=>{
+  const s=service();
+  const retained=Array.from({length:20},(_,i)=>({...normalized,id:`retained-${i}`,match:"GHIN_ONLY",linkedRoundId:null}));
+  const older={...normalized,id:"old-posted",match:"EXACT_MATCH",linkedRoundId:"canonical-round",linkedLocalId:"local-round",postingFingerprint:"a".repeat(64)};
+  const page=s.importPage({records:retained,historicalLinks:[older],syncedAt:"2026-10-06"},0);
+  assert.equal(page.total,20);assert.equal(page.items.length,20);assert.equal(page.nextCursor,null);
+  assert.equal(page.links.length,1);assert.equal(page.links[0].linkedRoundId,"canonical-round");
+  const unified=reconciliation.unifiedGhinHistory([{id:"local-round",date:normalized.playedOn!,courseName:"QA Club",teeName:"Blancas",holes:18,gross:82,lifecycle:"completed"}],[...page.items,...page.links]);
+  assert.equal(unified.filter(r=>r.origin==="BACKYARD + GHIN").length,1);
+});
 test("provider UI is read-only, labels adjusted-only scores honestly and has no dead open CTA",()=>{
   const h=socialUI("app/components/ghin-import-history.tsx",{"score-reconciliation":reconciliation,"career-statistics":{careerDate:(v:any)=>v,careerNumber:(v:any)=>v??"—"}});
   const entry={id:"ghin:p",date:"2026-10-05",courseName:"QA Club",teeName:"Blancas",holes:18,gross:null,origin:"GHIN",backyardId:null,provider:{...normalized,grossScore:null,adjustedGrossScore:81,match:"GHIN_ONLY"}};

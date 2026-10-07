@@ -96,6 +96,17 @@ test("route blocks unverified, missing session, missing mapping, wrong fingerpri
   for(const options of [{verified:false},{session:false},{mapping:false},{versionChange:true}]){const h=routeHarness(options);const r=await h.run({operation:"post",roundId,fingerprint:"a".repeat(64),confirm:true});assert.ok(r.status>=400);assert.equal(h.counts.posts,0);}
   const h=routeHarness();const r=await h.run({operation:"post",roundId,fingerprint:"a".repeat(64),confirm:true});assert.equal(r.body.code,"CANDIDATE_CHANGED");assert.equal(h.counts.posts,0);
 });
+test("retained successful receipt blocks repost after unlink/relink before session or upstream access",async()=>{
+  const options={verified:true,session:true};
+  const h=routeHarness(options),dry=await h.run({operation:"dry-run",roundId});
+  await h.run({operation:"post",roundId,fingerprint:dry.body.fingerprint,confirm:true});
+  const before=h.counts;
+  options.verified=false;
+  assert.ok((await h.run({operation:"dry-run",roundId})).status>=400);
+  options.verified=true;options.session=false;
+  assert.equal((await h.run({operation:"dry-run",roundId})).body.code,"ALREADY_POSTED");
+  assert.deepEqual(h.counts,before);assert.equal(h.receipt.provider_score_id,"789");
+});
 test("explicit confirmation and request ownership fields are checked before any upstream reads",async()=>{
   const h=routeHarness();for(const body of [{operation:"post",roundId,confirm:false,fingerprint:"a".repeat(64)},{operation:"post",roundId,confirm:true,fingerprint:"a".repeat(64),ownerId:"other"},{operation:"dry-run",roundId,golferId:"other"}])assert.equal((await h.run(body)).status,400);assert.equal(h.counts.reads,0);
 });

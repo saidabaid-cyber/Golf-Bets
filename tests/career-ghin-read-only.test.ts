@@ -72,7 +72,8 @@ test("0 eligible Backyard cards plus GHIN scores keeps zero percent and the fixe
 test("GHIN summaries remain read-only and Backyard Index reads only Backyard history",()=>{
   const code=readFileSync("app/components/career-ghin-scores.tsx","utf8")+readFileSync("app/components/career-index-panel.tsx","utf8");
   assert.doesNotMatch(code,/rounds_cloud|RoundSnapshot|localStorage|score-posting|submitScore|postScore|careerAttestSummary\(/);
-  assert.match(code,/calculateBackyardIndex\(props.history\?\?props.rounds,props.userId\)/);
+  assert.match(code,/backyardIndexTimeline\(props.history\?\?props.rounds,props.userId,props.index.resetAt\)/);
+  assert.doesNotMatch(code,/Backyard Index conservado/);
   const hook=readFileSync("app/components/use-ghin-read-only-profile.ts","utf8");
   assert.match(hook,/post\(\{ operation: "scores" \}\)/);assert.doesNotMatch(hook,/\/api\/profile\/ghin\/scores|postScore|submitScore|score-posting/);
   const endpoint=readFileSync("app/api/profile/ghin/route.ts","utf8");

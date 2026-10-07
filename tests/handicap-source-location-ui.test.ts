@@ -184,7 +184,7 @@ test("Perfil removes the complete Backyard card while a verified GHIN is linked"
 
 test("BACKYARD activation persists source and enabled server-side and reload/new device sees it", async () => {
   let metadata: Record<string, unknown> = {};
-  const client = { auth: { getUser: async () => ({ error: null, data: { user: { id: "owner", user_metadata: metadata } } }), updateUser: async ({ data }: { data: Record<string, unknown> }) => { metadata = { ...metadata, ...data }; return { error: null, data: { user: { id: "owner", user_metadata: metadata } } }; } } } as unknown as SupabaseClient;
+  const client = { from() { const query = { select() { return query; }, eq() { return query; }, maybeSingle: async () => ({data:null,error:null}) }; return query; }, auth: { getUser: async () => ({ error: null, data: { user: { id: "owner", user_metadata: metadata } } }), updateUser: async ({ data }: { data: Record<string, unknown> }) => { metadata = { ...metadata, ...data }; return { error: null, data: { user: { id: "owner", user_metadata: metadata } } }; } } } as unknown as SupabaseClient;
   const preference: BackyardIndexPreference = { version: 1, userId: "owner", enabled: true, handicapSource: "BACKYARD", updatedAt: "2026-09-16T12:00:00.000Z", localPccZeroDeclaredAt: "2026-09-16T12:00:00.000Z" };
   await saveCloudIndexPreference(client, preference);
   assert.deepEqual(metadata[BACKYARD_INDEX_METADATA_KEY], preference);
