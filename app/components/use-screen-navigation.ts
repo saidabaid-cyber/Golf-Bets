@@ -51,7 +51,7 @@ export function useScreenNavigation() {
     const href = screenHref(target, search.toString(), options?.roundId, view);
     if (target === current.current && href === `${window.location.pathname}${window.location.search}`) return;
     trail.current.push({ tab: current.current, scroll: window.scrollY });
-    window.history.pushState({ ...window.history.state, backyardTab: target }, "", href);
+    window.history.pushState({ ...window.history.state, backyardTab: target, backyardCareerDetail: false }, "", href);
     selectHistoricalRound(historicalRoundIdFromSearch(href.slice(1)));
     current.current = target;
     selectedCareer.current = view;
@@ -62,12 +62,14 @@ export function useScreenNavigation() {
   const setCareerView = useCallback((view: CareerView) => setTab("career", { careerView: view }), [setTab]);
   const setCareerDetail = useCallback((detail: CareerDetail) => {
     if (current.current !== "career" || selectedCareer.current !== "summary") return;
+    // A detail opened here returns to its actual parent; direct links return to Resumen.
+    if (!detail && window.history.state?.backyardCareerDetail) { window.history.back(); return; }
     const search = new URLSearchParams(window.location.search);
     if (detail) search.set("careerDetail", detail); else search.delete("careerDetail");
     const href = screenHref("career", search.toString(), undefined, "summary");
     showCareerDetail(detail);
     if (href !== `${window.location.pathname}${window.location.search}`)
-      window.history.pushState({ ...window.history.state, backyardTab: "career" }, "", href);
+      window.history.pushState({ ...window.history.state, backyardTab: "career", backyardCareerDetail: !!detail }, "", href);
   }, []);
   const setNavigationGuard = useCallback((nextGuard?: NavigationGuard) => {
     guard.current = nextGuard ?? ((next) => next);

@@ -76,14 +76,15 @@ test("only visited views mount, retain stable panel identities, and do not remou
   assert.equal(uiFind(tree,n=>n.props.id==="career-panel-tournaments").props.hidden,true);
   const before=h.scrollKeys.length;h.render();assert.equal(h.scrollKeys.length,before);
 });
-test("existing Index/Atest deep links remain details of Resumen, with tabs always available",()=>{
+test("Index/Atest deep links use a dedicated header and return to the preserved five Career tabs",()=>{
   for(const detail of ["index","attest"] as const){
     const h=shell(`?screen=career&career=summary&careerDetail=${detail}`);let tree=h.render();
     assert.equal(uiFind(tree,n=>n.type==="CareerIndexPanel").props.detail,detail);
-    assert.ok(uiNodes(tree).some(n=>n.type==="CareerTabs"));
+    assert.equal(uiFind(tree,n=>n.type==="CareerTabs").props.hidden,true);
     assert.equal(uiFind(tree,n=>n.type==="CareerOverview").props.displayName,"QA Owner");
     const summary=uiFind(tree,n=>n.type==="CareerOverview"),container=uiNodes(tree).find(n=>n.props.children===summary);
     assert.equal(container?.props.hidden,true);
+    h.props.onDetail(null);tree=h.render();assert.equal(uiFind(tree,n=>n.type==="CareerTabs").props.hidden,false);
     h.select(tree,"achievements");tree=h.render();assert.equal(new URLSearchParams(h.location.search).has("careerDetail"),false);
     assert.equal(h.selected(tree)[0].props.id,"career-panel-achievements");
     h.pop(`?screen=career&career=summary&careerDetail=${detail}`);tree=h.render();

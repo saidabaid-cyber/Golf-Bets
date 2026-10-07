@@ -45,7 +45,7 @@ export function CareerHub(props: CareerHubProps) {
     const measure=()=>screen.style.setProperty("--career-header-height",`${header.getBoundingClientRect().height}px`);
     measure();
     const observer=new ResizeObserver(measure);observer.observe(header);return()=>observer.disconnect();
-  },[]);
+  },[selectedDetail]);
   function selectView(view:CareerView){props.onView(view);}
   const opened=useRef(""),viewed=useRef("");
   useEffect(()=>{
@@ -55,7 +55,7 @@ export function CareerHub(props: CareerHubProps) {
     if(viewed.current!==key){viewed.current=key;recordCareerEvent("career_tab_viewed",props.view,props.accessToken);}
   },[props.userId,props.view,props.accessToken]);
   const data={...props,onOpenRound:(id:string)=>{recordCareerEvent("round_opened",props.view,props.accessToken);props.onOpenRound(id);}};
-  return <section ref={root} className={styles.screen} aria-label="Carrera"><CareerTabs view={props.view} onView={selectView}/>
+  return <section ref={root} className={styles.screen} aria-label="Carrera"><CareerTabs view={props.view} onView={selectView} hidden={!!selectedDetail}/>
     {CAREER_TABS.filter(tab=>views.includes(tab.id)||tab.id===props.view).map(tab=><div key={`${props.userId}:${tab.id}`} className={styles.content} role="tabpanel" id={`career-panel-${tab.id}`} aria-labelledby={`career-tab-${tab.id}`} hidden={props.view!==tab.id} tabIndex={0}>
       {tab.id==="summary"?<><CareerIndexPanel props={data} detail={selectedDetail} onDetail={props.onDetail}/><div className={styles.content} hidden={!!selectedDetail}>{!props.ready&&!props.error?<CareerSkeleton/>:<CareerOverview {...data}/>}</div></>:tab.id==="tournaments"?<CareerTournaments {...data}/>:!props.ready&&!props.error?<CareerSkeleton/>:props.error?<CareerErrorState onRetry={props.onRetry}/>:tab.id==="achievements"?<CareerAchievements {...data}/>:tab.id==="rivalries"?<CareerRivalries {...data}/>:<CareerRounds {...data}/>}
     </div>)}

@@ -60,6 +60,16 @@ test("all five Carrera tabs survive direct reload and browser Back within the sa
   for(const tab of careerNavigation.CAREER_TABS){render().setCareerView(tab.id);assert.equal(render().careerView,tab.id);render=mount(browser);assert.equal(render().careerView,tab.id);}
   browser.history.back();assert.equal(render().careerView,"rounds");assert.equal(render().tab,"career");
 });
+test("HCP → latest 20 → Back returns to HCP, then the Career summary; direct details stay in-app",()=>{
+  const browser=browserAt("?screen=career&career=summary&filter=keep"),render=mount(browser);
+  render().setCareerDetail("index");render().setCareerDetail("attest");
+  assert.equal(render().careerDetail,"attest");render().setCareerDetail(null);
+  assert.equal(render().careerDetail,"index");render().setCareerDetail(null);
+  assert.equal(render().careerDetail,null);assert.equal(render().tab,"career");
+  assert.equal(new URLSearchParams(browser.location.search).get("filter"),"keep");
+  const direct=mount(browserAt("?screen=career&career=summary&careerDetail=attest"));
+  direct().setCareerDetail(null);assert.equal(direct().careerDetail,null);assert.equal(direct().tab,"career");
+});
 test("switching from an index detail clears only the detail and Back/Forward restore section URLs",()=>{
   const browser=browserAt("?screen=career&career=summary&careerDetail=attest&unrelated=keep"),render=mount(browser);
   render().setCareerView("achievements");

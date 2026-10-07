@@ -11,7 +11,7 @@ export function GolfEmptyState({ title, copy, retry }: { title: string; copy: st
   return <div className={styles.empty} role={retry ? "status" : undefined}><BackyardIcon name="flag" size={32}/><h2>{title}</h2><p>{copy}</p>{retry && <button type="button" className={styles.primary} onClick={retry}>Reintentar</button>}</div>;
 }
 export function GolfDetailSkeleton({ profile = false }: { profile?: boolean }) {
-  return <div className={styles.skeleton} role="status" aria-label={profile ? "Cargando perfil" : "Cargando ronda"}><div className={styles.skeletonIdentity}><i/><div><i/><i/></div></div><div className={styles.skeletonMetrics}>{[0,1,2,3].map(n => <i key={n}/>)}</div>{[0,1,2,3,4,5].map(n => <i className={styles.skeletonRow} key={n}/>)}</div>;
+  return <div className={styles.skeleton} role="status" aria-label={profile ? "Cargando perfil" : "Cargando información"}><div className={styles.skeletonIdentity}><i/><div><i/><i/></div></div><div className={styles.skeletonMetrics}>{[0,1,2,3].map(n => <i key={n}/>)}</div>{[0,1,2,3,4,5].map(n => <i className={styles.skeletonRow} key={n}/>)}</div>;
 }
 export function golfDate(value: string) {
   const date = new Date(value.length === 10 ? `${value}T12:00:00Z` : value);
