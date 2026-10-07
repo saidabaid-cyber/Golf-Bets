@@ -2,6 +2,20 @@ import type { CSSProperties } from "react";
 
 /** Decorative line art, not product photography. Labels belong to the control. */
 const paths = {
+  search: "M21 21l-5-5M18 10.5a7.5 7.5 0 1 1-15 0 7.5 7.5 0 0 1 15 0Z",
+  heart: "M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z",
+  comment: "M21 11.5a9 9 0 0 1-9 9 10 10 0 0 1-4-.9L3 21l1.4-5a9 9 0 1 1 16.6-4.5Z",
+  more: "M5 12h.01M12 12h.01M19 12h.01",
+  chevron: "m9 5 7 7-7 7",
+  back: "m15 5-7 7 7 7",
+  info: "M12 11v6M12 7h.01M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+  shield: "M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Zm-4 9 3 3 5-6",
+  trophy: "M7 3h10v6a5 5 0 0 1-10 0V3Zm0 2H3v3a4 4 0 0 0 4 4m10-7h4v3a4 4 0 0 1-4 4M12 14v6M8 21h8",
+  qr: "M3 3h6v6H3V3Zm12 0h6v6h-6V3ZM3 15h6v6H3v-6Zm12 0h2v2h-2v-2Zm6 0v4h-4v2m-5-9h4m5 0h-2M12 3v2m0 4v3M3 12h6m3 4v5",
+  scan: "M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5M7 7h10v10H7V7Zm-2 5h14",
+  personAdd: "M15 21v-3a5 5 0 0 0-10 0v3m5-13a3 3 0 1 0 0-6 3 3 0 0 0 0 6m9 1v6m-3-3h6",
+  clock: "M12 7v5l4 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z",
+  bars: "M5 20v-6m7 6V8m7 12V3",
   flag: "M5 21V3m0 0c5-4 9 5 15 1v10c-6 4-10-5-15-1",
   score: "M5 3h14v18H5zM8 7h8M8 11h3m3 0h2m-8 4h3m3 0h2",
   players: "M16 21v-3a5 5 0 0 0-10 0v3m5-13a3 3 0 1 0 0-6 3 3 0 0 0 0 6m7 3a4 4 0 0 1 4 4v4M18 2a3 3 0 0 1 0 6",

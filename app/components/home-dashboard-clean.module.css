@@ -1,6 +1,7 @@
-.home{display:grid;gap:20px;min-width:0;overflow:visible;padding-bottom:24px;color:#123e30}
-.selector{display:grid;grid-template-columns:1fr 1fr 1.25fr;gap:4px;background:#edf0e8;border-radius:28px;padding:4px;min-width:0}
-.selector button{border:0;background:transparent;color:#375248;min-height:44px;padding:8px 5px;font:inherit;font-size:13px;font-weight:600;line-height:1.25;border-radius:24px;cursor:pointer}
+.home{display:grid;gap:16px;min-width:0;overflow:visible;padding-bottom:24px;color:var(--by-forest)}
+.selector{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:4px;background:#edf0e8;border:1px solid #e4e8df;border-radius:28px;padding:3px;min-width:0}
+.selector button{display:flex;align-items:center;justify-content:center;gap:6px;border:0;background:transparent;color:#375248;min-height:44px;padding:8px 5px;font:inherit;font-size:14px;font-weight:500;line-height:1.25;border-radius:24px;cursor:pointer;transition:background-color .15s,color .15s}
+.selector svg{flex-shrink:0}
 .selector button[aria-current=page]{background:#064832;color:#fff;box-shadow:0 2px 5px #123d3020}
 .selector .addFriends{border:1px solid #b49850;color:#816520;background:#fffdf7}
 .selector .addFriends[aria-current=page]{background:#846422;color:#fff}
@@ -10,3 +11,5 @@
 .continueRound small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#52695e}
 .continueRound:focus-visible{outline:2px solid #064832;outline-offset:3px}
 @media(min-width:600px){.selector button{font-size:15px}}
+@media(max-width:360px){.selector button{font-size:13px;gap:3px}.selector svg{width:16px;height:16px}}
+@media(prefers-reduced-motion:reduce){.selector button{transition:none}}

@@ -9,6 +9,8 @@
   --by-space-4: 16px; --by-space-5: 24px; --by-space-6: 32px;
   --by-radius-sm: 12px; --by-radius: 20px; --by-radius-lg: 28px;
   --by-shadow: 0 8px 28px #173f2a08; --by-shadow-raised: 0 16px 44px #173f2a12;
+  --by-gold-line: #c4a65d; --by-gold-soft: #fbf4e3;
+  --by-surface-warm: #fcfcf8; --by-positive: #eaf2e7;
   --by-touch: 48px;
   --bg: var(--by-ivory); --card: var(--by-paper); --ink: var(--by-ink);
   --muted: var(--by-muted); --line: var(--by-line); --green: var(--by-forest);

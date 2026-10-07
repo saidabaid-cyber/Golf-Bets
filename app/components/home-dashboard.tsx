@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FriendsHub, type FriendsView } from "./social-connections-panel";
 import { homeSocialHref, homeSocialViewFromSearch, type HomeSocialView } from "../../lib/home-social-navigation";
 import { CloudSocialActivity } from "./cloud-social-activity";
+import { BackyardIcon } from "./backyard-icon";
 import styles from "./home-dashboard-clean.module.css";
 
 export type ActiveRoundSummary = {
@@ -30,7 +31,7 @@ export function HomeDashboard({ displayName, avatarUrl, identityUserId, accessTo
   useEffect(() => { if(friendsEntry || targetId) setView(friendsInitialView === "add" || friendsInitialView === "search" ? "add-friends" : "friends"); else setView(homeSocialViewFromSearch(location.search)); }, [friendsEntry,friendsInitialView,targetId]);
   function select(next:HomeSocialView) { setView(next); onCloseTarget?.(); window.history.pushState({...window.history.state,backyardTab:"welcome"},"",homeSocialHref(next,location.search)); window.scrollTo({top:0}); }
   return <section className={styles.home} data-home-version="social-home" aria-label="Inicio social">
-    <nav className={styles.selector} aria-label="Secciones de Inicio">{([['feed','Feed'],['friends','Amigos'],['add-friends','Agregar amigos']] as const).map(([id,label])=><button type="button" key={id} aria-current={view===id?"page":undefined} className={id==="add-friends"?styles.addFriends:undefined} onClick={()=>select(id)}>{label}</button>)}</nav>
+    <nav className={styles.selector} aria-label="Secciones de Inicio">{([['feed','Feed'],['friends','Amigos'],['add-friends','Agregar amigos']] as const).map(([id,label])=><button type="button" key={id} aria-current={view===id?"page":undefined} className={id==="add-friends"?styles.addFriends:undefined} onClick={()=>select(id)}>{id==="add-friends"&&<BackyardIcon name="personAdd" size={19}/>}<span>{label}</span></button>)}</nav>
     {activeRound?.status === "live" && onContinueRound && <button type="button" className={styles.continueRound} onClick={onContinueRound}>
       <span><strong>Continuar ronda</strong><small>{activeRound.courseName} · Hoyo {activeRound.currentHole ?? 1} de {activeRound.totalHoles}</small></span><span aria-hidden="true">›</span>
     </button>}
