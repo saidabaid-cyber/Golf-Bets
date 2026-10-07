@@ -7,6 +7,7 @@ import { ghinUserContext } from "../../../../../lib/ghin/user-access.server";
 import { GHIN_SESSION_COOKIE_NAME, getGhinUserSession } from "../../../../../lib/ghin/user-session.server";
 import { ghinOwnedPostingEnvironment } from "../../../../../lib/ghin/posting-policy";
 import { buildOwnedPostingCandidate } from "../../../../../lib/ghin/posting-round";
+import { verifyGhinPostedScore } from "../../../../../lib/ghin/posting-verification";
 import { buildGhinScorePostingDryRun } from "../../../../../lib/ghin/score-posting";
 import { postGhinHoleByHole, GhinPostingError } from "../../../../../lib/ghin/post-transport.server";
 import { getSupabaseAdmin } from "../../../../../lib/supabase/server";
@@ -69,11 +70,8 @@ export async function POST(request:NextRequest) {
       if(!receipt.data?.provider_score_id)return privateGhinJson({code:"POST_NOT_CONFIRMED"},409);
       session.client.invalidateScores(c.golferId);
       const record=await session.client.getScores(c.golferId,1000);
-      const matches=record.data.filter(s=>s.id===receipt.data!.provider_score_id);
-      const s=matches[0],p=receipt.data;
-      const confirmed=matches.length===1 && s.playedOn?.slice(0,10)===p.played_at && s.courseId===p.course_id && s.teeId===p.tee_set_id && s.holes===18
-        && (s.grossScore===p.gross_score || s.adjustedGrossScore===p.gross_score);
-      return privateGhinJson({code:confirmed?"PROVIDER_CONFIRMED":"POST_NOT_CONFIRMED",count:record.data.length,matches:matches.length,score:s??null},confirmed?200:409);
+      const verified=verifyGhinPostedScore(record.data,receipt.data);
+      return privateGhinJson({code:verified.confirmed?"PROVIDER_CONFIRMED":"POST_NOT_CONFIRMED",count:record.data.length,matches:verified.matches,score:verified.score},verified.confirmed?200:409);
     }
     const s=round.data.snapshot as RoundSnapshot,a=s.playerTeeAssignments?.find(a=>a.playerId===s.ownerId);
     if(!a || s.lifecycleState!=="completed" || s.cloudReadOnly)return privateGhinJson({code:"ROUND_NOT_POSTABLE"},409);

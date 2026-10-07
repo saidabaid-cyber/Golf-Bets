@@ -5,6 +5,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { ghinOwnedPostingEnvironment } from "../lib/ghin/posting-policy";
 import { buildOwnedPostingCandidate } from "../lib/ghin/posting-round";
+import { verifyGhinPostedScore } from "../lib/ghin/posting-verification";
 import { buildGhinScorePostingDryRun } from "../lib/ghin/score-posting";
 import { reconcileGhinScores } from "../lib/ghin/score-reconciliation";
 import { SlidingWindowRateLimiter } from "../lib/ghin/core";
@@ -80,7 +81,7 @@ function routeHarness(options:{verified?:boolean;session?:boolean;mapping?:boole
     "next/server":{},"/http-security":{hasOnlyKeys:(v:any,keys:string[])=>Object.keys(v).every(k=>keys.includes(k)),readJsonBodyWithLimit:async(r:any)=>({ok:true,value:await r.json()})},
     "/client":{GhinClientError:ClientError},"/core":{SlidingWindowRateLimiter},"/qa-access.server":{privateGhinJson:(body:any,status=200)=>Response.json(body,{status})},
     "/user-access.server":{ghinUserContext:async()=>({ok:true,userId:owner,client})},"/user-session.server":{GHIN_SESSION_COOKIE_NAME:"cookie",getGhinUserSession:()=>options.session===false?null:{client:provider}},
-    "/posting-policy":{ghinOwnedPostingEnvironment},"/posting-round":{buildOwnedPostingCandidate},"/score-posting":{buildGhinScorePostingDryRun},"/post-transport.server":{GhinPostingError:transport.GhinPostingError,postGhinHoleByHole:async()=>{posts++;if(options.postFailure)throw new transport.GhinPostingError("POST_OUTCOME_UNKNOWN");return{providerScoreId:"789",httpStatus:200};}},"/supabase/server":{getSupabaseAdmin:()=>admin},
+    "/posting-policy":{ghinOwnedPostingEnvironment},"/posting-round":{buildOwnedPostingCandidate},"/posting-verification":{verifyGhinPostedScore},"/score-posting":{buildGhinScorePostingDryRun},"/post-transport.server":{GhinPostingError:transport.GhinPostingError,postGhinHoleByHole:async()=>{posts++;if(options.postFailure)throw new transport.GhinPostingError("POST_OUTCOME_UNKNOWN");return{providerScoreId:"789",httpStatus:200};}},"/supabase/server":{getSupabaseAdmin:()=>admin},
   },{process:{env},Date:class extends Date{toLocaleDateString(){return"2026-10-06";}}});
   async function run(body:any){const r=await route.POST({json:async()=>body,cookies:{get:()=>({value:"sealed-fixture"})}});return{status:r.status,body:await r.json()};}
   return{run,round,get counts(){return{posts,reads,claims};},get receipt(){return receipt;}};
@@ -125,6 +126,13 @@ test("posting receipt makes reimport link the original round once, preserving it
   const score:any={id:"789",playedOn:c.playedAt,courseId:"23233",teeId:"106090",holes:18,grossScore:108,adjustedGrossScore:108};
   const result=reconcileGhinScores({golferId,scores:[score],rounds:[{id:roundId,localId:"local",golferId,playedOn:c.playedAt!,courseId:"23233",teeId:"106090",holes:18,gross:108,adjustedGross:108,courseName:c.courseName!,teeName:c.teeName!}],existing:[],posts:[{roundId,providerScoreId:"789",fingerprint:d.fingerprint!}]});
   assert.equal(result.decisions[0].linkedRoundId,roundId);assert.equal(result.decisions[0].postingFingerprint,d.fingerprint);assert.equal(JSON.stringify(snapshot),before);
+});
+test("provider verification uses exact saved ID, never name-only, and tolerates omitted optional IDs",()=>{
+  const receipt={provider_score_id:"789",played_at:"2026-10-06",course_id:"23233",tee_set_id:"106090",gross_score:108};
+  const score:any={id:"789",playedOn:"2026-10-06",courseId:null,teeId:null,holes:18,grossScore:null,adjustedGrossScore:108};
+  assert.equal(verifyGhinPostedScore([score],receipt).confirmed,true);
+  for(const patch of [{id:"other"},{playedOn:"2026-10-05"},{courseId:"other"},{teeId:"other"},{holes:9},{adjustedGrossScore:99}])assert.equal(verifyGhinPostedScore([{...score,...patch}],receipt).confirmed,false);
+  assert.equal(verifyGhinPostedScore([score,score],receipt).confirmed,false);
 });
 test("posting UI is demand-only and requires an explicit checked confirmation",async()=>{
   let calls=0;const h=socialUI("app/components/ghin-posting-panel.tsx"),props={request:async(body:any)=>{calls++;return body?{status:"READY",roundId,fingerprint:"a".repeat(64)}:{items:[{id:roundId,date:"2026-10-06",course:"Club",tee:"Rojas",gross:108}]};},onReauthorize(){}};
