@@ -23,6 +23,7 @@ test("Feed → player → round → hole → Back restores each selection and ex
   const h=mount("?home=feed&filter=keep");h.window.scrollY=620;h.render().open({kind:"player",id:player});h.render();h.window.scrollY=340;
   h.render().open({kind:"round",id:round,source:"activity"});h.render();h.window.scrollY=215;
   h.render().open({kind:"hole",id:round,source:"activity",hole:7});h.render();assert.equal(h.window.scrollY,0);
+  h.window.scrollY=91;h.render().open({kind:"rules",id:"mine"});h.render();h.render().back();assert.equal(h.render().active?.kind,"hole");assert.equal(h.window.scrollY,91);
   h.render().back();assert.equal(h.render().active?.kind,"round");assert.equal(h.window.scrollY,215);
   h.render().back();assert.equal(h.render().active?.kind,"player");assert.equal(h.window.scrollY,340);
   h.render().back();assert.equal(h.render().active,null);assert.equal(h.window.scrollY,620);assert.equal(h.location.search,"?home=feed&filter=keep");assert.equal(h.history.state.backyardTab,"welcome");
@@ -38,4 +39,11 @@ test("Coach accepts category/metric/period context and recomputes values from ca
   const context=golfCoachContextFromSearch("?category=putting&metric=putts&period=20&holes=18&value=7.9")!;
   assert.equal(golfCoachMetric([careerRound("qa",1)],context).value,null);
   const r=careerRound("qa",1);r.putts=Object.fromEntries(r.order!.map(h=>[h,{"owner-player":2}]));assert.equal(golfCoachMetric([r],context).value,36);
+});
+test("captured GIR never infers a green from score and putts and respects the eligible period",()=>{
+  const r=careerRound("qa-recorded",1);r.putts=Object.fromEntries(r.order!.map(h=>[h,{"owner-player":2}]));
+  const context={category:"approach",metric:"gir",period:20} as const;
+  assert.equal(golfCoachMetric([r],context).value,null);
+  r.advancedStats={1:{"owner-player":{greenInRegulation:true}},2:{"owner-player":{greenInRegulation:false}}};
+  assert.equal(golfCoachMetric([r],context).value,50);assert.equal(golfCoachMetric([r],context).sample,2);
 });

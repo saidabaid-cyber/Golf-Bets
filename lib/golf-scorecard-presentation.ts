@@ -51,3 +51,15 @@ export function historyGolfDetail(snapshot: RoundSnapshot): GolfRoundDetail | nu
   }, playerId: id, playerName: player?.name || round.ownerName,
   shots: (round.shots || []).filter(s => s.playerId === id && s.roundId === (round.cloudSourceLocalId || round.id) && Number.isInteger(s.hole) && s.hole >= 1 && s.hole <= 18) };
 }
+/** Accuracy is shown as captured only when an explicit boolean exists. Score/putts do not prove GIR. */
+export function recordedGolfAccuracy(rounds: RoundSnapshot[], eligibleIds: ReadonlySet<string>) {
+  let greensInRegulation=0,greenAttempts=0,fairwaysHit=0,fairwayAttempts=0;
+  for(const round of rounds){
+    if(!eligibleIds.has(round.id))continue;
+    for(const hole of historyGolfDetail(round)?.card.scorecard || []){
+      if(typeof hole.greenInRegulation === "boolean"){greenAttempts++;greensInRegulation+=Number(hole.greenInRegulation);}
+      if(hole.par>3&&typeof hole.fairwayHit === "boolean"){fairwayAttempts++;fairwaysHit+=Number(hole.fairwayHit);}
+    }
+  }
+  return {greensInRegulation,greenAttempts,fairwaysHit,fairwayAttempts};
+}

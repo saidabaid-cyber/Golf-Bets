@@ -1,4 +1,5 @@
-import { buildFilteredGolfInsights, type StatsWindow } from "../features/stats/domain";
+import { buildFilteredGolfInsights, filterStatsRounds, type StatsWindow } from "../features/stats/domain";
+import { recordedGolfAccuracy } from "./golf-scorecard-presentation";
 import type { RoundSnapshot } from "./types";
 export type GolfCoachContext = { category: "putting" | "approach" | "tee"; metric: "putts" | "gir" | "fairways"; period: StatsWindow; holes?: 9 | 18 };
 export const coachCategoryLabels = { putting: "Putting", approach: "Approach", tee: "Tee" };
@@ -17,6 +18,7 @@ export function golfCoachMetric(rounds: RoundSnapshot[], context: GolfCoachConte
   const scope=context.holes || insights.scoreScopeHoles || (insights.scoredRounds18 ? 18 : 9);
   const putts=insights.recentRounds.filter(r=>r.holeCount===scope&&r.putts!==null).map(r=>r.putts!);
   if(context.metric==="putts")return {value:putts.length?putts.reduce((n,p)=>n+p,0)/putts.length:null,sample:putts.length,unit:`putts / ${scope} hoyos`};
-  const hit=context.metric==="gir"?insights.greensInRegulation:insights.fairwaysHit,attempts=context.metric==="gir"?insights.greenAttempts:insights.fairwayAttempts;
+  const recorded=recordedGolfAccuracy(filterStatsRounds(rounds,{window:context.period}),new Set(insights.recentRounds.map(r=>r.id)));
+  const hit=context.metric==="gir"?recorded.greensInRegulation:recorded.fairwaysHit,attempts=context.metric==="gir"?recorded.greenAttempts:recorded.fairwayAttempts;
   return {value:attempts?hit/attempts*100:null,sample:attempts,unit:"% de hoyos capturados"};
 }
