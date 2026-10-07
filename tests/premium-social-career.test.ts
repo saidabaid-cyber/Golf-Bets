@@ -15,7 +15,7 @@ test("index chart uses elapsed dates, supports plus handicaps, and never inserts
   assert.equal(JSON.stringify(input),before);
 });
 test("invalid or insufficient index history cannot render a synthetic chart",()=>{
-  for(const points of [[],[{date:"2026-01-01",value:8}],[{date:"invalid",value:8},{date:"2026-01-01",value:NaN}]])assert.equal(careerIndexChart(points),null);
+  for(const points of [[],[{date:"2026-01-01",value:8}],[{date:"invalid",value:8},{date:"2026-01-01",value:NaN}],[{date:"2026-01-01",value:8},{date:"2026-01-01",value:9}]])assert.equal(careerIndexChart(points),null);
 });
 function panel(source:"BACKYARD"|"GHIN"|null="BACKYARD",verified=false) {
   const cards=[{roundId:"one",date:"2026-10-01",courseName:"Test course",score:80,currentHash:"current",version:1},{roundId:"two",date:"2026-09-01",courseName:"Test course",score:81,currentHash:"other",version:1}];

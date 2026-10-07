@@ -58,7 +58,7 @@
 .lastAttest{display:flex;gap:8px;align-items:center;min-width:0;position:relative}
 .lastAttest>span:last-of-type{min-width:0}.lastAttest b{font-size:12px}.lastAttest strong{display:block;margin:3px 0;font-size:30px}
 .lastAttest small{font-size:11px}.lastAttest .shield{width:38px;height:38px}
-.lastAttest .info{position:absolute;right:-10px;top:-22px;width:32px;height:32px}
+.lastAttest .info{position:absolute;right:-12px;top:-24px;width:44px;height:44px}
 .lastSummary>p{margin:0;text-align:center;color:var(--by-muted);font-size:11px;line-height:1.5}
 .history{border:1px solid var(--by-line);background:#fff;border-radius:17px;padding:14px;min-width:0}
 .history>header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;flex-wrap:wrap}

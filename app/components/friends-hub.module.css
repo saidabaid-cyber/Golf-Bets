@@ -35,7 +35,7 @@
 .qrOptions{gap:10px}
 .qrOptions>button{display:flex;align-items:center;gap:11px;padding:15px 12px;min-height:96px;border-color:#dcded2;border-radius:13px;background:var(--by-surface-warm);color:var(--by-forest);box-shadow:0 2px 6px #103e2d07}
 .qrOptions svg{flex-shrink:0;color:var(--by-gold)}
-.qrOptions b{font:700 18px/1.15 var(--by-editorial)}
+.qrOptions b{font:700 17px/1.15 var(--by-editorial);letter-spacing:-.4px;white-space:nowrap}
 .qrOptions small{display:block;font-size:11px;line-height:1.5;margin-top:5px;color:var(--by-muted)}
 .suggestions{min-width:0}
 .sectionHeader{display:flex;align-items:center;justify-content:space-between;gap:8px}
