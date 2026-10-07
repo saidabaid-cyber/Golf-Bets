@@ -7,6 +7,17 @@ import { safeSocialRoundCard } from "../lib/social-round-card";
 import { displayDistanceFromStoredYards } from "../lib/account-ui-preferences";
 import { careerRound } from "./helpers/career-round";
 import { socialUI,uiNodes,uiFind,uiText } from "./helpers/social-ui";
+import { participantCard } from "../lib/shared-round-participants";
+test("shared round tee identity uses the linked participant's assignment and preserves absence",()=>{
+  const r=careerRound("mixed-tees",1), owner="11111111-1111-4111-8111-111111111111", peer="22222222-2222-4222-8222-222222222222";
+  r.players![0].accountUserId=owner;r.players![1].accountUserId=peer;
+  r.playerTeeAssignments=[{playerId:"rival-player",courseId:"course",teeId:"gold",teeName:"Doradas",source:"catalog",capturedAt:"2026-09-01T12:00:00Z"}];
+  assert.equal(participantCard("cloud",owner,1,"hash",r,peer,new Set()).myTeeName,"Doradas");
+  assert.equal(participantCard("cloud",owner,1,"hash",r,owner,new Set()).myTeeName,"Blancas");
+  delete r.playerTeeAssignments;r.teeName="";
+  assert.equal(participantCard("cloud",owner,1,"hash",r,peer,new Set()).myTeeName,null);
+  assert.match(readFileSync("app/components/golf-object-data.tsx","utf8"),/teeName:card.myTeeName\|\|null/);
+});
 test("rich captured facts preserve absence, explicit zero and direction without inventing FIR, OB or GIR",()=>{
   assert.deepEqual(capturedHoleFacts(undefined,4),{});
   assert.deepEqual(capturedHoleFacts({teeDirection:"center",landingLie:"water_ob"},4),{teeDirection:"center",landingLie:"water_ob"});

@@ -10,6 +10,7 @@ export type SharedRoundCard = {
     scorecard: Array<{ hole: number; score: number | null }> }>;
   myPlayerKey: string | null; myBalance: number | null; canConfirm: boolean;
   myScorecard?: SocialScoreHole[];
+  myTeeName?: string | null;
   scorekeeping: "owner";
   ghin: { canPostOwnScore: false; canPostScoreForAnotherUser: false };
 };
@@ -55,6 +56,7 @@ export function participantCard(roundId: string, ownerId: string, version: numbe
     myPlayerKey: mine?.id || null, myBalance: mine && completed && Number.isFinite(snapshot.playerBalances?.[mine.id]) ? snapshot.playerBalances![mine.id] : null,
     canConfirm: completed && ownerId !== viewerId && Boolean(mine) && !confirmed.has(viewerId),
     ...(myScorecard.length===holes.length&&myScorecard.length?{myScorecard}:{}),
+    ...(mine?{myTeeName:snapshot.playerTeeAssignments?.find(assignment=>assignment.playerId===mine.id)?.teeName || snapshot.teeName || null}:{}),
     scorekeeping: "owner", ghin: { canPostOwnScore: false, canPostScoreForAnotherUser: false },
   };
 }
