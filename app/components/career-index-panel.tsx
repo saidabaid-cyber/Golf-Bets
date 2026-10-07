@@ -19,7 +19,7 @@ function HandicapChart({points}:{points:Array<{date:string;value:number}>}) {
     {chart.ticks.map(value=><g key={value}><line x1="36" x2="330" y1={166-(value-chart.min)/(chart.max-chart.min)*138} y2={166-(value-chart.min)/(chart.max-chart.min)*138} stroke="currentColor" opacity=".14"/><text x="26" y={170-(value-chart.min)/(chart.max-chart.min)*138} textAnchor="end">{careerNumber(value,1)}</text></g>)}
     <path d={`${chart.path} L330,166 L36,166 Z`} fill="#d7bb63" opacity=".1"/>
     <path d={chart.path} fill="none" stroke="#e5c974" strokeWidth="2.4" strokeLinejoin="round"/>
-    {chart.points.map((p,i)=><g key={p.date}><circle cx={p.x} cy={p.y} r={points.length>15?3:4.5} fill="#e5c974"/>{(i===0||i===points.length-1||(points.length<=6))&&<text className={styles.pointValue} x={p.x} y={Math.max(16,p.y-12)} textAnchor="middle">{careerNumber(p.value,1)}</text>}</g>)}
+    {chart.points.map((p,i)=><g key={`${p.date}-${i}`}><circle cx={p.x} cy={p.y} r={points.length>15?3:4.5} fill="#e5c974"/>{(i===0||i===points.length-1||(points.length<=6))&&<text className={styles.pointValue} x={p.x} y={Math.max(16,p.y-12)} textAnchor="middle">{careerNumber(p.value,1)}</text>}</g>)}
     <text x="36" y="194">{careerDate(chart.points[0].date)}</text><text x="330" y="194" textAnchor="end">{careerDate(chart.points.at(-1)!.date)}</text>
   </svg></div>;
 }

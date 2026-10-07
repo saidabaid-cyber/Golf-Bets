@@ -45,3 +45,12 @@ test("post skeleton reserves avatar, content, metrics and action structure",()=>
   assert.equal(uiNodes(tree).filter(n=>n.props.className==="skeletonMetrics").length,3);
   assert.equal(uiNodes(tree).filter(n=>n.props.className==="skeletonActions").length,3);
 });
+test("career GHIN explanation stays in a closed disclosure without altering record provenance",()=>{
+  const h=socialUI("app/components/ghin-import-history.tsx",{"score-reconciliation":{unifiedGhinHistory:()=>[]},"career-statistics":statistics});
+  const tree=h.render("GhinImportHistory",{backyard:[],title:"Tarjetas GHIN guardadas",compactExplanation:true});
+  const disclosure=uiFind(tree,n=>n.type==="details"&&n.props.className==="explanation");
+  assert.equal(disclosure.props.open,undefined);
+  assert.match(uiText(disclosure),/Información sobre tarjetas GHIN/);
+  assert.match(uiText(disclosure),/Backyard conserva scores/);
+  assert.doesNotMatch(uiText(tree),/ORIGEN VERIFICABLE/);
+});

@@ -38,3 +38,7 @@
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+.explanation { margin-top: 8px; color: var(--by-muted); font-size: 12px; }
+.explanation > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.explanation > summary:focus-visible { outline: 2px solid var(--by-gold-line); outline-offset: 3px; border-radius: 5px; }
+.explanation > p { padding: 12px; background: var(--by-sage); border-radius: 10px; }

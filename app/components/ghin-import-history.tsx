@@ -3,6 +3,7 @@ import { useMemo, type ReactNode } from "react";
 import type { GhinImportedScoresController } from "./use-ghin-imported-scores";
 import { unifiedGhinHistory, type UnifiedHistoryEntry } from "../../lib/ghin/score-reconciliation";
 import { careerDate,careerNumber } from "../../lib/career-statistics";
+import { BackyardIcon } from "./backyard-icon";
 import styles from "./career-index-panel.module.css";
 import importedStyles from "./ghin-import-history.module.css";
 
@@ -20,15 +21,16 @@ export function GhinProviderCard({entry,onOpenRound}:{entry:UnifiedHistoryEntry;
     {score?.outOfSync&&<p role="status">GHIN_OUT_OF_SYNC · La ronda Backyard cambió. No se vuelve a publicar automáticamente.</p>}
   </article>;
 }
-export function GhinImportHistory({control,backyard,onOpenRound,renderBackyard,year="all",month="all",course="all",holes,title="Historial unificado"}:{
+export function GhinImportHistory({control,backyard,onOpenRound,renderBackyard,year="all",month="all",course="all",holes,title="Historial unificado",compactExplanation=false}:{
   control?:GhinImportedScoresController;backyard:readonly Omit<UnifiedHistoryEntry,"origin"|"provider"|"backyardId">[];
-  onOpenRound?:((id:string)=>void);renderBackyard?:(entry:UnifiedHistoryEntry)=>ReactNode;year?:string;month?:string;course?:string;holes?:9|18;title?:string;
+  onOpenRound?:((id:string)=>void);renderBackyard?:(entry:UnifiedHistoryEntry)=>ReactNode;year?:string;month?:string;course?:string;holes?:9|18;title?:string;compactExplanation?:boolean;
 }) {
   const data=control?.data;
   const rows=useMemo(()=>unifiedGhinHistory(backyard,[...new Map([...(data?.links??[]),...(data?.items??[])].map(r=>[r.id,r])).values()]),[backyard,data]);
   const shown=rows.filter(r=>(year==="all"||r.date.startsWith(year))&&(month==="all"||r.date.slice(5,7)===month)&&(course==="all"||r.courseName===course)&&(!holes||r.holes===holes));
-  return <section className={styles.ghinRecords} aria-label={title}><header><h3>{title}</h3><span className={styles.ghinBadge}>ORIGEN VERIFICABLE</span></header>
-    <p>Backyard conserva scores, jugadores, apuestas y Atest. GHIN conserva su registro oficial de lectura. Las tarjetas vinculadas aparecen una sola vez.</p>
+  const explanation=<p>Backyard conserva scores, jugadores, apuestas y Atest. GHIN conserva su registro oficial de lectura. Las tarjetas vinculadas aparecen una sola vez.</p>;
+  return <section className={styles.ghinRecords} aria-label={title}><header><h3>{title}</h3>{!compactExplanation&&<span className={styles.ghinBadge}>ORIGEN VERIFICABLE</span>}</header>
+    {compactExplanation?<details className={importedStyles.explanation}><summary><BackyardIcon name="info" size={18}/>Información sobre tarjetas GHIN</summary>{explanation}</details>:explanation}
     {data?.summary&&<p>{data.total} tarjetas GHIN guardadas · {data.summary.matched} vinculadas · {data.summary.ambiguous} requieren revisión.</p>}
     {control?.loading&&<p role="status">Consultando tarjetas guardadas…</p>}
     {control?.error&&<p role="status">{control.error}</p>}
