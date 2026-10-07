@@ -17,6 +17,6 @@
 .compactCard strong{font:700 15px/1.2 var(--by-editorial);margin-top:2px;overflow-wrap:anywhere}.compactCard small{font-size:11px;line-height:1.4;color:var(--by-muted);overflow-wrap:anywhere}
 .compactCard>svg{flex-shrink:0}
 .compactCode{width:72px;height:72px;display:grid;place-items:center;flex-shrink:0;color:var(--by-gold)}
-.compactCode canvas{width:72px;height:72px}
+.compactCode canvas{width:72px;height:72px;max-width:100%;max-height:100%;image-rendering:pixelated}
 .compactCard:focus-visible{outline:2px solid var(--by-gold-line);outline-offset:3px}
 @media(max-width:360px){.compactCode,.compactCode canvas{width:62px;height:62px}.compactCard{gap:9px}.compactCard b{font-size:18px}}
