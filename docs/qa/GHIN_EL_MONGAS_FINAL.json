@@ -1,9 +1,9 @@
 {
-  "status": "NO_EXISTING_POSTABLE_ROUND",
+  "status": "BLOCKED_EXTERNAL",
   "environment": "DEV",
   "branch": "integration/backyard-current",
   "url": "https://dev.thebackyard.com.mx",
-  "capturedAt": "2026-10-06T23:40:44.839Z",
+  "capturedAt": "2026-10-07T00:50:25.628Z",
   "initialSha": "6701089f443a7e2f5d635a175b5f6fd89121b406",
   "ownerId": "b182e0a1-d3f5-4e32-a005-29c6d55b6cdf",
   "BEFORE": {
@@ -32,428 +32,104 @@
     "duplicates": 0,
     "note": "Explicit second synchronization updates last-sync updated_at; original imported_at and score identity/material remain stable. Backyard rounds are untouched."
   },
-  "POSTS": [],
+  "POSTS": [
+    {
+      "roundId": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b",
+      "fingerprint": "5a940101e675cdc613b76e11764e57fdde0ac7788484283f8e69f24464ae413c",
+      "providerScoreId": "1208915748",
+      "date": "2026-10-06",
+      "course": "LA VISTA COUNTRY CLUB",
+      "tee": "ROJAS",
+      "gross": 103,
+      "postedAt": "2026-10-07T00:39:47.603285+00:00",
+      "receiptId": "106216c7-cdbb-4e30-824c-ebf35139c039",
+      "httpStatus": 200,
+      "verifyStatus": "PROVIDER_CONFIRMED",
+      "providerMatchCount": 1,
+      "reimportMatchStatus": "EXACT_MATCH",
+      "linkedRoundId": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b"
+    }
+  ],
   "POST_CANDIDATE": {
-    "status": "NO_EXISTING_POSTABLE_ROUND",
-    "eligibleCount": 0,
-    "completedReviewed": 22,
-    "physicalMappings": 12,
-    "linkedGolferGender": "F",
-    "localPreflightExecuted": true,
-    "localPreflightSource": "Persisted owner round assignments + live GHIN course/tees/profile evidence, using the tested alias resolver.",
-    "dryRunExecuted": false,
-    "roundId": null,
-    "fingerprint": null,
-    "reasons": [
-      "12 Gold rounds resolve the physical alias but use frozen MEN rating; linked GHIN gender is F.",
-      "9 White rounds have frozen 70.8/125/6590, incompatible with current Male 70.8/128/6591 or Female 77.4/153/6591.",
-      "1 Campestre Puebla completed round has no confirmed course+tee mapping/rating."
+    "status": "PASS",
+    "roundId": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b",
+    "localId": "3sygtta5",
+    "date": "2026-10-06",
+    "course": "LA VISTA COUNTRY CLUB",
+    "courseId": "course-la-vista",
+    "tee": "ROJAS",
+    "teeId": "tee-la-vista-rojas",
+    "providerCourseId": "23233",
+    "providerTeeId": "106090",
+    "ratingGender": "FEMALE",
+    "lifecycle": "completed",
+    "version": 21,
+    "holes": 18,
+    "par": 72,
+    "rating": 71,
+    "slope": 137,
+    "yards": 5476,
+    "scores": [
+      5,
+      4,
+      6,
+      7,
+      6,
+      5,
+      4,
+      6,
+      7,
+      7,
+      6,
+      5,
+      6,
+      6,
+      7,
+      6,
+      4,
+      6
     ],
-    "roundAudit": [
-      {
-        "roundId": "ad727513-d19e-45f5-9b3b-6cba094f6544",
-        "date": "2026-09-28",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-white",
-        "gross": 85,
-        "mapping": null,
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": false,
-        "eligible": false,
-        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
-      },
-      {
-        "roundId": "19bfd6a6-5808-4d8e-9432-4a8a9911dfa8",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-white",
-        "gross": 86,
-        "mapping": null,
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": false,
-        "eligible": false,
-        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
-      },
-      {
-        "roundId": "19c03579-423d-4521-9eb1-c7e61110e143",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 99,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "19e2d57c-bd49-4e37-b3f5-bb56d3f72eb0",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 76,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "1c5abff5-a02c-4a45-b151-0b2f5ac9bb55",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 82,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "1cc2c7cc-3c0f-4d93-9f25-9698216700ae",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 71,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "3c8d6add-5e5d-4002-ac00-164e1ab21257",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 83,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "4d004e21-fb27-489d-8081-0e38d6cc2733",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-white",
-        "gross": 88,
-        "mapping": null,
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": false,
-        "eligible": false,
-        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
-      },
-      {
-        "roundId": "4db8c485-fbd4-4a7b-90d0-816786ec7462",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-white",
-        "gross": 92,
-        "mapping": null,
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": false,
-        "eligible": false,
-        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
-      },
-      {
-        "roundId": "4dbafd9d-dccd-4e23-83bf-6a7638e2821e",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 77,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "4ede402e-0eca-442a-9335-31f7d9d44ebb",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 90,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "570c3a9f-03ca-4238-89fc-46ad039d25ba",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-white",
-        "gross": 93,
-        "mapping": null,
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": false,
-        "eligible": false,
-        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
-      },
-      {
-        "roundId": "59031561-6934-4cd0-b3cd-0181e5c76aa2",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 72,
-        "mapping": null,
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": false,
-        "eligible": false,
-        "blocker": "UNCONFIRMED_COURSE_AND_TEE"
-      },
-      {
-        "roundId": "60d444f6-f550-4496-a535-b6a559511954",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 79,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "697e4c3f-42cf-4c95-9c3f-7c57ddfcbf58",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 81,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "75fcbd06-804a-4508-bc34-ea0f23eb1895",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 80,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "7d13f9fb-4e93-49b3-b2d7-b20a5427e4ae",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-white",
-        "gross": 78,
-        "mapping": null,
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": false,
-        "eligible": false,
-        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
-      },
-      {
-        "roundId": "a1bfd195-9fd5-49f3-82ed-2c12e51ca5b0",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 85,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "abf43e91-d09d-499e-beaa-ec76f0ca0c7e",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-gold",
-        "gross": 74,
-        "mapping": {
-          "providerCourseId": "23233",
-          "providerTeeSetId": "106088",
-          "canonicalCourseId": "course-la-vista",
-          "canonicalTeeId": "tee-la-vista-doradas",
-          "strokeAllocationDiffers": true
-        },
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": true,
-        "eligible": false,
-        "blocker": "GOLFER_F_VS_RATED_TEE_M"
-      },
-      {
-        "roundId": "c250c150-8694-46f8-bba9-07472e1eb7bc",
-        "date": "2026-10-05",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-white",
-        "gross": 75,
-        "mapping": null,
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": false,
-        "eligible": false,
-        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
-      },
-      {
-        "roundId": "24493b70-a2ef-456b-8060-aa5d69bb02ea",
-        "date": "2026-10-06",
-        "courseId": "course-campestre-puebla",
-        "teeId": "ghin:23232:tee:468e7646a10f",
-        "gross": 86,
-        "mapping": null,
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": false,
-        "eligible": false,
-        "blocker": "UNCONFIRMED_COURSE_AND_TEE"
-      },
-      {
-        "roundId": "fee4ab11-9650-4f3b-99b3-8af0bd0eebde",
-        "date": "2026-10-06",
-        "courseId": "course-la-vista-club-current",
-        "teeId": "tee-la-vista-club-current-white",
-        "gross": 89,
-        "mapping": null,
-        "ratingGender": "MEN",
-        "genderMatches": false,
-        "complete": true,
-        "postingTeePermitted": false,
-        "eligible": false,
-        "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
-      }
-    ],
-    "scorePostingEnabled": false,
-    "upstreamPosts": 0,
-    "qa25Created": false,
-    "qa25Reason": "The remaining blocker is not solely catalog identity. No historical changes or unnecessary new round."
+    "out": 50,
+    "in": 53,
+    "gross": 103,
+    "handicapIndex": 30.8,
+    "handicapSource": "GHIN_OFFICIAL_FUTURE",
+    "courseHandicap": 36,
+    "courseHandicapFormula": "round(30.8 * 137 / 113 + (71 - 72)) = 36",
+    "bets": false,
+    "attest": "PENDING",
+    "backyardIndexEligibility": false,
+    "backyardIndexReason": "INDEX_NOT_ENABLED",
+    "capture": "Normal UI; all 18 holes confirmed; no direct score DB insertion",
+    "dryRun": "READY",
+    "gender": "F",
+    "scoreType": "H",
+    "side": "All18",
+    "duplicateScoreId": null,
+    "fingerprint": "5a940101e675cdc613b76e11764e57fdde0ac7788484283f8e69f24464ae413c"
   },
   "AFTER": {
     "ghinIndex": 30.8,
     "ghinIndexLiveRefresh": "PASS_USER_REAUTH_AND_REAL_SCORING",
-    "providerScoreCount": 6,
-    "providerScoringRecordCount": 6,
-    "backyardCompletedCount": 22,
+    "providerScoreCount": 7,
+    "providerScoringRecordCount": 7,
+    "backyardCompletedCount": 23,
     "ghinOnlyCount": 6,
-    "backyardPlusGhinCount": 0,
+    "backyardPlusGhinCount": 1,
     "backyardOnlyCompletedCount": 22,
     "duplicatesCount": 0,
     "backyardIndex": 5.5,
-    "attestPercent": 55,
+    "attestPercent": 50,
     "qa24Status": "live",
     "qa24ResumeHole": 2,
     "qa24H1": [
       5,
       6
     ],
-    "providerDuplicatesCount": 0
+    "providerDuplicatesCount": 0,
+    "ghinIndexLastSuccessfulSyncAt": "2026-10-07T00:45:00.494Z",
+    "attestedLast20": 10,
+    "attestDenominator": 20
   },
   "baseline": {
     "unchangedRounds": 26,
@@ -705,6 +381,233 @@
         "qa24OwnerH1": 5,
         "qa24CompanionH1": 6
       }
+    },
+    "QA25Integrity": {
+      "priorRoundCount": 26,
+      "scoreChanges": [],
+      "snapshotChanges": [
+        "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d"
+      ],
+      "snapshotChangeReason": "QA24 was parked and resumed by the normal UI, with H1 unchanged. No completed snapshot changed.",
+      "roundHashes": [
+        {
+          "id": "aec5071d-0011-49ff-92df-fbebcf9b5f95",
+          "localId": "s6h4mk2d",
+          "version": 1,
+          "lifecycle": "live",
+          "scoresMd5": "99914b932bd37a50b983c5e7c90ae93b",
+          "snapshotMd5": "213d74817c4f342a5e927a42b2caed34"
+        },
+        {
+          "id": "ad727513-d19e-45f5-9b3b-6cba094f6544",
+          "localId": "oonshxl8",
+          "version": 23,
+          "lifecycle": "completed",
+          "scoresMd5": "ffbd5e044d39f73202877ce58b200bcf",
+          "snapshotMd5": "b8fd155f9a7cdd50d65e5fd4461cc9cd"
+        },
+        {
+          "id": "697e4c3f-42cf-4c95-9c3f-7c57ddfcbf58",
+          "localId": "8t9l8dma",
+          "version": 21,
+          "lifecycle": "completed",
+          "scoresMd5": "c803f597f7dad6949922c780c910c1f1",
+          "snapshotMd5": "990f2ac738342d5df411210132aa8b31"
+        },
+        {
+          "id": "c250c150-8694-46f8-bba9-07472e1eb7bc",
+          "localId": "gys71iow",
+          "version": 21,
+          "lifecycle": "completed",
+          "scoresMd5": "ebc8605d10baa9ebb8923a6f90f85a06",
+          "snapshotMd5": "c220ef36073417f54c8c6537199747e1"
+        },
+        {
+          "id": "19bfd6a6-5808-4d8e-9432-4a8a9911dfa8",
+          "localId": "uud3jzr4",
+          "version": 21,
+          "lifecycle": "completed",
+          "scoresMd5": "4369eea0fdcb0afae5bb7e952e36fd43",
+          "snapshotMd5": "e7b5e66b4d198f172baca8ee4fa8fc75"
+        },
+        {
+          "id": "4d004e21-fb27-489d-8081-0e38d6cc2733",
+          "localId": "fz2xs46i",
+          "version": 21,
+          "lifecycle": "completed",
+          "scoresMd5": "8e26517a2e6067a1ab5b270e9c79bfa8",
+          "snapshotMd5": "3a4a5935c4dd62565b9a189d4c3c48aa"
+        },
+        {
+          "id": "75fcbd06-804a-4508-bc34-ea0f23eb1895",
+          "localId": "k1932hf8",
+          "version": 21,
+          "lifecycle": "completed",
+          "scoresMd5": "7d1301aacf25f3196a9d4da01431a942",
+          "snapshotMd5": "711cb72037ab20c9e0ca4cce1346572b"
+        },
+        {
+          "id": "570c3a9f-03ca-4238-89fc-46ad039d25ba",
+          "localId": "2r8lnvh2",
+          "version": 20,
+          "lifecycle": "completed",
+          "scoresMd5": "21e23680c3714db00b12ec6f1af006d2",
+          "snapshotMd5": "09be3a19b0aa6875f859bd50aa070ecb"
+        },
+        {
+          "id": "7d13f9fb-4e93-49b3-b2d7-b20a5427e4ae",
+          "localId": "fzkvtuec",
+          "version": 23,
+          "lifecycle": "completed",
+          "scoresMd5": "564fe5c4c261027300c63cb158c2c8e9",
+          "snapshotMd5": "4713940b382971525ec488f9df418817"
+        },
+        {
+          "id": "d1562db7-b37f-4e6b-b3f5-76a511c85fe6",
+          "localId": "408e4png",
+          "version": 5,
+          "lifecycle": "live",
+          "scoresMd5": "87157cc4d3a77613c9eacef88229f768",
+          "snapshotMd5": "08cbae4a42db49653777c0d5a36974a7"
+        },
+        {
+          "id": "1c5abff5-a02c-4a45-b151-0b2f5ac9bb55",
+          "localId": "5fgb1a39",
+          "version": 20,
+          "lifecycle": "completed",
+          "scoresMd5": "0b63a683d1b96e988c45b0331870ca22",
+          "snapshotMd5": "b945e73aa10b72f9e2a5d5ba97d6f4a9"
+        },
+        {
+          "id": "59031561-6934-4cd0-b3cd-0181e5c76aa2",
+          "localId": "vq7oerek",
+          "version": 20,
+          "lifecycle": "completed",
+          "scoresMd5": "6b13276e010a9d6a95d9bb73998fb3d7",
+          "snapshotMd5": "fdc4fa66971aab315bc9379d9847c86a"
+        },
+        {
+          "id": "19c03579-423d-4521-9eb1-c7e61110e143",
+          "localId": "gboenefn",
+          "version": 19,
+          "lifecycle": "completed",
+          "scoresMd5": "ec60d4b2e6e8e712b0599521706cc168",
+          "snapshotMd5": "89e5c2576bcbd8384dea88cb5252756b"
+        },
+        {
+          "id": "60d444f6-f550-4496-a535-b6a559511954",
+          "localId": "9zonng6p",
+          "version": 19,
+          "lifecycle": "completed",
+          "scoresMd5": "b2a31226f39501c5414d51afd2130f7a",
+          "snapshotMd5": "10efb3c2dab43e0f9da04cfdc763068e"
+        },
+        {
+          "id": "1cc2c7cc-3c0f-4d93-9f25-9698216700ae",
+          "localId": "uk0v5gmp",
+          "version": 19,
+          "lifecycle": "completed",
+          "scoresMd5": "443566bdafb05687e07521346386b086",
+          "snapshotMd5": "b694ce3c605412f7067af38d73b00dca"
+        },
+        {
+          "id": "a1bfd195-9fd5-49f3-82ed-2c12e51ca5b0",
+          "localId": "8flnuur6",
+          "version": 19,
+          "lifecycle": "completed",
+          "scoresMd5": "152443c54fd07f14e4841f764e3b31da",
+          "snapshotMd5": "4a1ecdcfbaf69548716b6c5e21f275d3"
+        },
+        {
+          "id": "19e2d57c-bd49-4e37-b3f5-bb56d3f72eb0",
+          "localId": "0hul3yua",
+          "version": 20,
+          "lifecycle": "completed",
+          "scoresMd5": "b8182d45c5a8472421c7901e39b246d9",
+          "snapshotMd5": "3d8da2ba0943fd8bcb6b5a7b80c65eca"
+        },
+        {
+          "id": "4db8c485-fbd4-4a7b-90d0-816786ec7462",
+          "localId": "1phhh8px",
+          "version": 20,
+          "lifecycle": "completed",
+          "scoresMd5": "a748ce9e58bff2b6f97c7277553c8dac",
+          "snapshotMd5": "91b1a2e60c5e5209e3c368a54df0a9c3"
+        },
+        {
+          "id": "abf43e91-d09d-499e-beaa-ec76f0ca0c7e",
+          "localId": "z36etwrb",
+          "version": 20,
+          "lifecycle": "completed",
+          "scoresMd5": "165572bcd7bfd32adfd6ddbc83474559",
+          "snapshotMd5": "eaa3c02044b7751992d63aa6f57a86a5"
+        },
+        {
+          "id": "3c8d6add-5e5d-4002-ac00-164e1ab21257",
+          "localId": "2dsahjll",
+          "version": 19,
+          "lifecycle": "completed",
+          "scoresMd5": "d63ca6265700e57081e9191e85b6a8bf",
+          "snapshotMd5": "59119da235bc2e0f71bf1fc60f0de111"
+        },
+        {
+          "id": "4ede402e-0eca-442a-9335-31f7d9d44ebb",
+          "localId": "p3lna28k",
+          "version": 20,
+          "lifecycle": "completed",
+          "scoresMd5": "9efe0a5b70ec6ea00701d5b9c6f79786",
+          "snapshotMd5": "a0503cf9821678279f02f23089697326"
+        },
+        {
+          "id": "4dbafd9d-dccd-4e23-83bf-6a7638e2821e",
+          "localId": "o3iwbjfy",
+          "version": 20,
+          "lifecycle": "completed",
+          "scoresMd5": "201d1ba96137f677a3fd3232113cde1d",
+          "snapshotMd5": "6236ed1a4348feabea15e57592499e17"
+        },
+        {
+          "id": "24493b70-a2ef-456b-8060-aa5d69bb02ea",
+          "localId": "z082rref",
+          "version": 11,
+          "lifecycle": "completed",
+          "scoresMd5": "2960e5c76ebf5fe5b2888aeebc699cf5",
+          "snapshotMd5": "1ffc4f0db13ba5354a67b1988243f9c0"
+        },
+        {
+          "id": "8b512844-eee5-4c34-95d1-877470b19361",
+          "localId": "hho9yjs8",
+          "version": 3,
+          "lifecycle": "cancelled",
+          "scoresMd5": "da0be7cc59306a53fc422ff7be71509e",
+          "snapshotMd5": "83168e5eda848fad550650f538abaed0"
+        },
+        {
+          "id": "fee4ab11-9650-4f3b-99b3-8af0bd0eebde",
+          "localId": "a9sro2vv",
+          "version": 21,
+          "lifecycle": "completed",
+          "scoresMd5": "d6480f8441ec31c9f994f47097f42062",
+          "snapshotMd5": "d03201080ccb438347b2bca305108443"
+        },
+        {
+          "id": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
+          "localId": "rrouggse",
+          "version": 5,
+          "lifecycle": "live",
+          "scoresMd5": "66e1869c4a4a09292175d295235e2762",
+          "snapshotMd5": "079e6b51336b515286ae849984608582"
+        },
+        {
+          "id": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b",
+          "localId": "3sygtta5",
+          "version": 21,
+          "lifecycle": "completed",
+          "scoresMd5": "29b48286f2320afb1ea5dd97286e796e",
+          "snapshotMd5": "c97b0cd231e1f6406d543ef64646e39c"
+        }
+      ],
+      "qa24ScoreHash": "66e1869c4a4a09292175d295235e2762"
     }
   },
   "DB": {
@@ -721,173 +624,140 @@
     "explicitReimportUpsertCount": 6
   },
   "requestBudget": {
-    "windowStart": "2026-10-06T23:03:00Z",
-    "windowEnd": "2026-10-06T23:40:44.837Z",
-    "scope": "Observed IAB tab diagnostics; four lookup requests also verified in DEV Vercel logs. Not an exhaustive project-wide HTTP count.",
-    "cloudSyncGet": 3,
-    "cloudSyncPost": 0,
-    "cloudRoundsObserved": 0,
-    "lookupRequests": 4,
-    "upstreamLookupReads": 6,
-    "upstreamLookupRetries": 0,
-    "ghinScoringReads": 0,
-    "ghinImports": 0,
-    "ghinScorePosts": 0,
-    "persistedProfileGetCount": null,
-    "persistedImportPageGetCount": null,
-    "unmeasuredCountsNote": "Routine persisted profile/history GETs were not fully instrumented; null is not zero.",
-    "fullBundles": 2,
+    "scope": "Agent tab observations from 2026-10-07T00:00Z through logout; owner Safari traffic separately confirmed, never inferred as zero",
+    "cloud": {
+      "/api/cloud/sync GET": 22,
+      "/api/cloud/rounds GET": 21,
+      "/api/cloud/rounds PUT": 19,
+      "/api/cloud/sync POST": 18,
+      "/api/cloud/rounds POST": 1
+    },
+    "ghinApp": {
+      "/api/profile/ghin/import GET": 1,
+      "/api/profile/ghin/post GET": 1,
+      "/api/profile/ghin/post POST": 4,
+      "/api/profile/ghin/import POST": 1
+    },
+    "cloudRequests": 81,
+    "maximumCloudResponseBytes": 536595,
+    "maximumCloudRequestBytes": 34810,
+    "fullCloudGets": [
+      {
+        "method": "GET",
+        "requestBytes": 0,
+        "responseBytes": 521587,
+        "durationMs": 918,
+        "success": true,
+        "httpStatus": 200,
+        "stage": "sync:download:success",
+        "trigger": "mount",
+        "fingerprint": "v1-2533160f",
+        "endpoint": "/api/cloud/sync",
+        "reason": "canonical-read",
+        "result": "success",
+        "timestamp": "2026-10-07T00:09:03.679Z"
+      },
+      {
+        "method": "GET",
+        "requestBytes": 0,
+        "responseBytes": 536595,
+        "durationMs": 684,
+        "success": true,
+        "httpStatus": 200,
+        "stage": "sync:download:success",
+        "trigger": "local",
+        "fingerprint": "v1-b73270a2",
+        "endpoint": "/api/cloud/sync",
+        "reason": "canonical-read",
+        "result": "success",
+        "timestamp": "2026-10-07T00:19:36.861Z"
+      },
+      {
+        "method": "GET",
+        "requestBytes": 0,
+        "responseBytes": 509451,
+        "durationMs": 726,
+        "success": true,
+        "httpStatus": 200,
+        "stage": "sync:download:success",
+        "trigger": "mount",
+        "fingerprint": "v1-91f5eeb5",
+        "endpoint": "/api/cloud/sync",
+        "reason": "canonical-read",
+        "result": "success",
+        "timestamp": "2026-10-07T00:38:58.234Z"
+      }
+    ],
     "unexpectedFullBundles": 0,
     "retries": 0,
     "failures": 0,
-    "fullBundleReason": "Two deliberate reloads to load the two new lookup UI builds. Each cold mount had knownCloud=false, then clean apply/gate success. No POST, conflict, recovery or retry. One online-event conditional GET was 259 B.",
-    "idleStart": "2026-10-06T23:22:41Z",
-    "idleEnd": "2026-10-06T23:24:41Z",
-    "idleSeconds": 120,
-    "idleCloudCalls": 0,
-    "idleGhinPeriodicCalls": 0,
-    "maxResponseBytes": 521587,
-    "maxLookupResponseBytes": 23785,
-    "maxUploadBytes": 41,
-    "upstreamRawResponseBytes": null,
-    "requestStorm": false,
+    "idle": {
+      "start": "2026-10-07T00:42:44.251Z",
+      "end": "2026-10-07T00:44:46.681Z",
+      "seconds": 122.43,
+      "calls": 0
+    },
+    "upstreamScorePost": {
+      "count": 1,
+      "status": 200,
+      "requestBytes": 797,
+      "responseBytes": 6673,
+      "retries": 0,
+      "providerScoreId": "1208915748"
+    },
     "polling": false,
+    "requestStorm": false,
     "usageGuardTriggered": false,
-    "cloudRequests": [
-      {
-        "at": "2026-10-06T23:03:03.761Z",
-        "method": "GET",
-        "requestBytes": 0,
-        "responseBytes": 521587,
-        "durationMs": 802,
-        "success": true,
-        "httpStatus": 200,
-        "stage": "sync:download:success",
-        "trigger": "mount",
-        "fingerprint": "v1-2533160f",
-        "endpoint": "/api/cloud/sync",
-        "reason": "canonical-read",
-        "result": "success"
-      },
-      {
-        "at": "2026-10-06T23:08:01.791Z",
-        "method": "GET",
-        "requestBytes": 0,
-        "responseBytes": 259,
-        "durationMs": 563,
-        "success": true,
-        "httpStatus": 200,
-        "stage": "sync:download:success",
-        "trigger": "online",
-        "fingerprint": "v1-2533160f",
-        "endpoint": "/api/cloud/sync",
-        "reason": "canonical-read",
-        "result": "success"
-      },
-      {
-        "at": "2026-10-06T23:22:09.629Z",
-        "method": "GET",
-        "requestBytes": 0,
-        "responseBytes": 521587,
-        "durationMs": 698,
-        "success": true,
-        "httpStatus": 200,
-        "stage": "sync:download:success",
-        "trigger": "mount",
-        "fingerprint": "v1-2533160f",
-        "endpoint": "/api/cloud/sync",
-        "reason": "canonical-read",
-        "result": "success"
-      }
-    ],
-    "lookupRequestsEvidence": [
-      {
-        "at": "2026-10-06T23:04:08.410Z",
-        "operation": "search",
-        "httpStatus": 200,
-        "requestBytes": 40,
-        "responseBytes": 8558
-      },
-      {
-        "at": "2026-10-06T23:04:45.733Z",
-        "operation": "course",
-        "httpStatus": 200,
-        "requestBytes": 41,
-        "responseBytes": 23785
-      },
-      {
-        "at": "2026-10-06T23:05:38.489Z",
-        "operation": "tee",
-        "httpStatus": 200,
-        "requestBytes": 36,
-        "responseBytes": 2132
-      },
-      {
-        "at": "2026-10-06T23:22:38.636Z",
-        "operation": "posting-profile",
-        "httpStatus": 200,
-        "requestBytes": 31,
-        "responseBytes": 292
-      }
-    ]
+    "upstreamScoringReads": {
+      "count": 4,
+      "evidence": "Call graph: dry-run duplicate check, pre-POST duplicate check, verify, post-import. Not presented as independently captured provider telemetry."
+    },
+    "profileExplicitRefresh": {
+      "count": 1,
+      "lastSuccessfulSyncAt": "2026-10-07T00:45:00.494Z"
+    }
   },
   "cleanSession": {
     "status": "BLOCKED_EXTERNAL",
-    "scope": "Final clean login after import still requires user confirmation",
-    "account": "el_mongas",
-    "appLoginConfirmed": true,
-    "agentObserved": false,
-    "importedCardsRestored": null,
-    "finalPostImportRelogin": "PENDING_EXTERNAL_CONFIRMATION",
-    "reason": "Agent's ordinary reload recovered server-persisted cards but does not establish empty-context relogin; final private Safari request pending.",
-    "initialHydrationStatus": "PASS",
-    "initialHydrationEvidence": "User certified Safari private hydration before current imports",
-    "ordinaryReloadCardsRestored": 6
+    "originalSessionLoggedOut": true,
+    "verification": "Awaiting owner Safari private new-session confirmation; agent tab has shared persistent workspace storage and is not called a clean context"
   },
   "tests": {
-    "directed": {
-      "tests": 142,
-      "pass": 142,
+    "ownedPosting": {
+      "total": 18,
+      "pass": 18,
       "fail": 0
+    },
+    "directedFinal": {
+      "total": 545,
+      "pass": 544,
+      "fail": 1,
+      "preexistingFail": "Mi Bolsa keeps approved product media while permanent management stays compact"
     },
     "full": {
-      "tests": 4598,
-      "pass": 4593,
-      "preexistingFailures": 5,
-      "newFailures": 0
-    },
-    "scripts": {
-      "tests": 117,
-      "pass": 117,
-      "fail": 0
+      "total": 4666,
+      "pass": 4657,
+      "fail": 9,
+      "newFailures": 0,
+      "baselineFailures": [
+        "✖ provider diagnostics contain no token, resource URL or personal coordinates",
+        "✖ new renderer is under demand with local position updates, cleanup and real terrain exaggeration",
+        "✖ round opens isolated GPS view without changing score navigation or creating another round",
+        "✖ every module flag is independent and opt-in, GPS doesn't require map or flyover",
+        "✖ la UI final usa bolsa premium, selección guiada y modo manual explícito",
+        "✖ Mi bolsa abre una ficha limpia por bastón y reserva el borrado para el detalle",
+        "✖ Mi Bolsa keeps approved product media while permanent management stays compact",
+        "✖ Reglas dejan IA/directorio plegables, recursos como accesos directos y videos abiertos al final",
+        "✖ nightly audit artifacts reproduce from canonical runtime catalogs and captured QA metadata"
+      ]
     },
     "typecheck": "PASS",
     "lint": "PASS",
-    "build": "PASS",
-    "baselineFailures": [
-      "equipment-owner-review",
-      "equipment-ui-contract",
-      "final-brand-ghin-closeout Equipment",
-      "iphone-capture Rules",
-      "nightly-catalog-quality equipment-gaps"
-    ],
-    "addedCoverage": [
-      "Owner-session finite course lookup and entitlement failures",
-      "Explicit provider gender with no name/tee inference",
-      "No owner/golfer selector or credential exposure",
-      "No automatic lookup; simultaneous clicks coalesce",
-      "Course evidence retained after tee/profile inspection",
-      "Physical alias preserves frozen data",
-      "No name-only alias",
-      "Rejects rating, gender, geometry, provisional, stale and identity drift",
-      "Real reconciliation uses alias with no round mutation",
-      "50-card in-process batch uses two catalog reads, no N+1"
-    ]
+    "build": "PASS"
   },
   "unresolved": [
-    "NO_EXISTING_POSTABLE_ROUND: no compatible completed round for the linked GHIN Female rating context.",
-    "Real posting, provider verify, round-trip and second posting attempt are not executed.",
-    "Post-import clean session confirmation is still pending; pre-import Safari smoke remains PASS and is not reused as post-import proof."
+    "Final fresh Safari private login confirmation is pending.",
+    "Nine unrelated baseline failures remain: four GPS, four Equipment/Rules, one nightly catalog audit; no new failures."
   ],
   "cloudGuard": {
     "preservedCAS": true,
@@ -942,7 +812,7 @@
       "note": "Captured window 19:49:27–19:50:55Z. One additional full recovery GET is inferred from CLOUD_FIELD_CONFLICT catch/rebase; it lacks request diagnostics, so observed totals are not exhaustive. POST 409 logged responseBytes=0 means unmeasured body, not proof of empty response. Two full GETs correspond to login/current-build hydration; one full retry GET followed conflict. QA halted before imports and idle certification."
     }
   },
-  "validatedCodeSha": "7586232a14ae4d1767b0714c964ee0bdeea33d29",
+  "validatedCodeSha": "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986",
   "hydrationRootCause": {
     "fixedRegressionCount": 16,
     "file": "app/page.tsx",
@@ -1227,13 +1097,11 @@
     ]
   },
   "RECONCILIATION": {
-    "status": "PASS",
     "GHIN_ONLY": 6,
     "BACKYARD_ONLY": 22,
-    "BACKYARD_PLUS_GHIN": 0,
+    "BACKYARD_PLUS_GHIN": 1,
     "MATCH_REVIEW_REQUIRED": 0,
-    "scope": "22 completed Backyard rounds; cancelled/live are conserved separately",
-    "matchByNameOnly": false
+    "DUPLICATES": 0
   },
   "MAPPINGS": {
     "status": "PASS_PARTIAL",
@@ -1325,69 +1193,35 @@
     "roundSnapshotsChanged": false
   },
   "POST_RESULT": {
-    "executed": false,
-    "providerVerifyExecuted": false,
-    "roundTripExecuted": false,
-    "secondPostingAttemptExecuted": false,
-    "optionalPostsExecuted": 0,
-    "reason": "Stopped before payload/claim/flag/provider POST: no compatible existing round. No provider result or fingerprint fabricated."
+    "status": "PASS",
+    "code": "POSTED",
+    "providerStatus": "SUCCEEDED",
+    "upstreamPosts": 1,
+    "automaticRetries": 0,
+    "secondAction": "ALREADY_POSTED",
+    "secondActionAdditionalProviderPosts": 0
   },
   "CAREER": {
     "status": "PASS",
-    "agentUiVerified": [
-      "Resumen",
-      "Logros",
-      "Rivalidades",
-      "Rondas",
-      "Torneos",
-      "Atest últimas 20",
-      "Inicio active CTA"
-    ],
-    "completedRounds": 22,
-    "grossAverage": 82.8,
+    "completed": 23,
+    "grossAverage": 83.7,
     "bestGross": 71,
     "birdies": 18,
-    "achievementsUnlocked": 5,
-    "achievementsTotal": 7,
-    "rivalryMatches": 25,
-    "tournaments": 0,
-    "ghinOnlyVisible": 6,
-    "adjustedOnlyExcludedFromGrossMetrics": true,
-    "ghinAdvancedStatsInvented": false,
-    "unifiedHistoryOrder": "Descending real played date; Backyard + GHIN links rendered once",
-    "uiFix": "Adjusted score label was inline inside fixed 40px score track. Dedicated provider card now uses intrinsic score track with stacked adjusted label; no domain changes.",
-    "uiFixDevVerified": true,
-    "visualViewportActualWidth": 573,
-    "mobile390Verification": "BLOCKED_EXTERNAL: browser viewport override did not change effective DOM width",
-    "cardScoreBadgeOverlapCount": 0,
-    "cardHorizontalOverflowCount": 0,
-    "persistedCardsAfterReload": 6,
-    "screenshot": ".qa-artifacts/ghin-import-fixed-dev.jpg",
-    "mappingContinuation": {
-      "summaryRechecked": true,
-      "roundsRechecked": true,
-      "completed": 22,
-      "ghinOnly": 6,
-      "linked": 0,
-      "ambiguous": 0,
-      "grossAverage": 82.8,
-      "bestGross": 71,
-      "birdies": 18,
-      "backyardIndex": 5.5,
-      "ghinIndex": 30.8,
-      "attestPercent": 55,
-      "note": "Count mapping pairs using the owner player tee assignment. A group card may display its common tee name; that presentation is not used to map the individual score."
-    }
+    "linkedQa25Rows": 1,
+    "ghinOnlyCards": 6,
+    "unsupportedGhinStatsInvented": false,
+    "backyardIndex": 5.5,
+    "ghinIndex": 30.8,
+    "attestPercent": 50
   },
   "deployment": {
     "url": "https://dev.thebackyard.com.mx",
-    "target": "preview",
-    "codeSha": "7586232a14ae4d1767b0714c964ee0bdeea33d29",
-    "codeDeploymentId": "dpl_6XSqb9pimKpshgKWBjboUjZCQmkj",
-    "codeDeploymentState": "READY",
-    "codeHealthHttp": 200,
-    "codeHealthBuildSha": "7586232a14ae4d1767b0714c964ee0bdeea33d29",
-    "finalReportDeploymentReceipt": "Final documentation commit SHA/READY/health are verified and delivered in the final response; the code validated here is unchanged by documentation."
+    "ready": true,
+    "id": "dpl_F5dQxTcNZtqGPxQ3Uwo9y2epRqFt",
+    "codeSha": "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986",
+    "healthHttp": 200,
+    "environment": "preview",
+    "productionTouched": false
   },
   "previousMappingContinuation": {
     "status": "POSTING_BLOCKED_MAPPING",
@@ -1560,22 +1394,16 @@
     }
   },
   "GIT": {
-    "initialSha": "6701089f443a7e2f5d635a175b5f6fd89121b406",
+    "initialObservedSha": "0d70689ecc1ca3100ac9aedd253f3a791a1177b4",
+    "functionalBaselineSha": "d26733f227243c7220a7c94479c11838a85b8bfc",
+    "validatedCodeSha": "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986",
     "commits": [
-      {
-        "sha": "c2a550358daf4f7bf76e6fa61b658c3385864c6b",
-        "purpose": "Owner-session course lookup and explicit-only UI"
-      },
-      {
-        "sha": "52c99d673767e7b8782bac0e4a6907eecbeb3c73",
-        "purpose": "Explicit linked-golfer gender and preserved lookup evidence"
-      },
-      {
-        "sha": "7586232a14ae4d1767b0714c964ee0bdeea33d29",
-        "purpose": "Audited physical aliases without frozen-round rewriting"
-      }
+      "0a41fe2bf1938be84e9f9fe8cb9962183956a28f",
+      "3c81726575afe63ffd40e19673e7cfb9b4009b0d",
+      "da0cf5c48d90fcf7982b3351759b9e51ff494568",
+      "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986"
     ],
-    "finalDocumentationCommit": "See final response / git HEAD containing this audit."
+    "preservedConcurrentGpsWork": true
   },
   "MAPPING_CONTINUATION_BEFORE": {
     "completedBackyard": 22,
@@ -1586,5 +1414,858 @@
     "ghinIndex": 30.8,
     "attestPercent": 55,
     "qa24": "live; UI resumes H2 from persisted H1 5/6"
-  }
+  },
+  "previousQa25Checkpoint": {
+    "status": "NO_EXISTING_POSTABLE_ROUND",
+    "AFTER": {
+      "ghinIndex": 30.8,
+      "ghinIndexLiveRefresh": "PASS_USER_REAUTH_AND_REAL_SCORING",
+      "providerScoreCount": 6,
+      "providerScoringRecordCount": 6,
+      "backyardCompletedCount": 22,
+      "ghinOnlyCount": 6,
+      "backyardPlusGhinCount": 0,
+      "backyardOnlyCompletedCount": 22,
+      "duplicatesCount": 0,
+      "backyardIndex": 5.5,
+      "attestPercent": 55,
+      "qa24Status": "live",
+      "qa24ResumeHole": 2,
+      "qa24H1": [
+        5,
+        6
+      ],
+      "providerDuplicatesCount": 0
+    },
+    "POST_CANDIDATE": {
+      "status": "NO_EXISTING_POSTABLE_ROUND",
+      "eligibleCount": 0,
+      "completedReviewed": 22,
+      "physicalMappings": 12,
+      "linkedGolferGender": "F",
+      "localPreflightExecuted": true,
+      "localPreflightSource": "Persisted owner round assignments + live GHIN course/tees/profile evidence, using the tested alias resolver.",
+      "dryRunExecuted": false,
+      "roundId": null,
+      "fingerprint": null,
+      "reasons": [
+        "12 Gold rounds resolve the physical alias but use frozen MEN rating; linked GHIN gender is F.",
+        "9 White rounds have frozen 70.8/125/6590, incompatible with current Male 70.8/128/6591 or Female 77.4/153/6591.",
+        "1 Campestre Puebla completed round has no confirmed course+tee mapping/rating."
+      ],
+      "roundAudit": [
+        {
+          "roundId": "ad727513-d19e-45f5-9b3b-6cba094f6544",
+          "date": "2026-09-28",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-white",
+          "gross": 85,
+          "mapping": null,
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": false,
+          "eligible": false,
+          "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+        },
+        {
+          "roundId": "19bfd6a6-5808-4d8e-9432-4a8a9911dfa8",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-white",
+          "gross": 86,
+          "mapping": null,
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": false,
+          "eligible": false,
+          "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+        },
+        {
+          "roundId": "19c03579-423d-4521-9eb1-c7e61110e143",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 99,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "19e2d57c-bd49-4e37-b3f5-bb56d3f72eb0",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 76,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "1c5abff5-a02c-4a45-b151-0b2f5ac9bb55",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 82,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "1cc2c7cc-3c0f-4d93-9f25-9698216700ae",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 71,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "3c8d6add-5e5d-4002-ac00-164e1ab21257",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 83,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "4d004e21-fb27-489d-8081-0e38d6cc2733",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-white",
+          "gross": 88,
+          "mapping": null,
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": false,
+          "eligible": false,
+          "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+        },
+        {
+          "roundId": "4db8c485-fbd4-4a7b-90d0-816786ec7462",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-white",
+          "gross": 92,
+          "mapping": null,
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": false,
+          "eligible": false,
+          "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+        },
+        {
+          "roundId": "4dbafd9d-dccd-4e23-83bf-6a7638e2821e",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 77,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "4ede402e-0eca-442a-9335-31f7d9d44ebb",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 90,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "570c3a9f-03ca-4238-89fc-46ad039d25ba",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-white",
+          "gross": 93,
+          "mapping": null,
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": false,
+          "eligible": false,
+          "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+        },
+        {
+          "roundId": "59031561-6934-4cd0-b3cd-0181e5c76aa2",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 72,
+          "mapping": null,
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": false,
+          "eligible": false,
+          "blocker": "UNCONFIRMED_COURSE_AND_TEE"
+        },
+        {
+          "roundId": "60d444f6-f550-4496-a535-b6a559511954",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 79,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "697e4c3f-42cf-4c95-9c3f-7c57ddfcbf58",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 81,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "75fcbd06-804a-4508-bc34-ea0f23eb1895",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 80,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "7d13f9fb-4e93-49b3-b2d7-b20a5427e4ae",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-white",
+          "gross": 78,
+          "mapping": null,
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": false,
+          "eligible": false,
+          "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+        },
+        {
+          "roundId": "a1bfd195-9fd5-49f3-82ed-2c12e51ca5b0",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 85,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "abf43e91-d09d-499e-beaa-ec76f0ca0c7e",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-gold",
+          "gross": 74,
+          "mapping": {
+            "providerCourseId": "23233",
+            "providerTeeSetId": "106088",
+            "canonicalCourseId": "course-la-vista",
+            "canonicalTeeId": "tee-la-vista-doradas",
+            "strokeAllocationDiffers": true
+          },
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": true,
+          "eligible": false,
+          "blocker": "GOLFER_F_VS_RATED_TEE_M"
+        },
+        {
+          "roundId": "c250c150-8694-46f8-bba9-07472e1eb7bc",
+          "date": "2026-10-05",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-white",
+          "gross": 75,
+          "mapping": null,
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": false,
+          "eligible": false,
+          "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+        },
+        {
+          "roundId": "24493b70-a2ef-456b-8060-aa5d69bb02ea",
+          "date": "2026-10-06",
+          "courseId": "course-campestre-puebla",
+          "teeId": "ghin:23232:tee:468e7646a10f",
+          "gross": 86,
+          "mapping": null,
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": false,
+          "eligible": false,
+          "blocker": "UNCONFIRMED_COURSE_AND_TEE"
+        },
+        {
+          "roundId": "fee4ab11-9650-4f3b-99b3-8af0bd0eebde",
+          "date": "2026-10-06",
+          "courseId": "course-la-vista-club-current",
+          "teeId": "tee-la-vista-club-current-white",
+          "gross": 89,
+          "mapping": null,
+          "ratingGender": "MEN",
+          "genderMatches": false,
+          "complete": true,
+          "postingTeePermitted": false,
+          "eligible": false,
+          "blocker": "FROZEN_RATING_NOT_COMPATIBLE"
+        }
+      ],
+      "scorePostingEnabled": false,
+      "upstreamPosts": 0,
+      "qa25Created": false,
+      "qa25Reason": "The remaining blocker is not solely catalog identity. No historical changes or unnecessary new round."
+    },
+    "POST_RESULT": {
+      "executed": false,
+      "providerVerifyExecuted": false,
+      "roundTripExecuted": false,
+      "secondPostingAttemptExecuted": false,
+      "optionalPostsExecuted": 0,
+      "reason": "Stopped before payload/claim/flag/provider POST: no compatible existing round. No provider result or fingerprint fabricated."
+    },
+    "tests": {
+      "directed": {
+        "tests": 142,
+        "pass": 142,
+        "fail": 0
+      },
+      "full": {
+        "tests": 4598,
+        "pass": 4593,
+        "preexistingFailures": 5,
+        "newFailures": 0
+      },
+      "scripts": {
+        "tests": 117,
+        "pass": 117,
+        "fail": 0
+      },
+      "typecheck": "PASS",
+      "lint": "PASS",
+      "build": "PASS",
+      "baselineFailures": [
+        "equipment-owner-review",
+        "equipment-ui-contract",
+        "final-brand-ghin-closeout Equipment",
+        "iphone-capture Rules",
+        "nightly-catalog-quality equipment-gaps"
+      ],
+      "addedCoverage": [
+        "Owner-session finite course lookup and entitlement failures",
+        "Explicit provider gender with no name/tee inference",
+        "No owner/golfer selector or credential exposure",
+        "No automatic lookup; simultaneous clicks coalesce",
+        "Course evidence retained after tee/profile inspection",
+        "Physical alias preserves frozen data",
+        "No name-only alias",
+        "Rejects rating, gender, geometry, provisional, stale and identity drift",
+        "Real reconciliation uses alias with no round mutation",
+        "50-card in-process batch uses two catalog reads, no N+1"
+      ]
+    },
+    "requestBudget": {
+      "windowStart": "2026-10-06T23:03:00Z",
+      "windowEnd": "2026-10-06T23:40:44.837Z",
+      "scope": "Observed IAB tab diagnostics; four lookup requests also verified in DEV Vercel logs. Not an exhaustive project-wide HTTP count.",
+      "cloudSyncGet": 3,
+      "cloudSyncPost": 0,
+      "cloudRoundsObserved": 0,
+      "lookupRequests": 4,
+      "upstreamLookupReads": 6,
+      "upstreamLookupRetries": 0,
+      "ghinScoringReads": 0,
+      "ghinImports": 0,
+      "ghinScorePosts": 0,
+      "persistedProfileGetCount": null,
+      "persistedImportPageGetCount": null,
+      "unmeasuredCountsNote": "Routine persisted profile/history GETs were not fully instrumented; null is not zero.",
+      "fullBundles": 2,
+      "unexpectedFullBundles": 0,
+      "retries": 0,
+      "failures": 0,
+      "fullBundleReason": "Two deliberate reloads to load the two new lookup UI builds. Each cold mount had knownCloud=false, then clean apply/gate success. No POST, conflict, recovery or retry. One online-event conditional GET was 259 B.",
+      "idleStart": "2026-10-06T23:22:41Z",
+      "idleEnd": "2026-10-06T23:24:41Z",
+      "idleSeconds": 120,
+      "idleCloudCalls": 0,
+      "idleGhinPeriodicCalls": 0,
+      "maxResponseBytes": 521587,
+      "maxLookupResponseBytes": 23785,
+      "maxUploadBytes": 41,
+      "upstreamRawResponseBytes": null,
+      "requestStorm": false,
+      "polling": false,
+      "usageGuardTriggered": false,
+      "cloudRequests": [
+        {
+          "at": "2026-10-06T23:03:03.761Z",
+          "method": "GET",
+          "requestBytes": 0,
+          "responseBytes": 521587,
+          "durationMs": 802,
+          "success": true,
+          "httpStatus": 200,
+          "stage": "sync:download:success",
+          "trigger": "mount",
+          "fingerprint": "v1-2533160f",
+          "endpoint": "/api/cloud/sync",
+          "reason": "canonical-read",
+          "result": "success"
+        },
+        {
+          "at": "2026-10-06T23:08:01.791Z",
+          "method": "GET",
+          "requestBytes": 0,
+          "responseBytes": 259,
+          "durationMs": 563,
+          "success": true,
+          "httpStatus": 200,
+          "stage": "sync:download:success",
+          "trigger": "online",
+          "fingerprint": "v1-2533160f",
+          "endpoint": "/api/cloud/sync",
+          "reason": "canonical-read",
+          "result": "success"
+        },
+        {
+          "at": "2026-10-06T23:22:09.629Z",
+          "method": "GET",
+          "requestBytes": 0,
+          "responseBytes": 521587,
+          "durationMs": 698,
+          "success": true,
+          "httpStatus": 200,
+          "stage": "sync:download:success",
+          "trigger": "mount",
+          "fingerprint": "v1-2533160f",
+          "endpoint": "/api/cloud/sync",
+          "reason": "canonical-read",
+          "result": "success"
+        }
+      ],
+      "lookupRequestsEvidence": [
+        {
+          "at": "2026-10-06T23:04:08.410Z",
+          "operation": "search",
+          "httpStatus": 200,
+          "requestBytes": 40,
+          "responseBytes": 8558
+        },
+        {
+          "at": "2026-10-06T23:04:45.733Z",
+          "operation": "course",
+          "httpStatus": 200,
+          "requestBytes": 41,
+          "responseBytes": 23785
+        },
+        {
+          "at": "2026-10-06T23:05:38.489Z",
+          "operation": "tee",
+          "httpStatus": 200,
+          "requestBytes": 36,
+          "responseBytes": 2132
+        },
+        {
+          "at": "2026-10-06T23:22:38.636Z",
+          "operation": "posting-profile",
+          "httpStatus": 200,
+          "requestBytes": 31,
+          "responseBytes": 292
+        }
+      ]
+    },
+    "cleanSession": {
+      "status": "BLOCKED_EXTERNAL",
+      "scope": "Final clean login after import still requires user confirmation",
+      "account": "el_mongas",
+      "appLoginConfirmed": true,
+      "agentObserved": false,
+      "importedCardsRestored": null,
+      "finalPostImportRelogin": "PENDING_EXTERNAL_CONFIRMATION",
+      "reason": "Agent's ordinary reload recovered server-persisted cards but does not establish empty-context relogin; final private Safari request pending.",
+      "initialHydrationStatus": "PASS",
+      "initialHydrationEvidence": "User certified Safari private hydration before current imports",
+      "ordinaryReloadCardsRestored": 6
+    }
+  },
+  "MAPPING_ROJAS": {
+    "status": "PASS",
+    "liveAt": "2026-10-07T00:09:48.594Z",
+    "courseId": "23233",
+    "facilityId": "19886",
+    "teeId": "106090",
+    "gender": "Female",
+    "rating": 71,
+    "slope": 137,
+    "par": 72,
+    "yards": 5476,
+    "geometry": [
+      [
+        1,
+        4,
+        331,
+        10
+      ],
+      [
+        2,
+        3,
+        115,
+        16
+      ],
+      [
+        3,
+        4,
+        297,
+        4
+      ],
+      [
+        4,
+        5,
+        447,
+        2
+      ],
+      [
+        5,
+        4,
+        319,
+        14
+      ],
+      [
+        6,
+        4,
+        270,
+        18
+      ],
+      [
+        7,
+        3,
+        116,
+        8
+      ],
+      [
+        8,
+        4,
+        306,
+        12
+      ],
+      [
+        9,
+        5,
+        430,
+        6
+      ],
+      [
+        10,
+        5,
+        446,
+        13
+      ],
+      [
+        11,
+        4,
+        306,
+        11
+      ],
+      [
+        12,
+        3,
+        99,
+        9
+      ],
+      [
+        13,
+        4,
+        292,
+        7
+      ],
+      [
+        14,
+        4,
+        364,
+        1
+      ],
+      [
+        15,
+        5,
+        503,
+        5
+      ],
+      [
+        16,
+        4,
+        343,
+        15
+      ],
+      [
+        17,
+        3,
+        135,
+        17
+      ],
+      [
+        18,
+        4,
+        357,
+        3
+      ]
+    ],
+    "postingTeeConfirmed": true,
+    "courseIdentity": "course-la-vista",
+    "teeIdentity": "tee-la-vista-rojas",
+    "courseLinkId": "f7c3aa26-866c-46ef-a227-29f2f734764b",
+    "teeLinkId": "a03c55eb-c3c7-4179-af0d-eb6ad89dd987",
+    "mappingWrites": 0,
+    "globalTeeGenderChanged": false
+  },
+  "QA25": {
+    "status": "PASS",
+    "roundId": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b",
+    "localId": "3sygtta5",
+    "date": "2026-10-06",
+    "course": "LA VISTA COUNTRY CLUB",
+    "courseId": "course-la-vista",
+    "tee": "ROJAS",
+    "teeId": "tee-la-vista-rojas",
+    "providerCourseId": "23233",
+    "providerTeeId": "106090",
+    "ratingGender": "FEMALE",
+    "lifecycle": "completed",
+    "version": 21,
+    "holes": 18,
+    "par": 72,
+    "rating": 71,
+    "slope": 137,
+    "yards": 5476,
+    "scores": [
+      5,
+      4,
+      6,
+      7,
+      6,
+      5,
+      4,
+      6,
+      7,
+      7,
+      6,
+      5,
+      6,
+      6,
+      7,
+      6,
+      4,
+      6
+    ],
+    "out": 50,
+    "in": 53,
+    "gross": 103,
+    "handicapIndex": 30.8,
+    "handicapSource": "GHIN_OFFICIAL_FUTURE",
+    "courseHandicap": 36,
+    "courseHandicapFormula": "round(30.8 * 137 / 113 + (71 - 72)) = 36",
+    "bets": false,
+    "attest": "PENDING",
+    "backyardIndexEligibility": false,
+    "backyardIndexReason": "INDEX_NOT_ENABLED",
+    "capture": "Normal UI; all 18 holes confirmed; no direct score DB insertion"
+  },
+  "IMPORT_AFTER_POST": {
+    "status": "PASS",
+    "fetched": 7,
+    "importedNew": 1,
+    "matchedExisting": 1,
+    "ambiguous": 0,
+    "skippedInvalid": 0,
+    "errors": 0,
+    "provider": {
+      "provider": "GHIN",
+      "played_on": "2026-10-06",
+      "score_type": "H",
+      "updated_at": "2026-10-07T00:40:26.290271+00:00",
+      "gross_score": null,
+      "imported_at": "2026-10-07T00:40:26.290271+00:00",
+      "match_status": "EXACT_MATCH",
+      "slope_rating": 137,
+      "course_rating": 71,
+      "posting_method": null,
+      "linked_round_id": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b",
+      "number_of_holes": 18,
+      "external_score_id": "1208915748",
+      "linked_score_hash": "c7e885df268d87964a2479ea98f5710b91513ae1945fa01732d26c4dcbe7853c",
+      "provider_tee_name": "ROJAS",
+      "provider_course_id": "23233",
+      "score_differential": 26.4,
+      "candidate_round_ids": [],
+      "posting_fingerprint": "5a940101e675cdc613b76e11764e57fdde0ac7788484283f8e69f24464ae413c",
+      "provider_tee_set_id": "106090",
+      "adjusted_gross_score": 103,
+      "provider_course_name": "LA VISTA COUNTRY CLUB"
+    }
+  },
+  "ROUND_TRIP": {
+    "status": "PASS",
+    "originalRoundId": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b",
+    "linkedRoundId": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b",
+    "providerScoreId": "1208915748",
+    "match": "EXACT_MATCH",
+    "backyardCompletedBeforeImport": 23,
+    "backyardCompletedAfterImport": 23,
+    "qa25VersionBeforeImport": 21,
+    "qa25VersionAfterImport": 21
+  },
+  "ATEST": {
+    "status": "PASS",
+    "before": {
+      "valid": 11,
+      "total": 20,
+      "percent": 55
+    },
+    "after": {
+      "valid": 10,
+      "total": 20,
+      "percent": 50
+    },
+    "reason": "New pending Backyard QA25 enters last-20 window and displaces one attested older card. GHIN-only import does not alter Atest; no prior attest removed or auto-attest added."
+  },
+  "QA24": {
+    "status": "PASS",
+    "roundId": "16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d",
+    "localId": "rrouggse",
+    "lifecycle": "live",
+    "resumeHole": 2,
+    "h1": [
+      5,
+      6
+    ],
+    "h2": null,
+    "serverRoundVersion": 5,
+    "serverCloudStateVersion": 494,
+    "canonicalActiveDraftRestored": true,
+    "scoresHash": "66e1869c4a4a09292175d295235e2762"
+  },
+  "previousMappingReportArchive": "docs/qa/GHIN_EL_MONGAS_PRE_QA25_REPORT.md"
 }

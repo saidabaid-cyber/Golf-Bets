@@ -1,113 +1,65 @@
-# Revisión manual GHIN — el_mongas
+# Revisión manual GHIN — el_mongas / QA25 Rojas
 
-Usar exclusivamente **https://dev.thebackyard.com.mx** e iniciar sesión como
-**el_mongas@yahoo.com.mx**. Esta cuenta conserva toda la evidencia QA anterior.
-No borrar rondas/importaciones, cerrar QA24 ni publicar tarjetas para superar un bloqueo.
+Entrar exclusivamente en **https://dev.thebackyard.com.mx** con
+**el_mongas@yahoo.com.mx**. Introducir personalmente OTP/credenciales si se
+solicitan. No enviar códigos por chat. No borrar evidencia ni cerrar QA24.
 
-## Resultado real actual
+**Posting, provider verify y round-trip PASS. Login privado final pendiente.**
 
-**Importación PASS; estado actual NO_EXISTING_POSTABLE_ROUND, no DONE.**
-El usuario renovó GHIN manualmente. Se consultaron seis tarjetas oficiales y
-se importaron mediante el flujo normal. La segunda importación agregó **0**.
-Hay **6 GHIN-only**, **22 completadas Backyard-only**, **0 vinculadas** y
-**0 ambiguas**. **0 publicaciones** upstream.
+1. Abrir una ventana privada **nueva** de Safari. La sesión original del agente
+   ya fue cerrada por UI después de todas las confirmaciones canónicas.
+2. Inicio: **Continuar ronda · Hoyo 2 de 18**. QA24, La Vista/Blancas, tarjeta
+   del club actual. ID `16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d`, local `rrouggse`.
+   Entrar sin guardar: H2 pendiente; H1 **dueño5/invitado6**, HCP congelados5/12.
+   No cerrar/cancelar/publicar QA24. Salir y continuar después conserva la ronda.
+3. Perfil → GHIN: VERIFIED, vínculo `****3351`, Index **30.8**, lectura
+   `2026-10-07T00:45:00.494Z`. Un refresh posterior legítimo puede cambiar el Index.
+4. Tarjetas GHIN guardadas: **7 tarjetas,1 vinculada,0 requieren revisión**.
+   Antes eran6. La nueva: **6oct2026,La Vista,Rojas,103 ajustado**, badge
+   **BACKYARD + GHIN**. ProviderID **1208915748**,18h,CR71/slope137,diff26.4,
+   course23233/tee106090. Abrir Detalle del provider para comprobar esos valores.
+5. Las6históricas siguen GHIN/SOLO LECTURA:
 
-- GHIN VERIFIED: vínculo enmascarado `****3351`.
-- Handicap Index GHIN observado: **30.8**, sync `2026-10-06T22:13:02.411Z`.
-- Backyard Index: **5.5**, independiente.
-- Atest: **11/20 = 55%**, independiente de GHIN.
-- 22 completadas Backyard, QA22 cancelada, QA24 live H2 y dos parciales antiguas.
-- Auditoría posterior: **26/26 snapshots/versiones/scores intactos**.
-- GHIN-only tienen adjusted gross. Gross/campo ID/tee ID son **null**.
-  No se presentan adjusted scores como gross ni se fabrican estadísticas.
-
-## Recorrido de revisión
-
-1. Abrir una **sesión privada nueva** en DEV e iniciar sesión con el_mongas.
-   Introducir personalmente el OTP si se solicita; no enviarlo por chat.
-   La certificación limpia previa fue antes del import. Falta confirmar esta
-   sesión posterior con las seis tarjetas nuevas.
-2. Perfil → GHIN: comprobar VERIFIED, Handicap Index **30.8**, última actualización.
-   Una futura actualización legítima puede cambiar ese valor; no imponerlo.
-3. Carrera → Resumen/Índice: comprobar GHIN como fuente principal y
-   **Backyard Index conservado 5.5**, sin mezcla ni promedio.
-4. Perfil → “Ver scoring record” consulta al provider. “Sincronizar tarjetas GHIN”
-   persiste información oficial privada. Ya se ejecutaron **dos** sincronizaciones;
-   no hace falta repetirlas para esta revisión.
-5. Scoring record antes de import: **6**. Provider scores persistidos antes: **0**.
-   Después de import: **6**. GHIN upstream no recibió tarjetas nuevas.
-6. El resumen de la segunda sincronización fue **0 nuevas, 0 vinculadas,
-   0 requieren revisión**. El total guardado permanece **6**, sin duplicados.
-7. En “Tarjetas GHIN guardadas”, comprobar las seis tarjetas:
-
-   | ID GHIN | Fecha | Tee | Ajustado |
+   | ID | Fecha | Tee | Ajustado |
    |---|---|---|---:|
-   | 902029046 | 7 jun 2023 | Red / Red | 112 |
-   | 899647834 | 1 jun 2023 | Red | 107 |
-   | 888298526 | 1 may 2023 | Red / Red | 116 |
-   | 853907291 | 6 oct 2022 | Red / Red | 122 |
-   | 819244193 | 21 jun 2022 | Red / Red | 129 |
-   | 816066271 | 12 jun 2022 | Red | 126 |
+   |902029046|7jun2023|Red / Red|112|
+   |899647834|1jun2023|Red|107|
+   |888298526|1may2023|Red / Red|116|
+   |853907291|6oct2022|Red / Red|122|
+   |819244193|21jun2022|Red / Red|129|
+   |816066271|12jun2022|Red|126|
 
-   Campo devuelto: “La Vista Country Club | La Vista”, duplicado como texto
-   de dos lados para Red / Red. Se conserva la información recibida.
-8. Cada una debe mostrar **GHIN / SOLO LECTURA**. Abrir “Detalle del provider”
-   en la primera: ID 902029046, ajustado 112, diff 33.8, 18 hoyos, CR 71, slope 137.
-   No debería mostrar gross, scores por hoyo, putts/GIR/bets/Atest inventados.
-9. En Carrera → Rondas, seleccionar todo el historial: las seis GHIN se ordenan
-   por fecha real después de las Backyard de 2026. Revisar también Histórico
-   si se accede desde las tarjetas/acciones existentes.
-10. No existe una ronda publicada en este checkpoint. **BACKYARD + GHIN = 0**
-    es el resultado real; no buscar un provider ID de posting inexistente.
-11. Posting permanece apagado. La consulta oficial confirmó course23233/facility19886.
-    Doradas106088 tiene68.4/121,6038yd y un alias físico para el ID histórico.
-    El GHIN vinculado declara géneroF; esas12 rondas usan ratingMEN.
-    Blancas congeló70.8/125,6590yd; GHIN Male usa70.8/128,6591yd y
-    Female77.4/153. No hay completed compatible y no se modificó historial.
-    Perfil → Consultar campo GHIN permite consultas explícitas; no hace falta
-    repetirlas: la prueba está en docs/qa/GHIN_LA_VISTA_LOOKUP.json y el manifest.
-    “Verificar perfil para posting” devuelve sólo identidad vinculada y género.
-12. Dedupe de import: cada uno de los seis IDs debe aparecer una sola vez
-    por vista. No confundir su aparición en Perfil y Carrera con una duplicación
-    de registros. No se fusionaron por nombre con las 22 de 2026.
-13. Carrera → Resumen conserva **22 completadas**, promedio gross **82.8**,
-    mejor **71**, birdies **18**. GHIN ajustado-only no se convierte en gross.
-14. Logros conserva **5/7**; Rivalidades **25 enfrentamientos** Backyard.
-    GHIN no añade rivales, birdies/putts/GIR ni apuestas. Torneos permanece
-    **0 / estado vacío real**.
-15. Atest conserva **55%, 11/20**, con tarjetas GHIN aparte de las últimas
-    20 Backyard. GHIN sólo lectura no certifica ni altera Atest.
-16. Inicio muestra **Continuar ronda · Hoyo 2 de 18** para QA24.
-    ID `16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d`, local `rrouggse`,
-    La Vista / Blancas (el CTA conserva el texto actual “Par 72 — Tarjeta del club — Actual”),
-    H1 **5/6**, H2 pendiente, versión **4**. No cerrarla, cancelarla ni publicarla.
-17. **MATCH_REVIEW_REQUIRED = 0**. Si una futura sincronización produce
-    ambigüedades, conservar ambas entradas hasta revisión; nunca forzar match
-    por nombre. Las 22 completadas siguen Backyard-only en esta importación.
+   Sus gross/campoID/teeID son null cuando el provider no los devuelve.
+   No deben mostrar scores por hoyo, putts/GIR/bets/Atest inventados.
+6. Carrera → Rondas → Todo el historial: QA25 aparece **una sola fila lógica**
+   con badge BACKYARD+GHIN. ABRIR RONDA BACKYARD abre el original
+   `49cd75db-eb6f-47fa-9e0e-b1841ae0f93b`, local `3sygtta5`, versión21.
+7. QA25:103,OUT50/IN53,par72,Rojas5476yd,CR71/slope137,GHIN Index congelado30.8,
+   Course Handicap36. Sin apuestas, sin auto-Atest. Scores:
+   `5,4,6,7,6,5,4,6,7 / 7,6,5,6,6,7,6,4,6`.
+8. Las22completadas anteriores siguen Backyard-only. QA21:89; QA23Puebla:86;
+   QA22cancelada,20originales y2parciales antiguas conservadas.
+9. Carrera → Resumen:23rondas,promedio83.7,mejor71,birdies18. Historial combinado
+   cuenta23con gross; QA25 vinculada una vez. GHIN adjusted-only no inventa gross
+   ni birdies/putts/GIR/rivalidades/bets. Torneos continúa vacío legítimo.
+10. Índice: GHIN principal30.8; **Backyard Index conservado5.5** separado.
+    QA25 tiene Index interno desactivado por preferencia existente,
+    `INDEX_NOT_ENABLED`; no se forzó elegibilidad ni se mezclaron índices.
+11. Atest últimas20: **10/20=50%**, antes11/20=55%. La nueva QA25 pendiente
+    desplaza una atestada fuera de esa ventana. Las11atestaciones previas siguen
+    guardadas; importar GHIN no cambió Atest ni auto-atestó QA25.
+12. Perfil → Publicar tarjeta en GHIN · QADEV → Ver rondas para revisar → QA25 →
+    Validar sin publicar: **ALREADY_POSTED**,ID1208915748. Segundo providerPOST0.
+    No publicar otras tarjetas: esta corrida autorizó una sola publicación.
+13. Matches ambiguos0. No fusionar por nombre ni modificar snapshots históricos.
+    Bets,grupos,frecuentes e historial previo permanecen. No cleanup.
 
-## Qué permanece pendiente
+Manifest: [GHIN_EL_MONGAS_FINAL.json](qa/GHIN_EL_MONGAS_FINAL.json).
+Reporte: [GHIN_EL_MONGAS_REPORT.md](qa/GHIN_EL_MONGAS_REPORT.md).
+Mapping: [GHIN_QA25_ROJAS_EVIDENCE.json](qa/GHIN_QA25_ROJAS_EVIDENCE.json).
+[Historial](qa/evidence/qa25-unified-history.jpg),
+[QA24H2](qa/evidence/qa24-restored-h2.jpg).
 
-- Confirmación posterior a import en sesión privada nueva, sin reutilizar
-  el storage de la sesión del agente.
-- Una tarjeta completed con rating/género compatible. Course y Doradas física
-  sí quedaron CONFIRMED mediante alias; esto no cambia el rating de la ronda.
-- Dry run → post real → verify provider → reimport same round → segundo
-  intento bloqueado. Ninguna de esas etapas upstream se ejecutó por falta
-  de un candidato compatible; los tests locales no sustituyen esa prueba.
-- CSS corregido verificado en DEV, build
-  `7586232a14ae4d1767b0714c964ee0bdeea33d29`, READY/health 200 del código actual.
-  Ancho efectivo del navegador 573 px: no se afirma prueba física de iPhone.
-  Confirmar durante la revisión privada que “Ajustado” no se encima con GHIN.
-
-Las seis provider cards viven en servidor privado y quedan guardadas.
-No hubo cleanup, cambios de scores ni nuevas rondas.
-No se declara PASS del ciclo GHIN completo.
-
-## Evidencia de esta continuación
-
-- docs/qa/GHIN_LA_VISTA_LOOKUP.json: detalles oficiales,tees postables y geometrías.
-- docs/qa/GHIN_LA_VISTA_MAPPING_DEV.sql: escritura aditiva de dos claves, sin snapshots.
-- docs/qa/GHIN_EL_MONGAS_FINAL.json: auditoría de las22 completed y blockers.
-- docs/qa/GHIN_POSTING_PROFILE_DEV.png: resultado real géneroF sin secretos.
-- Se preservó la asignación de golpes histórica, diferente de la GHIN actual.
-- No QA25,ninguna publicación,ninguna ronda cerrada/cancelada/reescrita.
+Pendiente: confirmación física de sesión privada nueva. El browser automatizado
+comparte storage y no se presenta como contexto limpio. Nueve fallos baseline
+ajenos permanecen; cero nuevos. main,beta,Production y su dominio no fueron tocados.
