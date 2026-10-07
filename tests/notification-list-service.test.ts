@@ -43,12 +43,12 @@ test("round notices never open a source without an exact viewer match; ready req
   const noMatch=await harness({linked:false}).list();assert.equal(noMatch.data.some(item=>item.id==="round"||item.id==="card"),false);
   const live=await harness({completed:false}).list();assert.equal(live.data.some(item=>item.id==="round"),true);assert.equal(live.data.some(item=>item.id==="card"),false);
 });
-test("master OFF mutes the notification query without changing individual choices",async()=>{
-  const f=harness({enabled:false});const before=JSON.stringify(f.tables.notification_preferences_v2);const result=await f.list();assert.equal(result.data.length,0);
-  assert.equal(f.calls.some(call=>call.table==="notification_events_v2"),false);assert.equal(JSON.stringify(f.tables.notification_preferences_v2),before);
+test("master OFF preserves received history without changing delivery choices",async()=>{
+  const f=harness({enabled:false});const before=JSON.stringify(f.tables.notification_preferences_v2);const result=await f.list();assert.equal(result.data.length,4);
+  assert.equal(f.calls.some(call=>call.table==="notification_events_v2"),true);assert.equal(JSON.stringify(f.tables.notification_preferences_v2),before);
 });
-test("event and social opt-outs independently suppress the corresponding notice",async()=>{
-  const result=await harness({inApp:false,notifyFriendRequest:false}).list();assert.deepEqual(JSON.parse(JSON.stringify(result.data.map(item=>item.id))),["card","like"]);
+test("delivery opt-outs retain received notices in history",async()=>{
+  const result=await harness({inApp:false,notifyFriendRequest:false}).list();assert.deepEqual(JSON.parse(JSON.stringify(result.data.map(item=>item.id))),["round","card","friend","like"]);
 });
 test("profile lookup failure retains the valid resource with honest generic presentation",async()=>{
   const result=await harness({profileError:true}).list();assert.equal(result.data.length,4);assert.equal(result.data[0].person,null);
