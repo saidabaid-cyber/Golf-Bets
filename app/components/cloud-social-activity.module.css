@@ -14,7 +14,7 @@
 .postMenu>div{position:absolute;right:0;top:42px;z-index:2;width:min(230px,70vw);padding:6px;background:var(--by-paper);border:1px solid var(--by-line);border-radius:12px;box-shadow:0 7px 20px #103e2d14}
 .postMenu button{display:block;width:100%;border:0;background:transparent;text-align:left;padding:12px;color:var(--by-forest);min-height:44px;font:inherit;font-size:13px;cursor:pointer}
 .postMenu span{display:block;padding:10px 12px;font-size:11px;color:var(--by-muted);line-height:1.5}
-.roundStats{display:flex;align-items:center;margin:16px 0 0;padding:12px;border-radius:12px;background:#f4f5ef;min-width:0}
+.roundStats{display:flex;align-items:center;margin:12px 0 0;padding:10px 12px;border-radius:12px;background:#f4f5ef;min-width:0}
 .roundStats>div{display:grid;gap:5px;text-align:center;flex:1;min-width:0;border-left:1px solid #dce3d7;padding:0 6px}
 .roundStats small{font-size:11px;color:var(--by-muted)}
 .roundStats b{font:700 23px/1.1 var(--by-editorial);font-variant-numeric:tabular-nums}
