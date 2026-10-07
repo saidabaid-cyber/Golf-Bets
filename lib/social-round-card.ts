@@ -2,6 +2,7 @@ import type { SocialRoundCard, SocialScoreHole } from "./social-activity-contrac
 import type { RoundSnapshot } from "./types";
 import { validTotalOnly } from "./total-score-round";
 import { capturedSocialStats } from "./social-feed-presentation";
+import { capturedHoleFacts } from "./golf-captured-hole-facts";
 
 export type SocialRoundSource = { id: string; local_round_id: string; snapshot: RoundSnapshot };
 
@@ -34,9 +35,7 @@ export function safeSocialRoundCard(
     holes.push({ hole: number, par: definition.par, score: score as number,
       ...(Number.isInteger(putts) && (putts as number) >= 0 && (putts as number) <= 20 ? { putts: putts as number } : {}),
       ...(includeCourseIdentity && Number.isFinite(definition.yards) && definition.yards! > 0 ? { yards: definition.yards } : {}),
-      ...(typeof stat?.fairwayHit === "boolean" && definition.par > 3 ? { fairwayHit: stat.fairwayHit } : {}),
-      ...(typeof stat?.greenInRegulation === "boolean" ? { greenInRegulation: stat.greenInRegulation } : {}),
-      ...(Number.isInteger(stat?.penaltyStrokes) && stat!.penaltyStrokes! >= 0 ? { penaltyStrokes: stat!.penaltyStrokes } : {}),
+      ...capturedHoleFacts(stat,definition.par),
     });
   }
   return {

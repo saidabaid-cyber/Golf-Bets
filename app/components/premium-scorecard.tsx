@@ -16,10 +16,10 @@ export function PremiumScorecard({ holes, onHole }: { holes: readonly SocialScor
   const [half, setHalf] = useState<"front" | "back">(front.length ? "front" : "back");
   const shown = half === "front" ? front : back;
   return <section className={styles.scorecard} aria-label="Scorecard de la ronda">
-    <div className={styles.sectionHeading}><h2>Scorecard</h2><small>{holes.length} hoyos</small></div>
+    <div className={styles.sectionHeading}><h2>Tarjeta</h2><small>{holes.length} hoyos</small></div>
     <nav className={styles.tabs} aria-label="Mitades de la tarjeta">{([['front','Front 9',front],['back','Back 9',back]] as const).filter(([, , part])=>part.length).map(([id,label])=><button type="button" key={id} aria-pressed={half===id} onClick={()=>setHalf(id)}>{label}</button>)}</nav>
     <div className={styles.scoreColumns} aria-hidden="true"><span>Hoyo</span><span>Par</span><span>Score</span><span>+/−</span><span>Putts</span></div>
-    <ol className={styles.scoreRows}>{shown.map(h => <li key={h.hole}><button type="button" aria-label={`Abrir hoyo ${h.hole} · ${scoreResultLabel[scoreResult(h.score,h.par)]}`} onClick={()=>onHole(h.hole)}><b>{h.hole}</b><span>{h.par}</span><ScoreSymbol score={h.score} par={h.par}/><span>{h.score === null ? "—" : againstPar(h.score-h.par)}</span><span>{h.putts ?? "—"}</span></button></li>)}</ol>
+    <ol className={styles.scoreRows}>{shown.map(h => <li key={h.hole}><button type="button" aria-label={`Abrir hoyo ${h.hole} · ${scoreResultLabel[scoreResult(h.score,h.par)]}`} onClick={()=>onHole(h.hole)}><b>{h.hole}</b><span>{h.par}</span><ScoreSymbol score={h.score} par={h.par}/><span>{h.score === null ? "—" : againstPar(h.score-h.par)}</span><span>{h.putts ?? "—"}</span>{(typeof h.fairwayHit==="boolean"||typeof h.greenInRegulation==="boolean"||h.penaltyStrokes!==undefined)&&<small className={styles.rowFacts}>{typeof h.fairwayHit==="boolean"&&<span>FIR {h.fairwayHit?"● Sí":"× No"}</span>}{typeof h.greenInRegulation==="boolean"&&<span>GIR {h.greenInRegulation?"● Sí":"× No"}</span>}{h.penaltyStrokes!==undefined&&<span>Penalidades {h.penaltyStrokes}</span>}</small>}</button></li>)}</ol>
     {front.length > 0 && <Totals title="Front 9" holes={front}/>}
     {back.length > 0 && <Totals title="Back 9" holes={back}/>}
     {front.length > 0 && back.length > 0 && <Totals title="Total" holes={holes}/>}

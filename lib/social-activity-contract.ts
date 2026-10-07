@@ -45,7 +45,10 @@ export type SocialRoundCard = {
   scorecard?: SocialScoreHole[];
 };
 
-export type SocialScoreHole = { hole: number; par: number; score: number | null; putts?: number; yards?: number; fairwayHit?: boolean; greenInRegulation?: boolean; penaltyStrokes?: number };
+export type SocialScoreHole = { hole: number; par: number; score: number | null; putts?: number; yards?: number; fairwayHit?: boolean; greenInRegulation?: boolean; penaltyStrokes?: number;
+  teeDirection?: import("./types").AdvancedHoleStat["teeDirection"]; landingLie?: import("./types").AdvancedHoleStat["landingLie"];
+  teeClub?: string; teeDistance?: number; firstPuttDistanceFeet?: number; bunkerCount?: number; greenSideBunkerCount?: number; fairwayBunkerCount?: number; penaltyAreaCount?: number; outOfBounds?: boolean; outOfBoundsCount?: number;
+};
 
 export type SocialActivityCard = {
   id: string;
@@ -86,6 +89,7 @@ export type SocialNotification = {
   createdAt: string;
   readAt: string | null;
   person?: SocialActivityAuthor | null;
+  requestState?: "PENDING" | "ACCEPTED" | "REJECTED" | "CANCELLED";
   courseName?: string | null;
 };
 

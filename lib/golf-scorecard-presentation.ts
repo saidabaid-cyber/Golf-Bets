@@ -2,6 +2,7 @@ import { buildHistoricalRoundRecap } from "./historical-round-recap";
 import { personalRoundPerspective } from "./participant-history";
 import type { SocialRoundCard, SocialScoreHole } from "./social-activity-contract";
 import type { RoundSnapshot, RoundShotSnapshot } from "./types";
+import { capturedHoleFacts } from "./golf-captured-hole-facts";
 
 export const SCORE_RESULTS = ["eagle", "birdie", "par", "bogey", "double"] as const;
 export type ScoreResult = typeof SCORE_RESULTS[number] | "missing";
@@ -19,7 +20,7 @@ export function scorecardTotals(holes: readonly SocialScoreHole[]) {
   const score = complete ? scores.reduce<number>((n,s) => n + s!, 0) : null;
   return { par, score, toPar: score === null ? null : score - par, putts: putts.length && putts.every(p => Number.isInteger(p) && p! >= 0) ? putts.reduce<number>((n,p) => n + p!, 0) : null };
 }
-export type GolfRoundDetail = { card: SocialRoundCard; playerId?: string; playerName?: string; shots: RoundShotSnapshot[] };
+export type GolfRoundDetail = { card: SocialRoundCard; playerId?: string; playerName?: string; handicapApplied?: number; shots: RoundShotSnapshot[] };
 /** Local private history stays in the app. It is never sent through the social reader. */
 export function historyGolfDetail(snapshot: RoundSnapshot): GolfRoundDetail | null {
   const round = personalRoundPerspective(snapshot);
@@ -32,9 +33,7 @@ export function historyGolfDetail(snapshot: RoundSnapshot): GolfRoundDetail | nu
     return { hole: h.number, par: definition?.par ?? h.par, score: h.players.find(p => p.playerId === id)?.score ?? null,
       ...(Number.isInteger(putts) && putts! >= 0 && putts! <= 20 ? { putts: putts! } : {}),
       ...(Number.isFinite(definition?.yards ?? h.yards) ? { yards: definition?.yards ?? h.yards } : {}),
-      ...(typeof stat?.fairwayHit === "boolean" && h.par > 3 ? { fairwayHit: stat.fairwayHit } : {}),
-      ...(typeof stat?.greenInRegulation === "boolean" ? { greenInRegulation: stat.greenInRegulation } : {}),
-      ...(Number.isInteger(stat?.penaltyStrokes) && stat!.penaltyStrokes! >= 0 ? { penaltyStrokes: stat!.penaltyStrokes } : {}),
+      ...capturedHoleFacts(stat,definition?.par ?? h.par),
     };
   });
   const totals = scorecardTotals(holes), fairways = holes.filter(h => h.par > 3), completeGreens = holes.length && holes.every(h => typeof h.greenInRegulation === "boolean"), completeFairways = fairways.length && fairways.every(h => typeof h.fairwayHit === "boolean");
@@ -48,7 +47,7 @@ export function historyGolfDetail(snapshot: RoundSnapshot): GolfRoundDetail | nu
     ...(completeGreens ? { girPct: Math.round(holes.filter(h => h.greenInRegulation).length / holes.length * 100) } : {}),
     ...(completeFairways ? { firPct: Math.round(fairways.filter(h => h.fairwayHit).length / fairways.length * 100) } : {}),
     ...(holes.length ? { scorecard: holes } : {}),
-  }, playerId: id, playerName: player?.name || round.ownerName,
+  }, playerId: id, playerName: player?.name || round.ownerName, ...(Number.isFinite(player?.handicap)?{handicapApplied:player!.handicap!}:{}),
   shots: (round.shots || []).filter(s => s.playerId === id && s.roundId === (round.cloudSourceLocalId || round.id) && Number.isInteger(s.hole) && s.hole >= 1 && s.hole <= 18) };
 }
 /** Accuracy is shown as captured only when an explicit boolean exists. Score/putts do not prove GIR. */

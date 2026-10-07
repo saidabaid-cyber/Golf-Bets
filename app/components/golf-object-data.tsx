@@ -6,6 +6,12 @@ import type { GolfObject } from "../../lib/golf-object-navigation";
 import { historyGolfDetail, scorecardTotals, type GolfRoundDetail } from "../../lib/golf-scorecard-presentation";
 import type { SharedRoundCard } from "../../lib/shared-round-participants";
 import { socialRequest } from "../../lib/social-activity-client";
+import { readAccountUiPreferences, type DistanceUnit } from "../../lib/account-ui-preferences";
+export function useGolfDistanceUnit(): DistanceUnit {
+  const {viewerId}=useGolfObjectData(), [unit,setUnit]=useState<DistanceUnit>("yards");
+  useEffect(()=>{const update=()=>setUnit(readAccountUiPreferences(localStorage,viewerId).distanceUnit);update();window.addEventListener("storage",update);window.addEventListener("focus",update);return()=>{window.removeEventListener("storage",update);window.removeEventListener("focus",update);};},[viewerId]);
+  return unit;
+}
 export type GolfObjectData = { viewerId: string; accessToken?: string; history: RoundSnapshot[]; readActivity: (id: string) => Promise<SocialActivityCard>; invalidateActivity: (id: string) => void };
 export const GolfObjectDataContext = createContext<GolfObjectData | null>(null);
 export function useGolfObjectData() { const context = useContext(GolfObjectDataContext); if (!context) throw Error("Golf object reader missing"); return context; }

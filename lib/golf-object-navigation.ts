@@ -2,6 +2,7 @@ import { golfCoachContextFromSearch, type GolfCoachContext } from "./golf-coach-
 export type GolfObjectSource = "activity" | "history" | "shared";
 export type GolfObject =
   | { kind: "player"; id: string }
+  | { kind: "round-options"; id: string; source: "history" }
   | { [K in "round" | "hole" | "course"]: { kind: K; id: string; source: GolfObjectSource; hole?: number } }["round" | "hole" | "course"]
   | { kind: "equipment" | "achievement" | "leaderboard" | "activity"; id: string; item?: string }
   | { kind: "analysis"; id: "mine" }
@@ -15,6 +16,7 @@ export function golfObjectFromSearch(search: string): GolfObject | null {
   const p = new URLSearchParams(search), kind = p.get("object"), id = p.get("objectId");
   if (!id || !reference.test(id)) return null;
   if (kind === "player") return uuid.test(id) ? { kind, id } : null;
+  if (kind === "round-options") return p.get("objectSource") === "history" ? {kind,id,source:"history"} : null;
   if (kind === "analysis" || kind === "statistics" || kind === "rules") return id === "mine" ? { kind, id } : null;
   if (kind === "coach" && id === "mine") { const context=golfCoachContextFromSearch(search); return context?{kind,id,context}:null; }
   if (kind === "round" || kind === "hole" || kind === "course") {

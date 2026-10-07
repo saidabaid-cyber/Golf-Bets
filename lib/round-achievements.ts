@@ -11,13 +11,13 @@ export type CareerAchievementDefinition = {
 };
 /** The catalogue extends the existing round evidence engine; no parallel achievement store. */
 export const CAREER_ACHIEVEMENTS: readonly CareerAchievementDefinition[] = [
-  { id:"low-round",slug:"low-round",name:"Low Round",description:"Completa una tarjeta de 18 hoyos con 80 golpes o menos.",category:"scoring",icon:"trophy",criterion:"best18",threshold:80,milestones:[100,90,85,80] },
-  { id:"birdie-club",slug:"birdie-club",name:"Birdie Club",description:"Suma 10 birdies en tarjetas completas de 9 o 18 hoyos.",category:"scoring",icon:"bird",criterion:"birdies",threshold:10,milestones:[1,5,10] },
-  { id:"par-master",slug:"par-master",name:"Par Master",description:"Registra 50 pares en tarjetas completas.",category:"scoring",icon:"flag",criterion:"pars",threshold:50,milestones:[10,25,50] },
-  { id:"consistency",slug:"consistency",name:"Consistency",description:"Completa 12 tarjetas de 9 o 18 hoyos.",category:"activity",icon:"bars",criterion:"rounds",threshold:12,milestones:[3,6,12] },
-  { id:"top-finish",slug:"top-finish",name:"Top Finish",description:"Termina en el podio de un torneo con resultados vinculados a tu cuenta.",category:"competition",icon:"star",criterion:"podiums",threshold:1,milestones:[1] },
-  { id:"win-streak",slug:"win-streak",name:"Win Streak",description:"Gana tres enfrentamientos seguidos contra el mismo rival en score bruto.",category:"competition",icon:"flame",criterion:"streak",threshold:3,milestones:[1,2,3] },
-  { id:"ace-club",slug:"ace-club",name:"Ace Club",description:"Registra un hoyo en uno en una tarjeta completa.",category:"scoring",icon:"ace",criterion:"aces",threshold:1,milestones:[1] },
+  { id:"low-round",slug:"low-round",name:"Mejor ronda",description:"Completa una tarjeta de 18 hoyos con 80 golpes o menos.",category:"scoring",icon:"trophy",criterion:"best18",threshold:80,milestones:[100,90,85,80] },
+  { id:"birdie-club",slug:"birdie-club",name:"Club de birdies",description:"Suma 10 birdies en tarjetas completas de 9 o 18 hoyos.",category:"scoring",icon:"bird",criterion:"birdies",threshold:10,milestones:[1,5,10] },
+  { id:"par-master",slug:"par-master",name:"Maestro del par",description:"Registra 50 pares en tarjetas completas.",category:"scoring",icon:"flag",criterion:"pars",threshold:50,milestones:[10,25,50] },
+  { id:"consistency",slug:"consistency",name:"Constancia",description:"Completa 12 tarjetas de 9 o 18 hoyos.",category:"activity",icon:"bars",criterion:"rounds",threshold:12,milestones:[3,6,12] },
+  { id:"top-finish",slug:"top-finish",name:"En el podio",description:"Termina en el podio de un torneo con resultados vinculados a tu cuenta.",category:"competition",icon:"star",criterion:"podiums",threshold:1,milestones:[1] },
+  { id:"win-streak",slug:"win-streak",name:"Racha de victorias",description:"Gana tres enfrentamientos seguidos contra el mismo rival en score bruto.",category:"competition",icon:"flame",criterion:"streak",threshold:3,milestones:[1,2,3] },
+  { id:"ace-club",slug:"ace-club",name:"Hoyo en uno",description:"Registra un hoyo en uno en una tarjeta completa.",category:"scoring",icon:"ace",criterion:"aces",threshold:1,milestones:[1] },
 ];
 export type CareerAchievement = CareerAchievementDefinition & {
   value: number | null; progress: number; status: "unlocked" | "in_progress" | "locked";

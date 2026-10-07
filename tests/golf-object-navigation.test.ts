@@ -29,6 +29,11 @@ test("Feed → player → round → hole → Back restores each selection and ex
   h.render().back();assert.equal(h.render().active,null);assert.equal(h.window.scrollY,620);assert.equal(h.location.search,"?home=feed&filter=keep");assert.equal(h.history.state.backyardTab,"welcome");
 });
 test("Friends and latest-20 origins survive dedicated round navigation",()=>{for(const origin of ["?home=friends&query=car","?screen=career&career=summary&careerDetail=attest"]){const h=mount(origin);h.window.scrollY=188;h.render().open({kind:"round",id:"saved-qa",source:"history"});h.render().back();assert.equal(h.render().active,null);assert.equal(h.location.search,origin);assert.equal(h.window.scrollY,188);}});
+test("round options keep the round frame and parent context without replacing module history",()=>{
+  const h=mount("?screen=career&career=rounds");h.render().open({kind:"round",source:"history",id:"qa-saved"});h.render();h.window.scrollY=281;
+  h.render().open({kind:"round-options",source:"history",id:"qa-saved"});h.render();h.render().back();assert.equal(h.render().active?.kind,"round");assert.equal(h.window.scrollY,281);
+  assert.equal(navigation.golfObjectFromSearch("?object=round-options&objectId=qa-saved&objectSource=activity"),null);
+});
 test("direct object links use an in-app return and malformed selections grant no destination",()=>{
   const h=mount(`?home=feed&object=player&objectId=${player}`);assert.equal(h.render().active?.kind,"player");h.render().back();assert.equal(h.render().active,null);assert.equal(h.location.search,"?home=feed");
   for(const s of ["?object=player&objectId=not-a-uuid",`?object=hole&objectId=${round}&objectSource=activity&hole=19`,`?object=round&objectId=${round}&objectSource=unknown`,`?object=round&objectId=../private&objectSource=history`])assert.equal(navigation.golfObjectFromSearch(s),null);

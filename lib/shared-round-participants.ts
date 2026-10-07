@@ -1,5 +1,6 @@
 import type { RoundSnapshot } from "./types";
 import type { SocialScoreHole } from "./social-activity-contract";
+import { capturedHoleFacts } from "./golf-captured-hole-facts";
 
 export type SharedRoundCard = {
   roundId: string; localRoundId: string; version: number; materialHash: string;
@@ -39,7 +40,7 @@ export function participantCard(roundId: string, ownerId: string, version: numbe
   const myScorecard: SocialScoreHole[] = mine ? holes.flatMap(hole => {
     const definition=definitions?.find(h=>h.number===hole), score=snapshot.scores?.[hole]?.[mine.id], putts=snapshot.putts?.[hole]?.[mine.id];
     if(!definition || !Number.isInteger(definition.par) || definition.par<3 || definition.par>6)return [];
-    return [{hole,par:definition.par,score:Number.isInteger(score)&&score!>0?score!:null,...(Number.isInteger(putts)&&putts!>=0&&putts!<=20?{putts:putts!}:{})}];
+    return [{hole,par:definition.par,score:Number.isInteger(score)&&score!>0?score!:null,...(Number.isInteger(putts)&&putts!>=0&&putts!<=20?{putts:putts!}:{}),...(Number.isFinite(definition.yards)&&definition.yards!>0?{yards:definition.yards}:{}),...capturedHoleFacts(snapshot.advancedStats?.[hole]?.[mine.id],definition.par)}];
   }) : [];
   return {
     roundId, localRoundId: snapshot.id, version, materialHash, courseName: snapshot.courseName,

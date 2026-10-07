@@ -97,3 +97,4 @@
 .highlightLabel{border:0;background:transparent;width:100%;text-align:left;cursor:pointer}
 .achievements li>button{border:0;background:transparent;color:inherit;font:inherit;padding:0;min-height:30px;cursor:pointer}
 @media(max-width:360px){.bagItem{grid-template-columns:42px 50px minmax(0,1fr) 14px;gap:6px}}
+.bagItem{grid-template-columns:72px minmax(0,1fr) 18px;gap:3px 12px;padding:12px 0;min-height:89px}.bagItem>span:first-child{grid-column:1;grid-row:1/3}.bagItem>small{grid-column:2;grid-row:1;align-self:end}.bagItem>b{grid-column:2;grid-row:2;align-self:start;overflow-wrap:anywhere}.bagItem>svg{grid-column:3;grid-row:1/3}

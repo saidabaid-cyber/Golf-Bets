@@ -10,12 +10,12 @@ import { GolfDetailHeader, GolfDetailSkeleton, GolfEmptyState, golfDate } from "
 import { ProfileAvatarMedia } from "./profile-avatar-media";
 import { SocialRoundActivityCard } from "./cloud-social-activity";
 import { BackyardIcon } from "./backyard-icon";
-import Image from "next/image";
+import { GolfEquipmentMedia } from "./golf-equipment-media";
 import styles from "./golf-object.module.css";
 export type GolfOwnProfile = SocialPerson & { club_name?: string | null; city?: string | null; index?: { value: number | null; label: string } };
 export function GolfEquipmentList({ card }: { card: SocialActivityCard }) {
   const navigation=useGolfNavigation();
-  return card.equipment?.items.length ? <div className={styles.equipmentList}>{card.equipment.items.map(item=><button type="button" key={item.id} onClick={()=>navigation?.open({kind:"equipment",id:card.id,item:item.id})}><span className={styles.equipmentImage}>{item.imageUrl?<Image src={item.imageUrl} alt="" width={49} height={49}/>:<BackyardIcon name={item.category==="Bola"?"ball":"club"} size={30}/>}</span><span><small>{item.category}</small><b>{item.brand} {item.model}</b></span><BackyardIcon name="chevron" size={18}/></button>)}</div> : <GolfEmptyState title="Sin equipo compartido" copy="La bolsa aparecerá aquí cuando el jugador elija compartirla."/>;
+  return card.equipment?.items.length ? <div className={styles.equipmentList}>{card.equipment.items.map(item=><button type="button" key={item.id} onClick={()=>navigation?.open({kind:"equipment",id:card.id,item:item.id})}><GolfEquipmentMedia item={item}/><span><small>{item.category}</small><b>{item.brand} {item.model}</b></span><BackyardIcon name="chevron" size={18}/></button>)}</div> : <GolfEmptyState title="Sin equipo compartido" copy="La bolsa aparecerá aquí cuando el jugador elija compartirla."/>;
 }
 export function GolfPlayerProfile({ userId, ownProfile, onEdit }: { userId: string; ownProfile: GolfOwnProfile; onEdit: () => void }) {
   const {viewerId,accessToken}=useGolfObjectData(), navigation=useGolfNavigation();
