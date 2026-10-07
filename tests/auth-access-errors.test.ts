@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
+import { consumeGpsPilotReturn, rememberGpsPilotReturn } from "../lib/gps-pilot-la-vista-1/auth-return";
 import { authCallbackError, authErrorMessage } from "../lib/account-state";
 
 test("OTP delivery errors distinguish unavailable mail configuration, invalid email, rate limits and outage", () => {
@@ -67,7 +68,10 @@ test("callback parser keeps error_code over generic error, and never treats a su
   assert.equal(authCallbackError(new URLSearchParams("code=one-time-authorization-code")), null);
 });
 
-async function runCallback(search: string, exchangeError?: unknown, hash = "") {
+async function runCallback(search: string, exchangeError?: unknown, hash = "", pilotReturn = false) {
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
+  if (pilotReturn) rememberGpsPilotReturn(storage, "dev.thebackyard.com.mx");
   const errors: string[] = []; const redirects: string[] = []; const exchanges: string[] = [];
   let effect: (() => void) | undefined; let restores = 0;
   const exports: { default?: () => unknown } = {};
@@ -76,12 +80,13 @@ async function runCallback(search: string, exchangeError?: unknown, hash = "") {
   }).outputText;
   runInNewContext(source, {
     exports, URLSearchParams,
-    window: { location: { search, hash, replace: (url: string) => redirects.push(url) }, setTimeout: () => 1, clearTimeout: () => {} },
+    window: { location: { search, hash, host: "dev.thebackyard.com.mx", replace: (url: string) => redirects.push(url) }, setTimeout: () => 1, clearTimeout: () => {} },
     require: (name: string) => {
       if (name === "react") return { useState: () => ["", (value: string) => errors.push(value)], useEffect: (fn: () => void) => { effect = fn; } };
       if (name === "react/jsx-runtime") return { jsx: () => null, jsxs: () => null };
       if (name === "next/link" || name.endsWith("brand-lockup")) return {};
       if (name.endsWith("/account-state")) return { authErrorMessage, authCallbackError };
+      if (name.endsWith("/auth-return")) return { consumeGpsPilotReturn, gpsReturnStorage: () => storage };
       if (name.endsWith('/oauth-callback-once')) return { finishOAuthOnce };
       if (name.endsWith("/supabase/client")) return { getSupabaseBrowser: () => ({ auth: { exchangeCodeForSession: async (code: string) => { exchanges.push(code); return { error: exchangeError || null }; }, getSession: async () => { restores++; return { data: { session: { access_token: 'test', refresh_token: 'refresh', expires_at: 9999999999, user: { id: 'verified-user' } } }, error: null }; }, getUser: async () => ({ data: { user: { id: 'verified-user' } }, error: null }) } }) };
       if (name.endsWith("/auth-flow")) return { restoreAuthSession: async () => { restores++; return { user: { id: "verified-user" } }; } };
@@ -91,7 +96,7 @@ async function runCallback(search: string, exchangeError?: unknown, hash = "") {
   exports.default!();
   assert.ok(effect); effect();
   await new Promise<void>(resolve => setImmediate(resolve));
-  return { errors, redirects, exchanges, restores };
+  return { errors, redirects, exchanges, restores, hasPendingReturn: values.size > 0 };
 }
 
 test("real callback handler surfaces sanitized provider failure before any session exchange", async () => {
@@ -137,4 +142,16 @@ test("query error is preferred consistently when callback also contains an OAuth
   assert.match(result.errors[0], /cancelado o no autorizado/);
   assert.deepEqual(result.exchanges, []); assert.equal(result.restores, 0);
   assert.deepEqual(result.redirects, []);
+});
+
+
+test("real OAuth callback returns to GPS after verified sign-in", async () => {
+  const result = await runCallback("?code=gps-pilot-success-code", undefined, "", true);
+  assert.deepEqual(result.redirects, ["/gps-pilot/la-vista-1"]);
+  assert.equal(result.hasPendingReturn, false);
+});
+test("OAuth failure keeps GPS return pending and does not navigate", async () => {
+  const result = await runCallback("?code=gps-pilot-error-code", { code: "bad_code_verifier" }, "", true);
+  assert.deepEqual(result.redirects, []);
+  assert.equal(result.hasPendingReturn, true);
 });

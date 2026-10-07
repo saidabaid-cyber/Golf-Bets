@@ -5,6 +5,7 @@ import { useEffect,useRef,useState } from 'react';
 import { emailLinkHash,verifyEmailLink } from '../../lib/email-link';
 import { getSupabaseBrowser } from '../../lib/supabase/client';
 import { BrandLockup } from './brand-lockup';
+import { consumeGpsPilotReturn, gpsReturnStorage } from '../../lib/gps-pilot-la-vista-1/auth-return';
 
 export function EmailLinkConfirmation(){
   const token=useRef<string|null>(null),initialized=useRef(false),inFlight=useRef(false);
@@ -27,7 +28,7 @@ export function EmailLinkConfirmation(){
     const auth=getSupabaseBrowser();
     if(!auth){setError('El acceso todavía no está configurado en este entorno.');setState('error');return;}
     inFlight.current=true;setState('busy');
-    try{await verifyEmailLink(auth.auth,token.current);token.current=null;window.location.replace('/manage');}
+    try{await verifyEmailLink(auth.auth,token.current);token.current=null;window.location.replace(consumeGpsPilotReturn(gpsReturnStorage(), window.location.host) || '/manage');}
     catch{token.current=null;setError('El enlace ya se utilizó o caducó. Solicita uno nuevo.');setState('error');}
     finally{inFlight.current=false;}
   }

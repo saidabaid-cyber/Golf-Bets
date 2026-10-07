@@ -6,6 +6,7 @@ import { getSupabaseBrowser } from "../../../lib/supabase/client";
 import { authCallbackError, authErrorMessage } from "../../../lib/account-state";
 import { finishOAuthOnce } from "../../../lib/oauth-callback-once";
 import { BrandLockup } from "../../components/brand-lockup";
+import { consumeGpsPilotReturn, gpsReturnStorage } from "../../../lib/gps-pilot-la-vista-1/auth-return";
 
 export default function AuthCallbackPage() {
   const [error, setError] = useState("");
@@ -30,7 +31,11 @@ export default function AuthCallbackPage() {
         const code = params.get("code");
         const session = await finishOAuthOnce(supabase.auth, code);
         if (!session) throw new Error("account_session_missing");
-        if (mounted && !timedOut) window.location.replace("/?auth=complete");
+        if (mounted && !timedOut) {
+          const pilot = consumeGpsPilotReturn(gpsReturnStorage(), window.location.host);
+          if (pilot) window.location.replace(pilot);
+          else window.location.replace("/?auth=complete");
+        }
       } catch (callbackError) {
         if (mounted && !timedOut) setError(authErrorMessage(callbackError, "callback"));
       } finally {

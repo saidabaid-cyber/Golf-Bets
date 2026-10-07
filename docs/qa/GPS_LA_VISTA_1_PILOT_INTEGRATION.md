@@ -12,9 +12,13 @@ base. No se interrumpieron operaciones ni se resolvieron conflictos de sus datos
 - Flag privado `GPS_LA_VISTA_1_PILOT_ENABLED=true`, limitado en Vercel a target
   `preview` y gitBranch `integration/backyard-current`. Apagado por defecto.
 - Además se comprueban rama, entorno y host exactos en página y API.
-- El servidor reutiliza `requireAdminMode(request, "courses")`: sesión real,
-  lifecycle y membresía administrativa vigente. No se amplían permisos.
-- La membresía ADMIN GLOBAL existente de Said se confirmó por lectura.
+- El servidor valida sesión real y lifecycle con `authenticatedRequest`.
+  `GPS_LA_VISTA_1_PILOT_USER_IDS` habilita sólo el piloto por UUID autenticado,
+  en la misma rama DEV. El fallback de administradores de campos se conserva.
+- Corrección de identidad (2026-10-06): la verificación original consultó otra
+  cuenta de Said. La cuenta real `@said_aba` no tiene membresía administrativa;
+  recibe únicamente el permiso privado de prueba GPS. No se crean ni amplían
+  roles globales, membresías ni permisos de Course Master.
 - API GET privada/no-store; no hay mutaciones, migraciones, inserción al Course
   Master ni almacenamiento/transmisión de posiciones del teléfono.
 - Se reutilizó el paquete preparado, sin incorporar la antigua rama GPS ni
@@ -76,3 +80,35 @@ local por sí solo no acredita publicación.
 Funcionamiento físico y exactitud del objetivo: **PENDING_DEVICE_QA**.
 Mapbox apagado; sin servicios ni cargos nuevos. Para desactivar, retirar/apagar
 solo el flag de esta rama y volver a desplegar el DEV existente.
+
+
+## Corrección de acceso y retorno de login
+
+La pantalla distingue sesión pendiente, acceso pendiente, sesión terminada,
+fallo recuperable y denegación comprobada. Valida/restaura la sesión mediante el
+flujo Auth existente y descarta respuestas antiguas después de cambios de cuenta,
+token o desmontaje. Una falla de red no se presenta como falta de permisos.
+
+El botón **Iniciar sesión y volver al piloto** abre `/gps-pilot/login`,
+reutilizando AccountProvider y su UI/lifecycle. Después de OTP regresa directamente
+al piloto. OAuth y el enlace de email conservan un destino fijo en sessionStorage,
+con caducidad de una hora y host DEV exacto. Sin esa intención, el login normal
+mantiene su destino anterior. No acepta URLs arbitrarias.
+
+La variable privada de probadores se limita a target Preview y
+gitBranch integration/backyard-current; no usa NEXT_PUBLIC. No se cambió la base,
+el objetivo provisional, GHIN, scores, apuestas, rondas ni Mapbox.
+
+La prueba con sesión real de `@said_aba` es **PENDING_INTERACTIVE_QA** hasta
+verificarla en su navegador; las pruebas con identidades simuladas no la sustituyen.
+La exactitud del objetivo y GPS físico siguen **PENDING_DEVICE_QA**.
+
+Validación de este delta sobre `ea0e3e3d5fabf2a8953bb876300153f020146737`:
+87/87 pruebas de GPS/sesión/retorno/Auth y 36/36 regresiones de permisos, email,
+catálogo autenticado y edición de ronda activa. Las 25 portables se ejecutaron
+como subproceso real. Typecheck, lint y build PASS. Salida de tests nueva y
+aislada; no se usaron resultados compilados de ramas anteriores.
+
+La evidencia de GHIN/El Mongas quedó en `ea0e3e3`; ese commit es la base y se
+conserva íntegro. Se comprobaron hashes originales antes de copiar el delta y se
+guardó una copia de recuperación externa. El otro turno terminó antes del push.
