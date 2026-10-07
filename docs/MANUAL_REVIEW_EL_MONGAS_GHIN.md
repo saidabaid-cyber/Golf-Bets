@@ -4,14 +4,18 @@ Entrar exclusivamente en **https://dev.thebackyard.com.mx** con
 **el_mongas@yahoo.com.mx**. Introducir personalmente OTP/credenciales si se
 solicitan. No enviar códigos por chat. No borrar evidencia ni cerrar QA24.
 
-**Posting, provider verify y round-trip QA25 certificados previamente.**
+**STATUS: DONE.** Posting, provider verify, round-trip, unlink/relink,
+reimport idempotente y recuperación en Safari privado NUEVO certificados.
+El dueño confirmó físicamente GHIN30.8, QA24H2, historial retenido y QA25 única.
+Reposo final superior a3minutos:sin eventos runtime,0sync periódico observado,
+0errores y ninguna tormenta. Esta guía queda para revisión futura; no hay
+otra prueba requerida para cerrar este frente.
 
 La regla vigente de fuente de índice cambió en el cierre link/unlink/relink.
 Con GHIN VERIFIED, GHIN es el único índice activo. El antiguo Backyard Index
 5.5 quedó cerrado mediante un reset persistente: no es un índice alternativo
 ni se reactiva al desvincular. Las rondas y sus HCP congelados se conservan.
-Consultar el reporte de transición al final para distinguir pruebas ejecutadas
-de las pendientes.
+Consultar el reporte de transición al final para revisar la evidencia ejecutada.
 
 1. Abrir una ventana privada **nueva** de Safari. La sesión original del agente
    ya fue cerrada por UI después de todas las confirmaciones canónicas.
@@ -19,8 +23,9 @@ de las pendientes.
    del club actual. ID `16e2c462-e6c3-4d5d-80d4-b68f6fc25a2d`, local `rrouggse`.
    Entrar sin guardar: H2 pendiente; H1 **dueño5/invitado6**, HCP congelados5/12.
    No cerrar/cancelar/publicar QA24. Salir y continuar después conserva la ronda.
-3. Perfil → GHIN: VERIFIED, vínculo `****3351`, Index **30.8**, lectura
-   `2026-10-07T00:45:00.494Z`. Un refresh posterior legítimo puede cambiar el Index.
+3. Perfil → GHIN: VERIFIED, mismo vínculo `****3351`, Index **30.8** certificado
+   tras relink y en la sesión privada final. Un refresh legítimo futuro puede
+   cambiar el Index. Reimport final: **0 nuevas/1 vinculada/0 requieren revisión**.
 4. Tarjetas GHIN guardadas: **7 tarjetas,1 vinculada,0 requieren revisión**.
    Antes eran6. La nueva: **6oct2026,La Vista,Rojas,103 ajustado**, badge
    **BACKYARD + GHIN**. ProviderID **1208915748**,18h,CR71/slope137,diff26.4,
@@ -50,7 +55,7 @@ de las pendientes.
    cuenta23con gross; QA25 vinculada una vez. GHIN adjusted-only no inventa gross
    ni birdies/putts/GIR/rivalidades/bets. Torneos continúa vacío legítimo.
 10. Índice con GHIN VERIFIED: **GHIN es la única fuente activa**; el último
-    valor certificado antes de esta transición es30.8. No debe aparecer
+    valor certificado en el cierre final es30.8. No debe aparecer
     “Backyard Index conservado5.5” ni un segundo índice activo. QA25 conserva
     su snapshot original `INDEX_NOT_ENABLED`; no se recalculan rondas viejas.
     Tras unlink debe verse **Sin índice activo**, manteniendo las tarjetas
@@ -76,8 +81,12 @@ Reporte de la regla vigente y evidencias de link/unlink/relink:
 Manifest de la transición:
 [GHIN_INDEX_TRANSITION_EL_MONGAS.json](qa/GHIN_INDEX_TRANSITION_EL_MONGAS.json).
 
-El browser automatizado comparte storage y no se presenta como contexto limpio.
-La verificación privada debe hacerse en una ventana privada nueva y capturando
-personalmente el código. No enviar OTP ni contraseñas por chat. Nueve fallos
-baseline ajenos permanecen; cero nuevos. main,beta,Production y su dominio no
-fueron tocados.
+La recuperación final fue certificada físicamente por el dueño en Safari
+privado NUEVO, separada del storage automatizado. No se incluyen OTP,
+contraseñas ni secretos. Nueve fallos baseline ajenos permanecen; cero nuevos.
+main,beta,Production y su dominio no fueron tocados. QA24 permanece activa;
+todo el historial, importaciones y receipt permanecen guardados. No cleanup.
+
+Único BACKLOG_NON_BLOCKING: revisar en otro frente el aviso “Ronda actualizada
+desde la nube. La versión local anterior se conservó en este dispositivo.”
+Puede ser confuso en sesión limpia; no causó conflicto, no cambióH2 y no bloquea.

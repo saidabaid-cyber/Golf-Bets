@@ -1,8 +1,9 @@
 # GHIN source transition — el_mongas — DEV
 
-**STATUS: USER_REAUTH_REQUIRED.** Implementation, local regression checks and
-real unlink passed. Independent private-session verification and manual relink
-remain required; this report does not declare DONE.
+**STATUS: DONE.** Link, unlink, retention, same-GHIN relink, explicit reimport,
+QA25 idempotence and final independent private-session recovery passed.
+The owner physically certified the final state in a NEW Safari private session.
+No further functional change, posting, round or cleanup is required.
 
 ## A. INDEX_STATE_MODEL
 
@@ -24,8 +25,10 @@ Same-identity VERIFIED refresh/reauth and initialization are idempotent. The
 server-owned revision overrides stale browser preferences, including a clock
 set far in the future. Unlink advances source revision without moving reset.
 
-The existing linked account adopted its boundary once at
-`2026-10-07T01:48:57.501033Z`. Future explicit Backyard activation can use only
+The existing linked account initially adopted its boundary at
+`2026-10-07T01:48:57.501033Z`. The later confirmed relink started revision3
+at `2026-10-07T03:27:17.051751Z`; subsequent refresh/import left it unchanged.
+Future explicit Backyard activation can use only
 eligible rounds started strictly after that boundary. GHIN-only cards remain
 excluded. Old rounds, scores and frozen playing handicaps are unchanged.
 
@@ -106,30 +109,33 @@ resume, cancel or completion was performed.
 
 ## K. CLEAN_SESSION_UNLINKED
 
-USER_REAUTH_REQUIRED. The original agent session was closed through UI. The
-owner has been asked to open a NEW Safari private window, log in manually and
-verify the unlinked state, seven retained cards, QA25 once, QA24 H2 and Carrera.
-An IAB tab shares browser storage and is not claimed as a clean-context proof.
-Relink will follow only after this independent verification.
+PASS, physically certified by the owner in NEW Safari private after unlink:
+no linked GHIN, no active Index, no revival of5.5, retained cards and QA25 once,
+Atest50%, history/Carrera recovered. The separately reported QA24 resume
+regression was subsequently fixed and physically certified before relink.
+The final private-session certification also confirms QA24 remains liveH2.
+The automated IAB shared storage is not used as the private-session evidence.
 
 ## L. RELINK
 
-USER_REAUTH_REQUIRED; not yet executed. The owner must authenticate the SAME
-GHIN manually in DEV. No passwords or OTPs are collected in chat or code.
-Local Postgres already verifies relink creates one new source epoch, retains
-provider IDs/receipts and does not move the boundary on subsequent refresh.
+PASS. The owner manually authenticated the SAME GHIN; server identity matched.
+VERIFIED, GHIN30.8 sole active source, old5.5 inactive/invisible. The confirmed
+relink established source revision3; explicit refresh left Index30.8 and the
+reset boundary unchanged. Provider IDs and receipts remained intact.
+No passwords or OTPs were collected in chat, logs or code.
 
 ## M. REIMPORT
 
-Not executed after real relink. Result `IMPORTED_NEW` is unknown, not zero.
-Local integration executes the canonical import RPC after unlink/relink and
-verifies zero new rows for retained provider IDs.
+PASS, executed once explicitly after real relink:0new,1linked,0review,
+0duplicates. All7retained provider IDs persist;6GHIN-only and1QA25Backyard+GHIN.
+The owner confirmed the same summary in the final private-session UI.
 
 ## N. QA25_IDEMPOTENCE_AFTER_RELINK
 
-Real preflight pending relink. Local owned-service regression returns
-ALREADY_POSTED from the existing canonical receipt before resolving a provider
-session or making upstream POST. Real provider POST count in this task:0.
+PASS. Real QA25 “Validar sin publicar” after relink returned ALREADY_POSTED
+from the canonical receipt before provider access. Provider score1208915748,
+receipt106216c7-cdbb-4e30-824c-ebf35139c039 SUCCEEDED and linked round unchanged.
+Additional upstream score POST in this final attempt:0. No repost or new round.
 
 ## O. CAREER
 
@@ -146,21 +152,28 @@ historical attestations were not deleted. Link/unlink does not change Atest.
 
 ## Q. REQUEST_BUDGET
 
-Observed browser diagnostics so far: cloud sync GET2, POST0, cloud rounds0,
+Historical unlink-stage browser diagnostics: cloud sync GET2, POST0, cloud rounds0,
 retry0, failure0. Two full535,006-byte bundles are explained by initial login
 and one deliberate reload to adopt the deployment, both mount/knownCloud=false.
 Unexpected full bundles0. No upload followed either hydration. GHIN persisted
-import GET3, largest4,551bytes; import POST0; unlink1; relink0; provider POST0.
+import GET3, largest4,551bytes; import POST0; unlink1; relink0; provider POST0
+in that stage. These are scoped observations, not totals for the later relink.
 
 Profile requests are not fully byte-instrumented; their total is unknown.
-Runtime-log absence is not substituted for request counts. Final authenticated
-two-minute idle verification is pending. No polling, storm or abnormal retry
-was observed during the finite explicit navigation/unlink flow.
+Runtime-log absence is not substituted for global request counts. The final
+agent session observed154.636seconds with0cloud diagnostic events. The owner
+then certified more than3minutes without runtime events after the last explicit
+action:0periodic cloud sync observed,0runtime errors, request stormNO.
+Reauthorize and scoring record returnedHTTP200. CLEAN_SESSION and IDLE_2_MIN
+are PASS. No additional provider score POST. In the documentary close only
+one DEV health GET was performed; no account/provider operations were repeated.
 
 ## R. TESTS
 
-Directed81/81PASS. Full suite4,705tests:4,696PASS,9exact preexisting failures,
-zero new failures. TypecheckPASS, lintPASS, buildPASS. New tests exercise real
+Final functional closure:directed171/171PASS. Full suite4,710tests:4,701PASS,
+9exact preexisting failures,zero new failures. Script suite117/117PASS.
+TypecheckPASS, lintPASS, buildPASS. No mass tests rerun for this documentary close.
+Earlier transition tests exercise real
 local Postgres triggers, transactions, RLS, retention, relink/import, source
 selection, stale clocks, future epochs, frozen snapshots and owned route reads.
 
@@ -182,14 +195,18 @@ InitialSHA `5c72b134a85a16b70c272cdc12782f7a0470617a`, clean integration branch.
 Concurrent GPS commit `9016d5cd0de488be64d619f8f67a489f5d4f7307` preserved.
 Core `de7eb6ce0fca4a9f684d5742d2564e720ee67afd` and tests
 `f369b73ee373b5b12684d271ec68b4750f30df63` pushed only to integration.
-Docs/evidence commit will contain this checkpoint. Main, beta, Production,
-productive domain and other accounts were not modified.
+Subsequent work, including QA24 resume fix and GPS work, is preserved at final
+functional SHA `b647eaf7dd168c365665a8d1f9f9c99ba23846c3`. This final commit
+changes only reports/manifests/manual guide. Its documentary SHA is recorded
+in the delivery and Git history. Main, beta, Production, productive domain and
+other accounts were not modified.
 
 ## T. DEPLOYMENT
 
 https://dev.thebackyard.com.mx/api/health HTTP200, environment preview,
-buildSHA `f369b73ee373b5b12684d271ec68b4750f30df63`, deployment
-`dpl_AYE79G5Wfpxcq1b7ACjCa72XumfS` READY. No Production deployment.
+buildSHA `b647eaf7dd168c365665a8d1f9f9c99ba23846c3`, deployment
+`dpl_2dcqTfVGYx9FBKS5kf2G9jwGTrox` READY. Health rechecked2026-10-07T04:10Z.
+No new functional deployment and no Production deployment.
 
 ## U. MANUAL_REVIEW
 
@@ -200,7 +217,9 @@ and checkpoint hashes without passwords, auth responses, cookies or tokens.
 
 ## V. UNRESOLVED
 
-Independent clean-session unlink proof; manual same-GHIN relink; explicit
-reimport; QA25 ALREADY_POSTED preflight after relink; final authenticated
-two-minute idle observation. These stages are not presented as PASS.
+None blocking. All required stages are PASS; GHIN + BACKYARD QA is DONE.
 All retained evidence remains in el_mongas DEV. No cleanup.
+
+BACKLOG_NON_BLOCKING only:review in a separate task the banner “Ronda actualizada
+desde la nube. La versión local anterior se conservó en este dispositivo.”
+It can confuse in a clean session, but caused no conflict, H2 change or blockage.

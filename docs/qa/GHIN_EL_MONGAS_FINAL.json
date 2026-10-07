@@ -1,5 +1,5 @@
 {
-  "status": "BLOCKED_EXTERNAL",
+  "status": "DONE",
   "environment": "DEV",
   "branch": "integration/backyard-current",
   "url": "https://dev.thebackyard.com.mx",
@@ -110,7 +110,7 @@
   },
   "AFTER": {
     "ghinIndex": 30.8,
-    "ghinIndexLiveRefresh": "PASS_USER_REAUTH_AND_REAL_SCORING",
+    "ghinIndexLiveRefresh": "PASS_SAME_GHIN_RELINK_EXPLICIT_REFRESH_AND_OWNER_PRIVATE_CONFIRMATION",
     "providerScoreCount": 7,
     "providerScoringRecordCount": 7,
     "backyardCompletedCount": 23,
@@ -118,7 +118,7 @@
     "backyardPlusGhinCount": 1,
     "backyardOnlyCompletedCount": 22,
     "duplicatesCount": 0,
-    "backyardIndex": 5.5,
+    "backyardIndex": null,
     "attestPercent": 50,
     "qa24Status": "live",
     "qa24ResumeHole": 2,
@@ -127,9 +127,16 @@
       6
     ],
     "providerDuplicatesCount": 0,
-    "ghinIndexLastSuccessfulSyncAt": "2026-10-07T00:45:00.494Z",
     "attestedLast20": 10,
-    "attestDenominator": 20
+    "attestDenominator": 20,
+    "ghinLinkState": "VERIFIED",
+    "activeIndexSource": "GHIN",
+    "oldBackyardIndex": 5.5,
+    "oldBackyardIndexActive": false,
+    "oldBackyardIndexVisible": false,
+    "sourceStateRevision": 3,
+    "backyardIndexResetAt": "2026-10-07T03:27:17.051751Z",
+    "evidenceScope": "Current final state; earlier AFTER is preserved in previousFinalClosureCheckpoint"
   },
   "baseline": {
     "unchangedRounds": 26,
@@ -624,7 +631,7 @@
     "explicitReimportUpsertCount": 6
   },
   "requestBudget": {
-    "scope": "Agent tab observations from 2026-10-07T00:00Z through logout; owner Safari traffic separately confirmed, never inferred as zero",
+    "scope": "Historical QA25 posting-stage observations; final closure metrics are recorded separately in finalClosure.requestBudget",
     "cloud": {
       "/api/cloud/sync GET": 22,
       "/api/cloud/rounds GET": 21,
@@ -718,47 +725,67 @@
     }
   },
   "cleanSession": {
-    "status": "BLOCKED_EXTERNAL",
-    "originalSessionLoggedOut": true,
-    "verification": "Awaiting owner Safari private new-session confirmation; agent tab has shared persistent workspace storage and is not called a clean context"
+    "status": "PASS",
+    "evidenceSource": "Owner physical final confirmation in the latest user instruction",
+    "browser": "NEW Safari private session",
+    "agentCreatedCleanContext": false,
+    "originalAgentSessionLoggedOutAndDiscarded": true,
+    "account": "el_mongas@yahoo.com.mx",
+    "login": "PASS",
+    "serverRecovery": "PASS",
+    "ghinVerified": true,
+    "ghinIndex": 30.8,
+    "activeSource": "GHIN",
+    "oldBackyardIndexActive": false,
+    "oldBackyardIndexVisible": false,
+    "retainedGhinHistoryVisible": true,
+    "qa25LogicalRows": 1,
+    "qa25Provenance": "BACKYARD_PLUS_GHIN",
+    "visibleDuplicates": 0,
+    "qa24Lifecycle": "live",
+    "qa24ResumeHole": 2,
+    "qa24H1": [
+      5,
+      6
+    ],
+    "careerAndHistory": "PASS",
+    "falseCloudConflict": false
   },
   "tests": {
-    "ownedPosting": {
-      "total": 18,
-      "pass": 18,
+    "directed": {
+      "total": 171,
+      "pass": 171,
       "fail": 0
     },
-    "directedFinal": {
-      "total": 545,
-      "pass": 544,
-      "fail": 1,
-      "preexistingFail": "Mi Bolsa keeps approved product media while permanent management stays compact"
-    },
     "full": {
-      "total": 4666,
-      "pass": 4657,
-      "fail": 9,
-      "newFailures": 0,
-      "baselineFailures": [
-        "✖ provider diagnostics contain no token, resource URL or personal coordinates",
-        "✖ new renderer is under demand with local position updates, cleanup and real terrain exaggeration",
-        "✖ round opens isolated GPS view without changing score navigation or creating another round",
-        "✖ every module flag is independent and opt-in, GPS doesn't require map or flyover",
-        "✖ la UI final usa bolsa premium, selección guiada y modo manual explícito",
-        "✖ Mi bolsa abre una ficha limpia por bastón y reserva el borrado para el detalle",
-        "✖ Mi Bolsa keeps approved product media while permanent management stays compact",
-        "✖ Reglas dejan IA/directorio plegables, recursos como accesos directos y videos abiertos al final",
-        "✖ nightly audit artifacts reproduce from canonical runtime catalogs and captured QA metadata"
-      ]
+      "total": 4710,
+      "pass": 4701,
+      "preexistingFail": 9,
+      "newFail": 0
+    },
+    "scripts": {
+      "total": 117,
+      "pass": 117,
+      "fail": 0
     },
     "typecheck": "PASS",
     "lint": "PASS",
-    "build": "PASS"
+    "build": "PASS",
+    "validatedCodeSha": "b647eaf7dd168c365665a8d1f9f9c99ba23846c3",
+    "evidence": "Executed once before final owner verification; not rerun during this documentary close",
+    "baselineFailures": [
+      "✖ provider diagnostics contain no token, resource URL or personal coordinates",
+      "✖ new renderer is under demand with local position updates, cleanup and real terrain exaggeration",
+      "✖ round opens isolated GPS view without changing score navigation or creating another round",
+      "✖ every module flag is independent and opt-in, GPS doesn't require map or flyover",
+      "✖ la UI final usa bolsa premium, selección guiada y modo manual explícito",
+      "✖ Mi bolsa abre una ficha limpia por bastón y reserva el borrado para el detalle",
+      "✖ Mi Bolsa keeps approved product media while permanent management stays compact",
+      "✖ Reglas dejan IA/directorio plegables, recursos como accesos directos y videos abiertos al final",
+      "✖ nightly audit artifacts reproduce from canonical runtime catalogs and captured QA metadata"
+    ]
   },
-  "unresolved": [
-    "Final fresh Safari private login confirmation is pending.",
-    "Nine unrelated baseline failures remain: four GPS, four Equipment/Rules, one nightly catalog audit; no new failures."
-  ],
+  "unresolved": [],
   "cloudGuard": {
     "preservedCAS": true,
     "localFixStatus": "PASS",
@@ -812,7 +839,7 @@
       "note": "Captured window 19:49:27–19:50:55Z. One additional full recovery GET is inferred from CLOUD_FIELD_CONFLICT catch/rebase; it lacks request diagnostics, so observed totals are not exhaustive. POST 409 logged responseBytes=0 means unmeasured body, not proof of empty response. Two full GETs correspond to login/current-build hydration; one full retry GET followed conflict. QA halted before imports and idle certification."
     }
   },
-  "validatedCodeSha": "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986",
+  "validatedCodeSha": "b647eaf7dd168c365665a8d1f9f9c99ba23846c3",
   "hydrationRootCause": {
     "fixedRegressionCount": 16,
     "file": "app/page.tsx",
@@ -899,7 +926,8 @@
     "vercelCloudFieldConflict": 0,
     "vercelRetries": 0,
     "vercelRuntimeErrors": 0,
-    "vercelProfileGhinExplicitRead": 1
+    "vercelProfileGhinExplicitRead": 1,
+    "evidenceScope": "Earlier historical pre-posting hydration smoke; final source state is AFTER/finalClosure, not this historical Backyard5.5 snapshot"
   },
   "SCORING_RECORD_ATTEMPT": {
     "status": "USER_REAUTH_REQUIRED",
@@ -1210,17 +1238,22 @@
     "linkedQa25Rows": 1,
     "ghinOnlyCards": 6,
     "unsupportedGhinStatsInvented": false,
-    "backyardIndex": 5.5,
+    "backyardIndex": null,
     "ghinIndex": 30.8,
-    "attestPercent": 50
+    "attestPercent": 50,
+    "oldBackyardIndexActive": false,
+    "activeIndexSource": "GHIN",
+    "finalPrivateSessionVerified": true
   },
   "deployment": {
     "url": "https://dev.thebackyard.com.mx",
     "ready": true,
-    "id": "dpl_F5dQxTcNZtqGPxQ3Uwo9y2epRqFt",
-    "codeSha": "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986",
+    "id": "dpl_2dcqTfVGYx9FBKS5kf2G9jwGTrox",
+    "codeSha": "b647eaf7dd168c365665a8d1f9f9c99ba23846c3",
     "healthHttp": 200,
+    "healthConfirmedAt": "2026-10-07T04:10:23Z",
     "environment": "preview",
+    "newFunctionalDeploymentDuringDocumentaryClose": false,
     "productionTouched": false
   },
   "previousMappingContinuation": {
@@ -1396,14 +1429,22 @@
   "GIT": {
     "initialObservedSha": "0d70689ecc1ca3100ac9aedd253f3a791a1177b4",
     "functionalBaselineSha": "d26733f227243c7220a7c94479c11838a85b8bfc",
-    "validatedCodeSha": "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986",
+    "validatedCodeSha": "b647eaf7dd168c365665a8d1f9f9c99ba23846c3",
     "commits": [
       "0a41fe2bf1938be84e9f9fe8cb9962183956a28f",
       "3c81726575afe63ffd40e19673e7cfb9b4009b0d",
       "da0cf5c48d90fcf7982b3351759b9e51ff494568",
       "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986"
     ],
-    "preservedConcurrentGpsWork": true
+    "preservedConcurrentGpsWork": true,
+    "finalDocumentaryClose": {
+      "documentaryInitialSha": "b647eaf7dd168c365665a8d1f9f9c99ba23846c3",
+      "validatedFunctionalSha": "b647eaf7dd168c365665a8d1f9f9c99ba23846c3",
+      "documentaryCommitSubject": "docs(qa): close GHIN and Backyard QA after private-session verification",
+      "documentaryShaLocation": "Git commit containing these documentation changes and final delivery; not embedded self-referentially",
+      "functionalChanges": false,
+      "preservedGpsAndCloudFixes": true
+    }
   },
   "MAPPING_CONTINUATION_BEFORE": {
     "completedBackyard": 22,
@@ -2267,5 +2308,260 @@
     "canonicalActiveDraftRestored": true,
     "scoresHash": "66e1869c4a4a09292175d295235e2762"
   },
-  "previousMappingReportArchive": "docs/qa/GHIN_EL_MONGAS_PRE_QA25_REPORT.md"
+  "previousMappingReportArchive": "docs/qa/GHIN_EL_MONGAS_PRE_QA25_REPORT.md",
+  "previousFinalClosureCheckpoint": {
+    "scope": "Historical QA25 stage before source reset/relink and final private-session certification",
+    "status": "BLOCKED_EXTERNAL",
+    "AFTER": {
+      "ghinIndex": 30.8,
+      "ghinIndexLiveRefresh": "PASS_USER_REAUTH_AND_REAL_SCORING",
+      "providerScoreCount": 7,
+      "providerScoringRecordCount": 7,
+      "backyardCompletedCount": 23,
+      "ghinOnlyCount": 6,
+      "backyardPlusGhinCount": 1,
+      "backyardOnlyCompletedCount": 22,
+      "duplicatesCount": 0,
+      "backyardIndex": 5.5,
+      "attestPercent": 50,
+      "qa24Status": "live",
+      "qa24ResumeHole": 2,
+      "qa24H1": [
+        5,
+        6
+      ],
+      "providerDuplicatesCount": 0,
+      "ghinIndexLastSuccessfulSyncAt": "2026-10-07T00:45:00.494Z",
+      "attestedLast20": 10,
+      "attestDenominator": 20
+    },
+    "cleanSession": {
+      "status": "BLOCKED_EXTERNAL",
+      "originalSessionLoggedOut": true,
+      "verification": "Awaiting owner Safari private new-session confirmation; agent tab has shared persistent workspace storage and is not called a clean context"
+    },
+    "tests": {
+      "ownedPosting": {
+        "total": 18,
+        "pass": 18,
+        "fail": 0
+      },
+      "directedFinal": {
+        "total": 545,
+        "pass": 544,
+        "fail": 1,
+        "preexistingFail": "Mi Bolsa keeps approved product media while permanent management stays compact"
+      },
+      "full": {
+        "total": 4666,
+        "pass": 4657,
+        "fail": 9,
+        "newFailures": 0,
+        "baselineFailures": [
+          "✖ provider diagnostics contain no token, resource URL or personal coordinates",
+          "✖ new renderer is under demand with local position updates, cleanup and real terrain exaggeration",
+          "✖ round opens isolated GPS view without changing score navigation or creating another round",
+          "✖ every module flag is independent and opt-in, GPS doesn't require map or flyover",
+          "✖ la UI final usa bolsa premium, selección guiada y modo manual explícito",
+          "✖ Mi bolsa abre una ficha limpia por bastón y reserva el borrado para el detalle",
+          "✖ Mi Bolsa keeps approved product media while permanent management stays compact",
+          "✖ Reglas dejan IA/directorio plegables, recursos como accesos directos y videos abiertos al final",
+          "✖ nightly audit artifacts reproduce from canonical runtime catalogs and captured QA metadata"
+        ]
+      },
+      "typecheck": "PASS",
+      "lint": "PASS",
+      "build": "PASS"
+    },
+    "deployment": {
+      "url": "https://dev.thebackyard.com.mx",
+      "ready": true,
+      "id": "dpl_F5dQxTcNZtqGPxQ3Uwo9y2epRqFt",
+      "codeSha": "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986",
+      "healthHttp": 200,
+      "environment": "preview",
+      "productionTouched": false
+    },
+    "GIT": {
+      "initialObservedSha": "0d70689ecc1ca3100ac9aedd253f3a791a1177b4",
+      "functionalBaselineSha": "d26733f227243c7220a7c94479c11838a85b8bfc",
+      "validatedCodeSha": "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986",
+      "commits": [
+        "0a41fe2bf1938be84e9f9fe8cb9962183956a28f",
+        "3c81726575afe63ffd40e19673e7cfb9b4009b0d",
+        "da0cf5c48d90fcf7982b3351759b9e51ff494568",
+        "f7a3cc7e2da10faa4c3d9f82e5f7b6a8d22e6986"
+      ],
+      "preservedConcurrentGpsWork": true
+    },
+    "unresolved": [
+      "Final fresh Safari private login confirmation is pending.",
+      "Nine unrelated baseline failures remain: four GPS, four Equipment/Rules, one nightly catalog audit; no new failures."
+    ]
+  },
+  "documentaryClosedAt": "2026-10-07T04:10:23Z",
+  "finalClosure": {
+    "status": "DONE",
+    "closedAt": "2026-10-07T04:10:23Z",
+    "evidenceSource": "Owner physical confirmation plus previously completed real DEV checks",
+    "relink": {
+      "status": "PASS",
+      "sameProviderIdentity": true,
+      "ghinVerified": true,
+      "indexBefore": 30.8,
+      "indexAfter": 30.8
+    },
+    "reimport": {
+      "status": "PASS",
+      "executed": true,
+      "importedNew": 0,
+      "matchedExisting": 1,
+      "ambiguous": 0,
+      "duplicates": 0,
+      "providerScoreCount": 7,
+      "skippedInvalid": null,
+      "skippedInvalidEvidence": "UI reported 0 requiring review; no separate invalid-count telemetry asserted",
+      "retainedProviderIdsUnchanged": true,
+      "ghinOnly": 6,
+      "backyardPlusGhin": 1,
+      "backyardOnlyCompleted": 22
+    },
+    "qa25": {
+      "status": "PASS",
+      "realPreflightExecuted": true,
+      "result": "ALREADY_POSTED",
+      "providerScoreId": "1208915748",
+      "receiptId": "106216c7-cdbb-4e30-824c-ebf35139c039",
+      "receiptStatus": "SUCCEEDED",
+      "roundId": "49cd75db-eb6f-47fa-9e0e-b1841ae0f93b",
+      "additionalProviderPosts": 0,
+      "linkedRoundIdUnchanged": true
+    },
+    "cleanSession": {
+      "status": "PASS",
+      "evidenceSource": "Owner physical final confirmation in the latest user instruction",
+      "browser": "NEW Safari private session",
+      "agentCreatedCleanContext": false,
+      "originalAgentSessionLoggedOutAndDiscarded": true,
+      "account": "el_mongas@yahoo.com.mx",
+      "login": "PASS",
+      "serverRecovery": "PASS",
+      "ghinVerified": true,
+      "ghinIndex": 30.8,
+      "activeSource": "GHIN",
+      "oldBackyardIndexActive": false,
+      "oldBackyardIndexVisible": false,
+      "retainedGhinHistoryVisible": true,
+      "qa25LogicalRows": 1,
+      "qa25Provenance": "BACKYARD_PLUS_GHIN",
+      "visibleDuplicates": 0,
+      "qa24Lifecycle": "live",
+      "qa24ResumeHole": 2,
+      "qa24H1": [
+        5,
+        6
+      ],
+      "careerAndHistory": "PASS",
+      "falseCloudConflict": false
+    },
+    "requestBudget": {
+      "scope": "Final relink/preflight idle evidence plus owner physical Vercel confirmation; not global historical HTTP totals",
+      "agentIdleSeconds": 154.636,
+      "agentIdleCloudDiagnosticEvents": 0,
+      "ownerIdleSecondsGreaterThan": 180,
+      "ownerIdleRuntimeEvents": 0,
+      "periodicCloudSyncObserved": 0,
+      "runtimeErrorsObserved": 0,
+      "reauthorizeHttp": 200,
+      "scoringRecordHttp": 200,
+      "idleTwoMinutes": "PASS",
+      "requestStorm": false,
+      "providerScorePostsDuringFinalPreflight": 0,
+      "globalEndpointTotals": null,
+      "maximumResponseBytes": null,
+      "maximumUploadBytes": null,
+      "unmeasuredReason": "Global final-session HTTP counts and bytes were not fully instrumented; unknown is not zero",
+      "documentaryClose": {
+        "devHealthGets": 1,
+        "accountMutations": 0,
+        "ghinRequests": 0,
+        "newTests": 0
+      }
+    },
+    "tests": {
+      "directed": {
+        "total": 171,
+        "pass": 171,
+        "fail": 0
+      },
+      "full": {
+        "total": 4710,
+        "pass": 4701,
+        "preexistingFail": 9,
+        "newFail": 0
+      },
+      "scripts": {
+        "total": 117,
+        "pass": 117,
+        "fail": 0
+      },
+      "typecheck": "PASS",
+      "lint": "PASS",
+      "build": "PASS",
+      "validatedCodeSha": "b647eaf7dd168c365665a8d1f9f9c99ba23846c3",
+      "evidence": "Executed once before final owner verification; not rerun during this documentary close"
+    },
+    "git": {
+      "documentaryInitialSha": "b647eaf7dd168c365665a8d1f9f9c99ba23846c3",
+      "validatedFunctionalSha": "b647eaf7dd168c365665a8d1f9f9c99ba23846c3",
+      "documentaryCommitSubject": "docs(qa): close GHIN and Backyard QA after private-session verification",
+      "documentaryShaLocation": "Git commit containing these documentation changes and final delivery; not embedded self-referentially",
+      "functionalChanges": false,
+      "preservedGpsAndCloudFixes": true
+    },
+    "deployment": {
+      "url": "https://dev.thebackyard.com.mx",
+      "ready": true,
+      "id": "dpl_2dcqTfVGYx9FBKS5kf2G9jwGTrox",
+      "codeSha": "b647eaf7dd168c365665a8d1f9f9c99ba23846c3",
+      "healthHttp": 200,
+      "healthConfirmedAt": "2026-10-07T04:10:23Z",
+      "environment": "preview",
+      "newFunctionalDeploymentDuringDocumentaryClose": false,
+      "productionTouched": false
+    },
+    "integrity": {
+      "rounds": 27,
+      "completed": 23,
+      "cancelled": 1,
+      "live": 3,
+      "allCanonicalIdsScoresLifecycleSnapshotsAndVersionsUnchangedDuringFinalClosure": true,
+      "providerIdsUnchanged": true,
+      "receiptUnchanged": true,
+      "qa24H1": [
+        5,
+        6
+      ],
+      "qa24ResumeHole": 2
+    },
+    "unresolved": [],
+    "backlogNonBlocking": [
+      {
+        "status": "BACKLOG_NON_BLOCKING",
+        "scope": "Separate future task; no functional changes in this closure",
+        "copy": "Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.",
+        "reason": "May confuse in a clean session; caused no conflict, did not change H2 and does not block functionality."
+      }
+    ],
+    "productionUntouched": true,
+    "cleanupPerformed": false
+  },
+  "BACKLOG_NON_BLOCKING": [
+    {
+      "status": "BACKLOG_NON_BLOCKING",
+      "scope": "Separate future task; no functional changes in this closure",
+      "copy": "Ronda actualizada desde la nube. La versión local anterior se conservó en este dispositivo.",
+      "reason": "May confuse in a clean session; caused no conflict, did not change H2 and does not block functionality."
+    }
+  ]
 }
