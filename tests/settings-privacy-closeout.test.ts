@@ -56,13 +56,15 @@ test("all five primary headers open the existing profile and notification action
   assert.match(readFileSync("app/components/profile-account-panel.tsx", "utf8"), /<b>Configuración<\/b><small>Preferencias, cuenta, notificaciones, privacidad y permisos/);
 });
 
-test("admin access remains in the top header actions with its existing links and logout", () => {
+test("social header stays focused on player actions; admin remains accessible through own settings", () => {
   let loggedOut = 0;
   const admin = load("app/components/admin-mode-menu.tsx", { "next/link": { __esModule: true, default: "a" }, "./account-provider": { useBackyardAccount: () => ({ adminAccess: { hasAccess: true }, logout: () => { loggedOut++; } }) } });
   const header = load("app/components/primary-header.tsx", { "./profile-navigation-button": { ProfileNavigationButton: () => null }, "./admin-mode-menu": admin });
   const tree = header.PrimaryHeader({ tab: "home", displayName: "Admin", avatarUrl: "", onProfile: () => {}, onNotifications: () => {}, onHome: () => {} });
   const actions = nodes(tree).find((node) => node.props.className === "primaryHeaderActions")!;
-  const menu = nodes(actions).find((node) => node.type === "details")!;
+  assert.equal(nodes(actions).filter((node) => node.type === "details").length,0);
+  assert.match(readFileSync("app/components/profile-account-panel.tsx","utf8"),/adminAccess.hasAccess && <a[^>]*href="\/manage"[^>]*>Modo administrador/);
+  const menu = admin.AdminModeMenu();
   assert.match(text(menu), /Administrador/);
   assert.deepEqual(nodes(menu).filter((node) => node.type === "a").map((node) => [node.props.href, text(node)]), [["/", "Modo jugador"], ["/manage", "Modo administrador"]]);
   const logout = nodes(menu).find((node) => node.type === "button")!;

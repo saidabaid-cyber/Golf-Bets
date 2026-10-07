@@ -51,8 +51,9 @@ function exerciseCourseBack(changed: boolean, confirmResult: boolean) {
 }
 
 test("page-level top and bottom returns share handlePageBack, including the course editor", () => {
-  assert.match(page, /showPageBack && <button[^>]*onClick=\{handlePageBack\}>← Regresar<\/button>/);
-  assert.match(page, /showPageBack && tab !== "courses" && <BottomBackAction label="← Regresar" onBack=\{handlePageBack\} \/>/);
+  assert.match(page, /showPageBack && tab !== "stats" && <button[^>]*onClick=\{handlePageBack\}>← Regresar<\/button>/);
+  assert.match(page, /showPageBack && tab !== "courses" && tab !== "stats" && <BottomBackAction label="← Regresar" onBack=\{handlePageBack\} \/>/);
+  assert.match(page, /PremiumGolfStatistics rounds=\{statisticsHistory\} onBack=\{handlePageBack\}/);
   assert.match(page, /tab === "courses"[\s\S]*<button className="secondary big" onClick=\{handlePageBack\}>← Regresar<\/button>/);
   assert.match(backDeclaration, /courseEditorFingerprint\(courseDraft\) !== courseEditorInitialFingerprint/);
   assert.match(backDeclaration, /window\.confirm\("Tienes cambios sin guardar\. ¿Salir sin guardarlos\?"\)/);
