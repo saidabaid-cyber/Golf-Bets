@@ -42,8 +42,10 @@ export type SocialRoundCard = {
   /** Only account-linked participants with independently authorized social cards. */
   leaderboard?: Array<{userId:string;name:string;avatarUrl:string|null;score:number;toPar?:number;holes:number}>;
   /** Only captured, non-financial hole facts are exposed to the eligible audience. */
-  scorecard?: Array<{ hole: number; par: number; score: number | null }>;
+  scorecard?: SocialScoreHole[];
 };
+
+export type SocialScoreHole = { hole: number; par: number; score: number | null; putts?: number; yards?: number; fairwayHit?: boolean; greenInRegulation?: boolean; penaltyStrokes?: number };
 
 export type SocialActivityCard = {
   id: string;

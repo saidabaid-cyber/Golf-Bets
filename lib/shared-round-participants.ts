@@ -1,4 +1,5 @@
 import type { RoundSnapshot } from "./types";
+import type { SocialScoreHole } from "./social-activity-contract";
 
 export type SharedRoundCard = {
   roundId: string; localRoundId: string; version: number; materialHash: string;
@@ -7,6 +8,7 @@ export type SharedRoundCard = {
     score: number | null; status: "CONFIRMED" | "PENDING_CONFIRMATION" | "GUEST";
     scorecard: Array<{ hole: number; score: number | null }> }>;
   myPlayerKey: string | null; myBalance: number | null; canConfirm: boolean;
+  myScorecard?: SocialScoreHole[];
   scorekeeping: "owner";
   ghin: { canPostOwnScore: false; canPostScoreForAnotherUser: false };
 };
@@ -33,6 +35,12 @@ export function participantCard(roundId: string, ownerId: string, version: numbe
   if (ownerId !== viewerId && !mine) throw new Error("PARTICIPANT_NOT_LINKED");
   const completed = snapshot.lifecycleState === "completed" && Boolean(snapshot.completedAt);
   const holes = snapshot.order || Object.keys(snapshot.scores || {}).map(Number).sort((a, b) => a - b);
+  const definitions = mine ? snapshot.courseSnapshot?.playerHoleCards?.[mine.id] || snapshot.courseSnapshot?.holes : undefined;
+  const myScorecard: SocialScoreHole[] = mine ? holes.flatMap(hole => {
+    const definition=definitions?.find(h=>h.number===hole), score=snapshot.scores?.[hole]?.[mine.id], putts=snapshot.putts?.[hole]?.[mine.id];
+    if(!definition || !Number.isInteger(definition.par) || definition.par<3 || definition.par>6)return [];
+    return [{hole,par:definition.par,score:Number.isInteger(score)&&score!>0?score!:null,...(Number.isInteger(putts)&&putts!>=0&&putts!<=20?{putts:putts!}:{})}];
+  }) : [];
   return {
     roundId, localRoundId: snapshot.id, version, materialHash, courseName: snapshot.courseName,
     groupName: snapshot.groupOrigin?.groupName || null, date: snapshot.date, completed,
@@ -45,6 +53,7 @@ export function participantCard(roundId: string, ownerId: string, version: numbe
     }),
     myPlayerKey: mine?.id || null, myBalance: mine && completed && Number.isFinite(snapshot.playerBalances?.[mine.id]) ? snapshot.playerBalances![mine.id] : null,
     canConfirm: completed && ownerId !== viewerId && Boolean(mine) && !confirmed.has(viewerId),
+    ...(myScorecard.length===holes.length&&myScorecard.length?{myScorecard}:{}),
     scorekeeping: "owner", ghin: { canPostOwnScore: false, canPostScoreForAnotherUser: false },
   };
 }

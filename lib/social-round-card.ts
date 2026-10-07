@@ -1,4 +1,4 @@
-import type { SocialRoundCard } from "./social-activity-contract";
+import type { SocialRoundCard, SocialScoreHole } from "./social-activity-contract";
 import type { RoundSnapshot } from "./types";
 import { validTotalOnly } from "./total-score-round";
 import { capturedSocialStats } from "./social-feed-presentation";
@@ -24,13 +24,20 @@ export function safeSocialRoundCard(
   if (linked.length !== 1 || !linked[0]?.id) return null;
   const playerId = linked[0].id;
   const definitions = new Map((round.courseSnapshot.playerHoleCards?.[playerId] ?? round.courseSnapshot.holes).map(hole => [hole.number, hole]));
-  const holes: Array<{ hole: number; par: number; score: number }> = [];
+  const holes: Array<SocialScoreHole & { score: number }> = [];
   for (const number of round.order) {
     const definition = definitions.get(number);
     const score = round.scores[number]?.[playerId];
     if (!definition || !Number.isInteger(definition.par) || definition.par < 3 || definition.par > 6
       || !Number.isInteger(score) || (score as number) < 1 || (score as number) > 100) return null;
-    holes.push({ hole: number, par: definition.par, score: score as number });
+    const putts = round.putts?.[number]?.[playerId], stat = round.advancedStats?.[number]?.[playerId];
+    holes.push({ hole: number, par: definition.par, score: score as number,
+      ...(Number.isInteger(putts) && (putts as number) >= 0 && (putts as number) <= 20 ? { putts: putts as number } : {}),
+      ...(includeCourseIdentity && Number.isFinite(definition.yards) && definition.yards! > 0 ? { yards: definition.yards } : {}),
+      ...(typeof stat?.fairwayHit === "boolean" && definition.par > 3 ? { fairwayHit: stat.fairwayHit } : {}),
+      ...(typeof stat?.greenInRegulation === "boolean" ? { greenInRegulation: stat.greenInRegulation } : {}),
+      ...(Number.isInteger(stat?.penaltyStrokes) && stat!.penaltyStrokes! >= 0 ? { penaltyStrokes: stat!.penaltyStrokes } : {}),
+    });
   }
   return {
     roundId: source.id, localRoundId: source.local_round_id, date: round.date,

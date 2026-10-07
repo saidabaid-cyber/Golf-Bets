@@ -538,12 +538,14 @@ async function recoverVisibleSourcesBestEffort(ctx: SocialContext) {
 }
 
 export async function listActivity(
-  ctx: SocialContext, query: { localRoundId?: string; limit?: number; cursor?: string; friendsOnly?: boolean } = {},
+  ctx: SocialContext, query: { localRoundId?: string; limit?: number; cursor?: string; friendsOnly?: boolean; authorId?: string } = {},
 ): Promise<SocialActivityPage> {
   await recoverVisibleSourcesBestEffort(ctx);
   const limit = Math.min(30, Math.max(1, Math.floor(query.limit || 15)));
   let builder = ctx.client.from("social_activities_v3").select("*")
     .eq("active", true).order("created_at", { ascending: false }).order("id", { ascending: false });
+  // Filtering narrows the existing viewer-RLS reader; it never elevates access.
+  if (query.authorId) builder = builder.eq("author_id", query.authorId);
   if (query.friendsOnly) {
     const friends = await ctx.client.from("friendships").select("user_a_id,user_b_id").or(`user_a_id.eq.${ctx.userId},user_b_id.eq.${ctx.userId}`);
     if (friends.error) dbError(friends.error);
