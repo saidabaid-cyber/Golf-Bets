@@ -4705,7 +4705,7 @@ function GolfBetsApp() {
 
     {(rulesVisited || tab === "rules") && <div hidden={tab !== "rules"}><RulesPanel active={tab === "rules"} courseName={rulesCourseContext} localRules={isLaVistaCourse(rulesCourseContext) ? course.localRules : undefined} localRulesUpdatedAt={isLaVistaCourse(rulesCourseContext) ? course.localRulesUpdatedAt : undefined} onBack={goBack} /></div>}
     {tab === "pollaLive" && <PollaLivePanel courses={courses} privateRound={{ active: draftAvailable && players.length > 0, players }} />}
-    {showPageBack && tab !== "courses" && <BottomBackAction label="← Regresar" onBack={handlePageBack} />}
+    {showPageBack && tab !== "courses" && tab !== "stats" && <BottomBackAction label="← Regresar" onBack={handlePageBack} />}
 
     {groupRoundSelection && <GroupRoundSelector group={groupRoundSelection} onCancel={() => setGroupRoundSelection(null)} onConfirm={(selectedMemberIds) => confirmFrequentGroupRoundSelection(groupRoundSelection, selectedMemberIds)} />}
 
