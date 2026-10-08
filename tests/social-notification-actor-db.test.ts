@@ -17,11 +17,11 @@ test('social notification trigger captures actor, deduplicates retry/unlike, hon
       create table social_likes_v3(activity_id uuid,user_id uuid,expected_hash text,created_at timestamptz default now(),primary key(activity_id,user_id));
       create table social_comments_v3(id uuid primary key,activity_id uuid,author_id uuid,expected_hash text,created_at timestamptz default now(),body text);
       create table social_activity_preferences_v3(user_id uuid primary key,notify_like boolean,notify_comment boolean,notify_attest boolean);
-      create table user_preferences(user_id uuid primary key,notifications_enabled boolean);
+      create table user_preferences(user_id uuid primary key,notifications_enabled boolean,notification_internal_enabled boolean);
       create table notification_preferences_v2(user_id uuid,event_type text,in_app boolean,push boolean,primary key(user_id,event_type));
       insert into social_activities_v3 values('${activity}','${owner}');
       insert into social_activity_preferences_v3 values('${owner}',true,true,true);
-      insert into user_preferences values('${owner}',true);
+      insert into user_preferences values('${owner}',true,true);
       insert into notification_preferences_v2 values('${owner}','like',true,false),('${owner}','comment',true,false);
       insert into social_comments_v3 values('44444444-4444-4444-8444-444444444444','${activity}','${actor}','hash','2026-10-01T12:00:00Z','legacy');
       insert into notification_events_v2 values('55555555-5555-4555-8555-555555555555','${owner}','comment','ROUND','${activity}','2026-10-01T12:00:00Z','2026-10-02T12:00:00Z');`);
@@ -36,11 +36,11 @@ test('social notification trigger captures actor, deduplicates retry/unlike, hon
     await db.exec(`update notification_events_v2 set read_at=now() where id='${notice.id}';delete from social_likes_v3;`);await like();
     assert.equal((await db.query("select * from notification_events_v2 where event_type='like'")).rows.length,1);assert.ok((await db.query<{read_at:string}>(`select read_at from notification_events_v2 where id='${notice.id}'`)).rows[0].read_at);
     await db.exec(`insert into social_likes_v3 values('${activity}','${owner}','hash',now())`);assert.equal((await db.query<{n:number}>('select count(*) n from notification_events_v2')).rows[0].n,2,'self-like creates no notification');
-    for(const gate of ['notify_comment','in_app','master']){
-      await db.exec(gate==='notify_comment'?`update social_activity_preferences_v3 set notify_comment=false`:gate==='in_app'?`update notification_preferences_v2 set in_app=false where event_type='comment'`:`update user_preferences set notifications_enabled=false`);
+    for(const gate of ['notify_comment','in_app','master','internal']){
+      await db.exec(gate==='notify_comment'?`update social_activity_preferences_v3 set notify_comment=false`:gate==='in_app'?`update notification_preferences_v2 set in_app=false where event_type='comment'`:gate==='internal'?`update user_preferences set notification_internal_enabled=false`:`update user_preferences set notifications_enabled=false`);
       await db.exec(`insert into social_comments_v3 values(gen_random_uuid(),'${activity}','${actor}','hash',now(),'muted')`);
       assert.equal((await db.query<{n:number}>('select count(*) n from notification_events_v2')).rows[0].n,2,gate);
-      await db.exec(`update social_activity_preferences_v3 set notify_comment=true;update notification_preferences_v2 set in_app=true;update user_preferences set notifications_enabled=true;`);
+      await db.exec(`update social_activity_preferences_v3 set notify_comment=true;update notification_preferences_v2 set in_app=true;update user_preferences set notifications_enabled=true,notification_internal_enabled=true;`);
     }
     await db.exec(`insert into social_comments_v3 values('66666666-6666-4666-8666-666666666666','${activity}','${actor}','hash',now(),'QA isolated');update social_comments_v3 set body='edited';delete from social_comments_v3 where id='66666666-6666-4666-8666-666666666666';`);
     assert.equal((await db.query<{n:number}>('select count(*) n from notification_events_v2')).rows[0].n,3,'editing/deletion keeps history, no duplicate');

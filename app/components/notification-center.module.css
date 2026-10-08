@@ -9,3 +9,4 @@
 
 .avatar[data-notice-type=like]{background:#fbeceb;color:#b74a51}.avatar[data-notice-type=comment]{background:#e8f3f3;color:#257c83}.avatar[data-notice-type=attest]{background:#fbf1dc;color:#987528}
 .screen:has([data-feed-view=comments])>.heading{display:none}
+.rowTitle{flex-wrap:wrap;align-items:flex-start}.rowTitle b{white-space:normal;overflow-wrap:anywhere;line-height:1.35;flex-basis:calc(100% - 14px)}.rowTitle i{background:#299565;margin-top:6px}.rowTitle time{flex-basis:100%;font-size:11px;margin-top:2px}

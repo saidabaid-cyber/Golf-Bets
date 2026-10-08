@@ -49,7 +49,8 @@ begin
     into permitted from public.social_activity_preferences_v3 p where p.user_id=recipient;
   if not coalesce(permitted,true) then return new; end if;
   -- Internal delivery is independent of OS push permission/configuration.
-  if not exists(select 1 from public.user_preferences p where p.user_id=recipient and p.notifications_enabled)
+  if not exists(select 1 from public.user_preferences p where p.user_id=recipient
+      and p.notifications_enabled and p.notification_internal_enabled is not false)
     or exists(select 1 from public.notification_preferences_v2 p
       where p.user_id=recipient and p.event_type=event_name and not p.in_app) then return new; end if;
   if exists(select 1 from public.notification_events_v2 e
