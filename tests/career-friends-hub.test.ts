@@ -105,11 +105,11 @@ test("incoming accept/reject and outgoing cancel reuse supported API commands", 
 test("QR scanner opens authorized profile for review, never sends request automatically; own QR keeps identity", async () => {
   const h = setup(0, "scan"); let tree = h.render(); await flush(); tree = h.render();
   const scanner = find(tree, n => n.type === "SocialQrScanner"); scanner.props.onFound("gallery-peer"); await flush(); tree = h.render();
-  assert.match(text(tree), /QA gallery-peer[\s\S]*Agregar amigo/); assert.equal(h.calls.filter(call => call.init?.method === "POST").length, 0);
+  assert.equal(find(tree, n => n.type === "SocialPlayerProfile").props.userId, "gallery-peer"); assert.equal(h.calls.filter(call => call.init?.method === "POST").length, 0);
   const qr = setup(0, "qr"); tree = qr.render(); const own = find(tree, n => n.type === "PersonalQr"); assert.equal(own.props.userId, "owner"); assert.equal(own.props.username, "qa_owner"); assert.equal(own.props.backLabel, "Amigos");
 });
 test("deep target is authorized through existing profile RPC endpoint", async () => {
-  const h = setup(); Object.assign(h.props, { targetId: "target-peer" }); h.render(); await flush(); const tree = h.render(); assert.match(text(tree), /QA target-peer/); assert.ok(h.calls.some(call => call.path.endsWith("?target=target-peer")));
+  const h = setup(); Object.assign(h.props, { targetId: "target-peer" }); h.render(); await flush(); const tree = h.render(); assert.equal(find(tree, n => n.type === "SocialPlayerProfile").props.userId, "target-peer"); assert.ok(h.calls.some(call => call.path.endsWith("?target=target-peer")));
 });
 test("SocialFeed menus and friend notification action delegate to canonical hub, group notifications remain", () => {
   const views: any[] = []; const h = harness("app/components/social-feed.tsx"); const props = { initialView: "activity", identityUserId: "owner", accessToken: "qa-token", onOpenFriends: (view: any) => views.push(view) };

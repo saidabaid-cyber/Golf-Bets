@@ -9,10 +9,11 @@ import { PersonalQr, SocialQrScanner, CompactPersonalQr } from "./social-qr";
 import { BackyardIcon } from "./backyard-icon";
 import { useViewScrollReset } from "./use-view-scroll-reset";
 import styles from "./friends-hub.module.css";
+import {SocialPlayerProfile} from './social-player-profile';
 export type FriendsView = "list" | "add" | "search" | "nearby" | "requests" | "qr" | "scan";
 type Person = SocialPerson & { club_name?: string | null };
 type Nearby = Person & { area_label: string };
-type Props = { ownerId: string; accessToken?: string; directory?: SocialProfile[]; targetId?: string | null; onCloseTarget?: () => void; onChanged?: () => void; initialView?: FriendsView; name?: string; username?: string; avatar?: string; embedded?: boolean; onViewChange?: (view:FriendsView)=>void };
+type Props = { ownerId: string; accessToken?: string; directory?: SocialProfile[]; targetId?: string | null; onCloseTarget?: () => void; onChanged?: () => void; initialView?: FriendsView; name?: string; username?: string; avatar?: string; embedded?: boolean; onViewChange?: (view:FriendsView)=>void;onOpenProfile?:(id:string)=>void };
 const EMPTY: ConnectionPage = { people: [], requests: [], friends: [], blocked: [] };
 function FriendRequestList({ requests, people, ownerId, sameClubIds, busy, onProfile, onAction }: {
   requests: ConnectionPage["requests"]; people: Person[]; ownerId: string; sameClubIds: Set<string>; busy: boolean;
@@ -30,7 +31,7 @@ function FriendRequestList({ requests, people, ownerId, sameClubIds, busy, onPro
     </> : <><span className={styles.state}><BackyardIcon name="clock" size={16}/>Pendiente</span><button className={styles.cancel} type="button" disabled={busy} onClick={() => void onAction({ action: "CANCELLED", id: request.id })}>Cancelar solicitud</button></>}</div></li>;
   })}</ul>;
 }
-export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onChanged, initialView = "list", name = "Jugador", username = "", avatar = "", embedded=false, onViewChange }: Props) {
+export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onChanged, initialView = "list", name = "Jugador", username = "", avatar = "", embedded=false, onViewChange,onOpenProfile }: Props) {
   const [data, setData] = useState<ConnectionPage>(EMPTY), [view, setView] = useState<FriendsView>(initialView);
   const [query, setQuery] = useState(""), [friendQuery, setFriendQuery] = useState(""), [results, setResults] = useState<Person[]>([]);
   const [selected, setSelected] = useState<Person | null>(null), [sent, setSent] = useState<Person | null>(null);
@@ -80,10 +81,11 @@ export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onCh
   const label = (person: Person) => <><span className={styles.avatar}><ProfileAvatarMedia value={person.avatar_url} fallback={person.display_name[0] || "J"} /></span><span className={styles.identity}><b>{person.display_name}</b><small>@{person.username}</small>{person.club_name&&<small>{person.club_name}</small>}{sameClubIds.has(person.user_id) && <small className={styles.club}>Mismo club</small>}</span></>;
   function open(next: FriendsView) { setSelected(null); setSent(null); setMessage(""); onCloseTarget?.(); setView(next); onViewChange?.(next); }
   const showProfile = useCallback(async (person: Person) => {
+    if(onOpenProfile){onOpenProfile(person.user_id);return;}
     setSelected(person); setMessage("");
     try { const next = await socialRequest<{ person: Person }>(`/api/social/connections?target=${encodeURIComponent(person.user_id)}`, accessToken!); if (alive.current) setSelected(current => current?.user_id === person.user_id ? next.person : current); }
     catch (e) { if (alive.current) setMessage(socialErrorMessage(e)); }
-  }, [accessToken]);
+  }, [accessToken,onOpenProfile]);
   function relationship(person: Person) {
     const state = connectionState(data, ownerId, person.user_id);
     const request = pending.find(item => item.requester_id === person.user_id || item.addressee_id === person.user_id);
@@ -95,6 +97,7 @@ export function FriendsHub({ ownerId, accessToken, targetId, onCloseTarget, onCh
   if (!accessToken) return <section className={styles.screen}><h2>Mis amigos</h2><p>Inicia sesión para buscar y enviar solicitudes.</p></section>;
   const incoming=pending.filter(request=>request.addressee_id===ownerId), outgoing=pending.filter(request=>request.requester_id===ownerId);
   const suggestions=rankFriendResults(nearby,"",sameClubIds,ownerId,data.blocked).filter(person=>connectionState(data,ownerId,person.user_id)==="NONE");
+  if(selected&&accessToken)return <SocialPlayerProfile key={selected.user_id} userId={selected.user_id} viewerId={ownerId} accessToken={accessToken} onBack={()=>{setSelected(null);onCloseTarget?.();}} onOpenPlayer={id=>{if(onOpenProfile)onOpenProfile(id);else void socialRequest<{person:Person}>(`/api/social/connections?target=${encodeURIComponent(id)}`,accessToken).then(r=>{if(alive.current)setSelected(r.person);}).catch(e=>{if(alive.current)setMessage(socialErrorMessage(e));});}}/>;
   if(embedded && !selected && !sent && !["qr","scan"].includes(view)) return <section className={styles.screen} aria-label={view==="list"||view==="requests"?"Mis amigos":"Agregar amigos"}>
     {message&&<p className={styles.notice} role="status">{message}</p>}
     {view==="list"||view==="requests"?<>

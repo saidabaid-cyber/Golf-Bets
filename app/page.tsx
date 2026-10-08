@@ -4002,7 +4002,7 @@ function GolfBetsApp() {
       onOpenFriends={() => openCareerFriends()}
       onPrivacy={() => openAccountSettings("privacy")}
       onOpenAchievements={() => { setCareerView("achievements"); }}
-      onOpenSocialProfile={id => openCareerFriends("list",id)}
+      onOpenOwnProfile={openProfileRoot}
       activeRound={globalRoundAvailable ? activeRoundSummary : null}
       onContinueRound={globalRoundAvailable ? resumeActiveRound : undefined}
     />}

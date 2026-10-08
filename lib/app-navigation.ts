@@ -47,6 +47,8 @@ export function screenHref(tab: AppTab, search = "", roundId?: string | null, ca
   params.delete("screen");
   params.delete("round");
   params.delete("career");
+  // Explicit global navigation leaves the social child stack.
+  params.delete('player');params.delete('playerTab');
   if(tab!=="career")params.delete("careerDetail");
   if(tab!=="welcome"&&tab!=="friends")params.delete("home");
   if (tab !== "notifications") { params.delete("notice"); params.delete("resource"); }
