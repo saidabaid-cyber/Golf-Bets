@@ -499,6 +499,7 @@ function GolfBetsApp() {
   const openCoachFitting = (launchMonitor: boolean) => { setLaunchMonitorEntry(launchMonitor); setProfileCompletionTarget("fitting"); setProfileFocus("equipment"); setTab("profile"); };
   const [socialInitialView, setSocialInitialView] = useState<SocialView>("activity");
   const [friendsEntry, setFriendsEntry] = useState(0);
+  const [homeRevision, setHomeRevision] = useState(0);
   const [friendsInitialView, setFriendsInitialView] = useState<FriendsView>("list");
   const [socialTarget, setSocialTarget] = useState<string | null>(null);
   useEffect(() => {
@@ -1856,6 +1857,7 @@ function GolfBetsApp() {
 
   function navigateFromBottomBar(target: AppTab) {
     setFeedback("");
+    if (target === "welcome") { setSocialTarget(null); setFriendsEntry(0); setHomeRevision(value => value + 1); }
     if (target === "profile") setProfileFocus("profile");
     if (target === "social") setSocialInitialView("activity");
     if (target === "rules") setRulesCourseContext(rulesContextForRound(hasRoundProgress({ players, scores, currentIndex }) && courseSelected, course.name));
@@ -1864,7 +1866,7 @@ function GolfBetsApp() {
       window.setTimeout(() => window.scrollTo({ top: 0, behavior: "smooth" }), 0);
       return;
     }
-    setTab(target, target === "career" ? { careerView: "summary" } : undefined);
+    setTab(target, target === "career" ? { careerView: "summary" } : target === "welcome" ? { resetHome: true } : undefined);
     window.setTimeout(() => window.scrollTo({ top: 0, behavior: target === "career" ? "instant" : "smooth" }), 0);
   }
 
@@ -3983,13 +3985,14 @@ function GolfBetsApp() {
       scoreOnly={roundPresentation.playMode === "score_only"} canBet={bettingConsentGranted} onFriends={() => void openFirstExperienceFriends()}
       onCreateGroup={() => void openFirstExperienceGroup()} onSkip={() => void skipFirstSocialExperience()} />
     <FeedbackDialog key={`feedback:${identity.userId}`} token={identity.accessToken} email={identity.email} screen={tab} />
-    {(isPrimaryTab(tab) || tab === "friends") && <PrimaryHeader tab={tab === "friends" ? "welcome" : tab} notificationCount={groupNotificationsUnread} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => setTab("welcome")} onNotifications={() => setTab("notifications")} />}
+    {(isPrimaryTab(tab) || tab === "friends") && <PrimaryHeader tab={tab === "friends" ? "welcome" : tab} notificationCount={groupNotificationsUnread} avatarUrl={identity.avatarUrl} displayName={identity.displayName} onProfile={openProfileRoot} onHome={() => navigateFromBottomBar("welcome")} onNotifications={() => setTab("notifications")} />}
     {!isPrimaryTab(tab) && tab !== "friends" && tab !== "round" && <header className="topbar">
       <button className="brandHomeButton" onClick={() => setTab("welcome")} aria-label="Ir a Inicio"><BackyardWordmark /></button>
       <div className="topActions"><span className={`saveIndicator ${saveStatus}`}>{saveStatus === "saving" ? "Guardando…" : saveStatus === "error" ? "Error de guardado" : identity.mode !== "authenticated" || !cloudLinked ? "Guardado en este dispositivo" : cloudStatus === "synced" ? "Guardado en la nube ✓" : cloudStatus === "syncing" ? "Sincronizando…" : cloudStatus === "offline" ? "Sin conexión · pendiente" : cloudStatus === "error" ? "Error de sincronización" : "Pendiente de sincronizar"}</span><button className="contrastButton" onClick={() => changeHighContrast(!highContrast)} aria-pressed={highContrast}>{contrastToggleLabel(highContrast)}</button><ProfileNavigationButton avatarUrl={identity.avatarUrl} displayName={identity.displayName} onClick={openProfileRoot} /></div>
     </header>}
 
     {(tab === "welcome" || tab === "friends") && <HomeDashboard
+      key={`${identity.userId}:${homeRevision}`}
       displayName={identity.displayName}
       avatarUrl={identity.avatarUrl}
       username={identity.username || ""} friendsInitialView={friendsInitialView} friendsEntry={tab === "friends" ? friendsEntry : 0} targetId={tab === "friends" ? socialTarget : null} onCloseTarget={closeFriendTarget}

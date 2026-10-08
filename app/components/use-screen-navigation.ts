@@ -43,10 +43,11 @@ export function useScreenNavigation() {
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
   }, []);
-  const setTab = useCallback((next: AppTab, options?: { roundId?: string | null; careerView?: CareerView }) => {
+  const setTab = useCallback((next: AppTab, options?: { roundId?: string | null; careerView?: CareerView; resetHome?: boolean }) => {
     const target = guard.current(next);
     const view = options?.careerView ?? selectedCareer.current;
     const search = new URLSearchParams(window.location.search);
+    if (target === "welcome" && options?.resetHome) ["home", "card", "cardHole", "cardPlayer"].forEach(key => search.delete(key));
     if (target === "career" && options?.careerView !== undefined) search.delete("careerDetail");
     const href = screenHref(target, search.toString(), options?.roundId, view);
     if (target === current.current && href === `${window.location.pathname}${window.location.search}`) return;
