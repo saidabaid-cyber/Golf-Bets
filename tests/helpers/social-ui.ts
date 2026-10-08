@@ -4,7 +4,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { careerIndexChart } from "../../lib/career-index-chart";
 export type UINode={type:any;props:Record<string,any>};
-function presentationNode(node:any){if(node?.type==="ScorecardNavigationBoundary")return node.props.children(()=>{});return typeof node?.type==="function"&&["ScoreSummary","HandicapChart","SocialFeedSkeleton","RoundContent"].includes(node.type.name)?node.type(node.props):node;}
+function presentationNode(node:any):any{if(node?.type==="ScorecardNavigationBoundary"||node?.type==="SocialFeedViews")return presentationNode(node.props.children(()=>{}));return typeof node?.type==="function"&&["ScoreSummary","HandicapChart","SocialFeedSkeleton","RoundContent","SocialPostContent","FeedContent"].includes(node.type.name)?presentationNode(node.type(node.props)):node;}
 export function uiNodes(node:any):UINode[]{node=presentationNode(node);return Array.isArray(node)?node.flatMap(uiNodes):node?.props?[node,...uiNodes(node.props.children)]:[];}
 export function uiText(node:any):string{node=presentationNode(node);return Array.isArray(node)?node.map(uiText).join(" ").replace(/\s+/g," ").trim():node?.props?uiText(node.props.children):typeof node==="string"||typeof node==="number"?String(node):"";}
 export function uiFind(tree:any,predicate:(n:UINode)=>boolean){const node=uiNodes(tree).find(predicate);assert.ok(node);return node;}
@@ -17,15 +17,15 @@ export function socialUI(file:string,boundaries:Record<string,any>={},globals:Re
   const listeners=new Map<string,Set<(...args:any[])=>void>>();
   const add=(type:string,fn:any)=>{if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type)!.add(fn);};
   const remove=(type:string,fn:any)=>listeners.get(type)?.delete(fn);
-  const location={search:""};const history={state:{} as Record<string,unknown>,pushState(state:any,_title:string,url:string){history.state=state;location.search=new URL(url,"https://dev.thebackyard.com.mx").search;}};
-  const window={location,history,scrollY:0,scrollTo(){},addEventListener:add,removeEventListener:remove,confirm:()=>true,dispatchEvent(event:Event){listeners.get(event.type)?.forEach(fn=>fn(event));}};
+  const location={search:"",origin:"https://dev.thebackyard.com.mx",pathname:"/"};const trail:any[]=[];const history={state:{} as Record<string,unknown>,pushState(state:any,_title:string,url:string){trail.push({state:history.state,search:location.search});history.state=state;location.search=new URL(url,location.origin).search;},replaceState(state:any,_title:string,url:string){history.state=state;location.search=new URL(url,location.origin).search;},back(){const prior=trail.pop();if(prior){history.state=prior.state;location.search=prior.search;listeners.get("popstate")?.forEach(fn=>fn({}));}}};
+  const window={location,history,scrollY:0,scrollTo(value:any,top?:number){window.scrollY=typeof value==="object"?value.top:top??0;},addEventListener:add,removeEventListener:remove,confirm:()=>true,dispatchEvent(event:Event){listeners.get(event.type)?.forEach(fn=>fn(event));}};
   const document={visibilityState:"visible",addEventListener:add,removeEventListener:remove};
-  const surface={addEventListener:add,removeEventListener:remove};let intersect:((entries:any[])=>void)|undefined;
+  const surface={addEventListener:add,removeEventListener:remove,focus(){}};let intersect:((entries:any[])=>void)|undefined;
   class Observer{constructor(callback:any){intersect=callback;}observe(){}disconnect(){intersect=undefined;}}
   class Element{closest(){return null;}}
   const exports:any={};
   const source=ts.transpileModule(readFileSync(file,"utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.ReactJSX,esModuleInterop:true}}).outputText;
-  runInNewContext(source,{exports,window,document,location,IntersectionObserver:Observer,Element,URL,URLSearchParams,Set,Map,Promise,AbortController,Event,setTimeout,clearTimeout,crypto:{randomUUID:()=>"test-operation"},...globals,require(id:string){
+  runInNewContext(source,{exports,window,document,location,IntersectionObserver:Observer,Element,HTMLElement:Element,URL,URLSearchParams,Set,Map,Promise,AbortController,Event,setTimeout,clearTimeout,crypto:{randomUUID:()=>"test-operation"},...globals,require(id:string){
     if(id==="react")return react;
     if(id==="react/jsx-runtime")return{jsx:(type:any,props:any)=>({type,props}),jsxs:(type:any,props:any)=>({type,props}),Fragment:"fragment"};
     if(id.endsWith(".css"))return{__esModule:true,default:new Proxy({},{get:(_t,k)=>String(k)})};
