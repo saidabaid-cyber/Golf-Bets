@@ -6,7 +6,7 @@ import ts from 'typescript';
 import {scorecardQaEnvironment,scorecardQaAccount} from '../lib/scorecard-qa-access';
 import {completeScorecardQa as fixture} from '../lib/scorecard-qa-fixture';
 import * as domain from '../lib/premium-scorecard';
-import {socialUI,uiFind,uiText,settleUI} from './helpers/social-ui';
+import {socialUI,uiFind,uiNodes,uiText,settleUI} from './helpers/social-ui';
 
 const env={VERCEL:'1',VERCEL_ENV:'preview',VERCEL_GIT_COMMIT_REF:'integration/backyard-current',PREVIEW_DB_REF:'bymeopxkxapfizeeqeyb',NEXT_PUBLIC_SUPABASE_URL:'https://bymeopxkxapfizeeqeyb.supabase.co'};
 test('remote demo fails closed outside DEV, approved branch, exact DB and server-verified QA identity',()=>{
@@ -71,4 +71,18 @@ test('remote access gate discards responses from a previous identity after accou
   h.render('ScorecardQaGate',{});await settleUI();assert.equal(calls,1);
   changed();release({ok:true,json:async()=>({data:fixture})});await settleUI();assert.doesNotMatch(uiText(h.render('ScorecardQaGate',{})),/18 hoyos/);assert.equal(uiFind(h.render('ScorecardQaGate',{}),n=>n.type==='p').props.role,'status');
   scheduled.shift()!();await settleUI();release({ok:false,json:async()=>({error:'Cuenta sin permiso'})});await settleUI();assert.match(uiText(h.render('ScorecardQaGate',{})),/Cuenta sin permiso/);h.unmount();
+});
+test('QA token refresh preserves the mounted demo, while sign-out clears it immediately',async()=>{
+  const identity='b182e0a1-d3f5-4e32-a005-29c6d55b6cdf';
+  let session:{access_token:string;user:{id:string}}|null={access_token:'QA',user:{id:identity}};
+  let changed:(_event:string,value:typeof session)=>void=()=>{},release:(value:any)=>void=()=>{},calls=0;
+  const scheduled:Array<()=>void>=[];
+  const client={auth:{getSession:async()=>({data:{session}}),onAuthStateChange(fn:typeof changed){changed=fn;return{data:{subscription:{unsubscribe(){}}}};}}};
+  const h=socialUI('app/qa/scorecard/scorecard-qa-gate.tsx',{'supabase/client':{getSupabaseBrowser:()=>client},'scorecard-qa':{ScorecardQa:'Demo'}},{setTimeout:(fn:()=>void)=>{scheduled.push(fn);},fetch:async()=>{calls++;return new Promise(resolve=>{release=resolve;});}});
+  const render=()=>h.render('ScorecardQaGate',{});
+  render();await settleUI();release({ok:true,json:async()=>({data:fixture})});await settleUI();assert.ok(uiFind(render(),n=>n.type==='Demo'));
+  changed('TOKEN_REFRESHED',session);assert.ok(uiFind(render(),n=>n.type==='Demo'),'same verified user is never unmounted while revalidating');
+  scheduled.shift()!();await settleUI();assert.equal(calls,2);release({ok:true,json:async()=>({data:{...fixture}})});await settleUI();assert.ok(uiFind(render(),n=>n.type==='Demo'));
+  session=null;changed('SIGNED_OUT',null);assert.equal(uiNodes(render()).some(n=>n.type==='Demo'),false,'sign-out immediately removes the authorized fixture');
+  scheduled.shift()!();await settleUI();assert.equal(calls,2);assert.match(uiText(render()),/Inicia sesión/);h.unmount();
 });
