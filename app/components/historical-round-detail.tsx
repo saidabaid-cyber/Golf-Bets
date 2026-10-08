@@ -8,7 +8,7 @@ import { buildHistoricalRoundRecap, type HistoricalRoundRecapIssueCode } from ".
 import { canEditSnapshot } from "../../lib/round-editing";
 import type { PrivateLeaderboardRow } from "../../lib/round-utils";
 import type { Course, HoleScore, Player, RoundSnapshot } from "../../lib/types";
-import { FullScorecard } from "./full-scorecard";
+import { ScorecardBoundary } from "./scorecard-boundary";
 import { GolfLeaderboard, type GolfLeaderboardMode } from "./golf-leaderboard";
 import { RoundStatsCard } from "./round-stats-card";
 import { summarizeClubDistances } from "../../features/shots/domain";
@@ -77,8 +77,6 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
   onPhoto: () => void;
 }) {
   const [leaderboardMode, setLeaderboardMode] = useState<GolfLeaderboardMode>("gross");
-  const [scorecardScale, setScorecardScale] = useState(75);
-  const [showScorecard, setShowScorecard] = useState(false);
   const recap = useMemo(() => buildHistoricalRoundRecap(round), [round]);
   const indexRecord = useMemo(() => accountUserId ? calculateBackyardIndex([round], accountUserId).records[0] : undefined, [round, accountUserId]);
   const legacyCategories = useMemo(() => legacyOwnerCategories(round), [round]);
@@ -115,6 +113,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       id: player.playerId,
       name: player.name,
       handicap: player.handicap,
+      accountUserId: round.players?.find(value => value.id === player.playerId)?.accountUserId,
     }));
     const course: Course = {
       id: recap.meta.roundId || "historical-round",
@@ -126,6 +125,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
         strokeIndex: hole.strokeIndex,
         ...(hole.yards === undefined ? {} : { yards: hole.yards }),
       })),
+      playerHoleCards: round.courseSnapshot?.playerHoleCards,
     };
     const scores: Record<number, HoleScore> = {};
     for (const hole of recap.golf.scorecard) {
@@ -136,7 +136,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       if (Object.keys(row).length) scores[hole.number] = row;
     }
     return { players, course, scores };
-  }, [recap.golf, recap.meta.courseName, recap.meta.roundId, recap.meta.teeName]);
+  }, [recap.golf, recap.meta.courseName, recap.meta.roundId, recap.meta.teeName, round.players, round.courseSnapshot?.playerHoleCards]);
 
   const metaParts = [
     round.groupOrigin?.groupName ? `Grupo ${round.groupOrigin.groupName}` : undefined,
@@ -146,7 +146,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
     recap.meta.teeName ? `Tee ${recap.meta.teeName}` : undefined,
   ].filter((part): part is string => Boolean(part));
 
-  return <div className="historicalDetail">
+  const content = (openScorecard: () => void) => <div className="historicalDetail">
     {accountUserId && attributableHistory([round], accountUserId).length > 0 && <RoundAchievementSummary round={round} priorRounds={priorRounds} accountUserId={accountUserId} />}
     {accountUserId && accessToken && <RoundSharingPanel key={`${accountUserId}:${round.id}`} round={round} userId={accountUserId} accessToken={accessToken} />}
     {accountUserId && accessToken && round.scorekeeping?.version === 1 && !round.cloudReadOnly && round.lifecycleState === "completed" && <OwnerRoundFinalizeSync round={round} userId={accountUserId} accessToken={accessToken} />}
@@ -180,18 +180,8 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       <button
         type="button"
         className="secondary historicalScorecardToggle"
-        aria-expanded={showScorecard}
-        aria-controls="historical-full-scorecard"
-        onClick={() => setShowScorecard((visible) => !visible)}
-      >{showScorecard ? "Ocultar tarjeta completa" : "Ver tarjeta completa"}</button>
-      {showScorecard && <div id="historical-full-scorecard"><FullScorecard
-          course={scorecard.course}
-          players={scorecard.players}
-          scores={scorecard.scores}
-          order={recap.golf.order}
-          scale={scorecardScale}
-          onScale={setScorecardScale}
-        /></div>}
+        onClick={openScorecard}
+      >Ver tarjeta completa</button>
     </> : <section className="card historicalUnavailable">
       <h2>Resultado de golf no disponible</h2>
       <p>Este registro no contiene campo, jugadores y scores suficientes para reconstruir una clasificación confiable.</p>
@@ -268,4 +258,8 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       {safelyEditable ? <button type="button" className="primary" onClick={onEdit}>{round.lifecycleState === "live" ? "Reanudar ronda" : "Corregir ronda guardada"}</button> : <p className="notice">{round.lifecycleState === "cancelled" ? "Ronda cancelada: los scores se conservan para consulta. La cancelación no permite reactivar esta tarjeta." : "Registro de solo lectura: faltan datos suficientes para corregirlo sin inventar su configuración original."}</p>}
     </section>
   </div>;
+  return scorecard && recap.golf ? <ScorecardBoundary roundId={round.id} course={scorecard.course} players={scorecard.players} scores={scorecard.scores}
+    order={recap.golf.order} date={round.date} lifecycle={recap.meta.lifecycleState} ownerId={recap.meta.ownerId}
+    putts={round.putts} advancedStats={round.advancedStats} assignments={round.playerTeeAssignments} shots={round.shots}
+    accountUserId={accountUserId} onRequestEdit={safelyEditable ? onEdit : undefined}>{content}</ScorecardBoundary> : content(() => undefined);
 }
