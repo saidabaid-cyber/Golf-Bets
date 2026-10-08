@@ -32,7 +32,7 @@ export function ScorecardBoundary({ children, navigation, ...props }: PremiumSco
       // A global tab change must not carry this round's child selection into another module.
       const params = new URLSearchParams(window.location.search);
       if (params.get("card") === props.roundId && params.get("screen") !== parentScreen.current)
-        window.history.replaceState(window.history.state, "", scorecardViewHref(window.location.search, props.roundId, { kind: "round" }));
+        window.history.replaceState(window.history.state, "", scorecardViewHref(window.location.search, props.roundId, { kind: "round" }, window.location.pathname));
     };
   }, [props.roundId, holes, playerIds]);
   useLayoutEffect(() => {
@@ -45,12 +45,12 @@ export function ScorecardBoundary({ children, navigation, ...props }: PremiumSco
   function navigate(next: ScorecardView) {
     positions.current.set(key(current.current), window.scrollY);
     if (next.kind === "card" && current.current.kind === "round") opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    window.history.pushState({ ...window.history.state, backyardScorecard: props.roundId }, "", scorecardViewHref(window.location.search, props.roundId, next));
+    window.history.pushState({ ...window.history.state, backyardScorecard: props.roundId }, "", scorecardViewHref(window.location.search, props.roundId, next, window.location.pathname));
     returning.current = false; current.current = next; setView(next);
   }
   function back() {
     if (window.history.state?.backyardScorecard === props.roundId) window.history.back();
-    else { const next: ScorecardView = view.kind === "hole" ? { kind: "card" } : { kind: "round" }; returning.current = true; window.history.replaceState(window.history.state, "", scorecardViewHref(window.location.search, props.roundId, next)); current.current = next; setView(next); }
+    else { const next: ScorecardView = view.kind === "hole" ? { kind: "card" } : { kind: "round" }; returning.current = true; window.history.replaceState(window.history.state, "", scorecardViewHref(window.location.search, props.roundId, next, window.location.pathname)); current.current = next; setView(next); }
   }
   return <><div hidden={view.kind !== "round"}><RoundContent render={children} onOpen={() => navigate({ kind: "card" })} /></div>
     {view.kind !== "round" && <><PremiumScorecard {...props} view={view} onBack={back} onHole={(hole, playerId) => navigate({ kind: "hole", hole, playerId })} />{navigation}</>}

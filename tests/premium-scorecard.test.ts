@@ -9,6 +9,7 @@ import { scorecardViewFromSearch, scorecardViewHref } from "../lib/scorecard-vie
 import { persistRoundDraftCheckpoint } from "../lib/round-review";
 import { STORAGE_KEYS } from "../lib/round-utils";
 import type { Course, Player, AdvancedStatsByHole } from "../lib/types";
+import { qaAccess, qaAdvanced, qaCourse, qaOrder, qaPlayer, qaPutts, qaScores } from './fixtures/scorecard-ux';
 
 // These deliberately synthetic values exist only in the test suite.
 const player: Player = { id: "owner", name: "Test owner", handicap: 7, accountUserId: "test-account" };
@@ -108,15 +109,42 @@ test("round → card → hole → card → round keeps parent navigation and rej
 test("scorecard and manual hole detail expose real data, readable labels and read-only actions", () => {
   const props = { roundId: "test-round", course, players: [player, other], order, scores, advancedStats, putts: { 1: { owner: 0 } }, ownerId: player.id, accountUserId: player.accountUserId, onBack() {}, onHole() {} };
   const card = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, view: { kind: "card" } }));
-  for (const label of ["Tarjeta de golf", "Hoyos 1–9", "Hoyos 10–18", "IDA / OUT", "VUELTA / IN", "TOTAL", "Ventaja · SI", "Distancia · yd", "Solo lectura", "Eagle o mejor", "Doble bogey o más"]) assert.ok(card.includes(label), label);
+  for (const label of ["Tarjeta de golf", "Ida", "1–9", "Vuelta", "10–18", "IDA / OUT", "VUELTA / IN", "TOTAL", "Ventaja · SI", "Yardas", "Solo lectura", "Eagle o mejor", "Doble bogey o más"]) assert.ok(card.includes(label), label);
   assert.match(card, /scope="row"/); assert.match(card, /Ver detalle del hoyo 1/); assert.doesNotMatch(card, /Editar score|undefined|NaN|Strokes Gained|GHIN verificado/);
   const hole = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, view: { kind: "hole", hole: 1, playerId: player.id } }));
-  assert.match(hole, /Sin golpes registrados/); assert.match(hole, /funcionan sin GPS/); assert.match(hole, /Volver a tarjeta/);
+  assert.match(hole, /Sin golpes registrados/); assert.match(hole, /premiumHolePrimary/); assert.match(hole, /Volver a tarjeta/);
   assert.doesNotMatch(hole, /Capturar este hoyo|Golpe 1/);
   const editable = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, access, onSaveHole() {}, view: { kind: "card" } }));
   assert.match(editable, /Editar score del hoyo 1/);
   const otherHole = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, onRequestEdit() {}, view: { kind: "hole", hole: 1, playerId: other.id } }));
   assert.doesNotMatch(otherHole, /Corregir ronda con el flujo autorizado|Capturar este hoyo|Editar score/);
+});
+
+test('controlled fixture renders captured zero, missing and not applicable separately; FIR never substitutes direction', () => {
+  const props = { roundId: qaAccess.roundId, course: qaCourse, players: [qaPlayer], order: qaOrder, scores: qaScores, advancedStats: qaAdvanced, putts: qaPutts, ownerId: qaPlayer.id, onBack() {}, onHole() {} };
+  const markup = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, view: { kind: 'card' } }));
+  for (const label of ['FIR', 'Salida', 'GIR', 'Penalidades', 'No aplicable', 'Sin capturar', 'Nombre completo del campo']) assert.ok(markup.includes(label), label);
+  assert.match(markup, /aria-label="No aplicable"[^>]*>N\/A/);
+  assert.match(markup, /aria-label="Sin capturar"[^>]*>—/);
+  const fixture = scorecardCells({ ...props, playerId: qaPlayer.id });
+  assert.equal(fixture[0].putts, 0); assert.equal(fixture[0].stat.penaltyStrokes, 0);
+  assert.equal(fixture[2].fir, null); assert.equal(fixture[5].putts, null); assert.equal(fixture[5].gir, null);
+  const hole = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, view: { kind: 'hole', hole: 1, playerId: qaPlayer.id } }));
+  assert.match(hole, /<dt>Putts<\/dt><dd>0<\/dd>/);
+  assert.match(hole, /<dt>Penalidades<\/dt><dd>0<\/dd>/);
+  assert.ok(hole.indexOf('premiumHolePrimary') < hole.indexOf('premiumHoleAdvanced'));
+  assert.equal((hole.match(/aria-label="Volver a tarjeta"/g) ?? []).length, 1);
+  assert.doesNotMatch(hole, /<h2>Sin golpes/);
+});
+
+test('QA navigation stays on its isolated pathname and confirmed edit affects only the in-memory fixture', () => {
+  const href = scorecardViewHref('', qaAccess.roundId, { kind: 'card' }, '/qa/scorecard');
+  assert.equal(href, '/qa/scorecard?card=qa-memory-round');
+  const before = JSON.stringify({ qaScores, qaAdvanced, qaPutts });
+  const next = prepareQuickHole({ access: qaAccess, player: qaPlayer, hole: qaCourse.holes[3], scores: qaScores, edits: {}, putts: qaPutts, advancedStats: qaAdvanced, draft: { score: 4, putts: 1, advanced: { fairwayHit: true, teeDirection: 'center', greenInRegulation: true, penaltyStrokes: 0 } } });
+  assert.equal(next.scores[4][qaPlayer.id], 4); assert.equal(next.putts[4][qaPlayer.id], 1);
+  assert.equal(next.advancedStats[4][qaPlayer.id]?.greenInRegulation, true);
+  assert.equal(JSON.stringify({ qaScores, qaAdvanced, qaPutts }), before);
 });
 
 test("quick editor renders saved values without invoking any write; no value is invented for missing putts", () => {
