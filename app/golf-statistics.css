@@ -32,7 +32,7 @@
 .golfStatsBars>div { display:grid; grid-template-columns:minmax(98px,1fr) minmax(40px,1fr) 36px; align-items:center; gap:8px; font-size:12px; }
 .golfStatsBars>div>span { display:flex; align-items:center; gap:8px; }
 .golfStatsBars>div>div { background:var(--by-sage); height:8px; border-radius:8px; overflow:hidden; }
-.golfStatsBars i { background:var(--by-forest); display:block; height:100%; border-radius:8px; }
+.golfStatsBars>div>div>i { background:var(--by-forest); display:block; height:100%; border-radius:8px; }
 .golfStatsBars b { text-align:right; }
 .golfStatsBars b small { display:block; font-size:10px; font-weight:400; }
 .golfStatsSymbol { width:17px; height:17px; flex:none; background:none!important; border:1px solid var(--by-gold); }
