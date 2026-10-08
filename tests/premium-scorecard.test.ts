@@ -115,6 +115,8 @@ test("scorecard and manual hole detail expose real data, readable labels and rea
   assert.doesNotMatch(hole, /Capturar este hoyo|Golpe 1/);
   const editable = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, access, onSaveHole() {}, view: { kind: "card" } }));
   assert.match(editable, /Editar score del hoyo 1/);
+  const otherHole = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, onRequestEdit() {}, view: { kind: "hole", hole: 1, playerId: other.id } }));
+  assert.doesNotMatch(otherHole, /Corregir ronda con el flujo autorizado|Capturar este hoyo|Editar score/);
 });
 
 test("quick editor renders saved values without invoking any write; no value is invented for missing putts", () => {

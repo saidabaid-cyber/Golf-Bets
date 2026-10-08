@@ -9,7 +9,7 @@ function RoundContent({ render, onOpen }: { render: (open: () => void) => ReactN
 }
 
 /** A round-local history stack. Global tabs and their active-section mapping remain unchanged. */
-export function ScorecardBoundary({ children, ...props }: PremiumScorecardProps & { children: (open: () => void) => ReactNode }) {
+export function ScorecardBoundary({ children, navigation, ...props }: PremiumScorecardProps & { children: (open: () => void) => ReactNode; navigation?: ReactNode }) {
   const [view, setView] = useState<ScorecardView>({ kind: "round" });
   const positions = useRef(new Map<string, number>()), returning = useRef(false), opener = useRef<HTMLElement | null>(null);
   const current = useRef<ScorecardView>(view);
@@ -17,6 +17,10 @@ export function ScorecardBoundary({ children, ...props }: PremiumScorecardProps 
   const holes = props.order.join(","), playerIds = JSON.stringify(props.players.map(player => player.id));
   const key = (value: ScorecardView) => value.kind === "hole" ? `hole:${value.hole}:${value.playerId}` : value.kind;
   useEffect(() => {
+    // Native history restoration happens after popstate and otherwise overwrites
+    // the round-local position restored by the layout effect below.
+    const previousRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
     const read = () => scorecardViewFromSearch(window.location.search, props.roundId, holes.split(",").map(Number), JSON.parse(playerIds) as string[]);
     parentScreen.current = new URLSearchParams(window.location.search).get("screen");
     const initial = read(); current.current = initial; setView(initial);
@@ -24,6 +28,7 @@ export function ScorecardBoundary({ children, ...props }: PremiumScorecardProps 
     window.addEventListener("popstate", pop);
     return () => {
       window.removeEventListener("popstate", pop);
+      window.history.scrollRestoration = previousRestoration;
       // A global tab change must not carry this round's child selection into another module.
       const params = new URLSearchParams(window.location.search);
       if (params.get("card") === props.roundId && params.get("screen") !== parentScreen.current)
@@ -48,6 +53,6 @@ export function ScorecardBoundary({ children, ...props }: PremiumScorecardProps 
     else { const next: ScorecardView = view.kind === "hole" ? { kind: "card" } : { kind: "round" }; returning.current = true; window.history.replaceState(window.history.state, "", scorecardViewHref(window.location.search, props.roundId, next)); current.current = next; setView(next); }
   }
   return <><div hidden={view.kind !== "round"}><RoundContent render={children} onOpen={() => navigate({ kind: "card" })} /></div>
-    {view.kind !== "round" && <PremiumScorecard {...props} view={view} onBack={back} onHole={(hole, playerId) => navigate({ kind: "hole", hole, playerId })} />}
+    {view.kind !== "round" && <><PremiumScorecard {...props} view={view} onBack={back} onHole={(hole, playerId) => navigate({ kind: "hole", hole, playerId })} />{navigation}</>}
   </>;
 }

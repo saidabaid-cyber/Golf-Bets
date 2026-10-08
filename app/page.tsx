@@ -4427,7 +4427,8 @@ function GolfBetsApp() {
 
     {tab === "round" && <ScorecardBoundary roundId={roundId} course={course} players={players} order={order} scores={scores} putts={putts} advancedStats={advancedStats}
       date={roundDate} lifecycle={roundReviewPending ? "completed" : "live"} ownerId={ownerId} accountUserId={identity.userId} assignments={playerTeeAssignments} shots={shots}
-      clubs={ownerClubChoices.map(club => club.label)} access={scorecardEditAccess()} onSaveHole={saveScorecardHole}>{openScorecard => <>
+      clubs={ownerClubChoices.map(club => club.label)} access={scorecardEditAccess()} onSaveHole={saveScorecardHole}
+      navigation={<AppBottomNav activeTab={tab} onNavigate={navigateFromBottomBar} onResumeRound={globalRoundAvailable ? resumeActiveRound : undefined} />}>{openScorecard => <>
       <nav className="roundSessionActions" aria-label="Administrar ronda en curso">
         <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={() => { flushLocalState.current?.(); setTab("welcome"); }}>Salir y continuar después</button>
         <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={requestNewRound}>Nueva ronda</button>
