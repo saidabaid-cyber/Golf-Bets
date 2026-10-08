@@ -59,6 +59,6 @@ test("retained latest-20 presentation preserves linked Backyard provenance even 
 test("provider UI is read-only, labels adjusted-only scores honestly and has no dead open CTA",()=>{
   const h=socialUI("app/components/ghin-import-history.tsx",{"score-reconciliation":reconciliation,"career-statistics":{careerDate:(v:any)=>v,careerNumber:(v:any)=>v??"—"}});
   const entry={id:"ghin:p",date:"2026-10-05",courseName:"QA Club",teeName:"Blancas",holes:18,gross:null,origin:"GHIN",backyardId:null,provider:{...normalized,grossScore:null,adjustedGrossScore:81,match:"GHIN_ONLY"}};
-  const tree=h.render("GhinProviderCard",{entry});assert.match(uiText(tree),/81 Ajustado/);assert.match(uiText(tree),/GHIN SOLO LECTURA/);assert.equal(uiNodes(tree).filter(n=>n.type==="button").length,0);
+  const tree=h.render("GhinProviderCard",{entry});assert.match(uiText(tree),/81 Ajustado/);assert.match(uiText(tree),/GHIN Solo lectura/);assert.equal(uiNodes(tree).filter(n=>n.type==="button").length,0);
   assert.doesNotMatch(uiText(tree),/Atestada|Putts|Birdies|Reanudar/);
 });

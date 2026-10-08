@@ -102,7 +102,7 @@ for (const previous of ["achievements", "tournaments"] as const) test(`bottom-na
   browser.history.forward();browser.history.forward();assert.equal(render().careerView,"summary");
   const page=readFileSync("app/page.tsx","utf8");
   const adapter=page.slice(page.indexOf("function navigateFromBottomBar"),page.indexOf("function openRulesForRound"));
-  assert.match(adapter,/setTab\(target, target === "career" \? \{ careerView: "summary" \} : undefined\)/);
+  assert.match(adapter,/setTab\(target, target === "career" \? \{ careerView: "summary" \} : target === "welcome" \? \{ resetHome: true \} : undefined\)/);
 });
 
 test("opening another historical round and browser Back restore the respective selections", () => {

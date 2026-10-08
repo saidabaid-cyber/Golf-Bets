@@ -3,7 +3,7 @@
 .golfStatsHeader h1 { margin:0; font:700 26px var(--by-editorial,Georgia,serif); }
 .golfStatsHeader button,.golfStatsEmpty button { border:0; background:var(--by-sage); color:var(--by-forest); border-radius:24px; padding:10px 16px; min-height:44px; cursor:pointer; }
 .golfStatsTabs { display:flex; gap:3px; overflow-x:auto; scrollbar-width:none; background:var(--by-sage); padding:4px; border-radius:26px; }
-.golfStatsTabs button { flex:1 0 auto; min-height:40px; padding:8px 10px; border:0; border-radius:24px; background:none; color:var(--by-forest); font-size:12px; cursor:pointer; }
+.golfStatsTabs button { flex:1 0 auto; min-height:44px; padding:8px 10px; border:0; border-radius:24px; background:none; color:var(--by-forest); font-size:12px; cursor:pointer; }
 .golfStatsTabs button[aria-pressed="true"] { background:var(--by-forest); color:#fff; }
 .golfStatsControls { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
 .golfStatsControls label { display:flex; align-items:center; gap:8px; font-size:12px; flex:1; min-width:0; }

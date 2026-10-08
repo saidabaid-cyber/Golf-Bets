@@ -8,6 +8,12 @@ import { StatsDashboard, type StatsCategory } from "../app/components/stats-dash
 import { careerRound } from "./helpers/career-round";
 import { golfStatsSelection } from "../lib/golf-stats-navigation";
 import { screenHref } from "../lib/app-navigation";
+import { socialUI, uiFind, uiText } from "./helpers/social-ui";
+import * as statsDomain from "../features/stats/domain";
+import * as captureProjection from "../lib/golf-capture-statistics";
+import * as statsNavigation from "../lib/golf-stats-navigation";
+import * as careerStatistics from "../lib/career-statistics";
+import * as golfInsights from "../lib/golf-insights";
 
 test("stats selection survives round and back URLs without accepting invalid categories or periods",()=>{
   const search="?screen=stats&statsView=putting&statsPeriod=5&statsHoles=9&statsCourse=Campo";
@@ -16,6 +22,17 @@ test("stats selection survives round and back URLs without accepting invalid cat
   assert.equal(golfStatsSelection(search).scope,9);assert.equal(golfStatsSelection(search).window,5);
   assert.equal(golfStatsSelection("?statsView=admin&statsPeriod=999&statsHoles=0").view,"summary");
   assert.equal(golfStatsSelection("?statsPeriod=999").window,20);
+});
+test("category interactions switch real panels, retain filters and open the correct player's round",()=>{
+  const round=careerRound("qa-round-id",1),opened:string[]=[];
+  const ui=socialUI("app/components/stats-dashboard.tsx",{"domain":statsDomain,"golf-insights":golfInsights,"golf-capture-statistics":captureProjection,"golf-stats-navigation":statsNavigation,"career-statistics":careerStatistics,"insights":{structuredGolfInsightInput:()=>({sampleRounds:1})}});
+  const props={rounds:[round],insights:buildGolfInsights([round]),consentOwnerId:"owner",onOpenHistory(){},onOpenRound(id:string){opened.push(id);}};
+  let tree=ui.render("StatsDashboard",props);
+  uiFind(tree,n=>n.type==="button"&&n.props.children==="Putting").props.onClick();tree=ui.render("StatsDashboard",props);
+  assert.match(uiText(tree),/Aún no hay datos suficientes/);assert.doesNotMatch(uiText(tree),/Mejor score/);
+  uiFind(tree,n=>n.type==="button"&&n.props.children==="Scoring").props.onClick();tree=ui.render("StatsDashboard",props);
+  assert.match(uiText(tree),/Resultado por hoyo/);assert.match(uiText(tree),/18 hoyos reales/);
+  uiFind(tree,n=>n.type==="button"&&uiText(n).includes("Campo QA sintético")).props.onClick();assert.deepEqual(opened,["qa-round-id"]);
 });
 
 test("capture projection keeps zero, missing, FIR par3 and owner attribution distinct",()=>{
