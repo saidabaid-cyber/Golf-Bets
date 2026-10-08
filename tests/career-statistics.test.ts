@@ -33,10 +33,10 @@ test("precision is empty without explicit evidence; foreign-linked legacy owner 
   const foreign = { id:"foreign", players:[{id:"p",accountUserId:"other"}], ownerId:"p" } as RoundSnapshot;
   assert.equal(ownCareerHistory([foreign],"owner").length,0);
 });
-test("overview has honest empty/GHIN states and keeps profile when statistics fail", () => {
+test("overview has honest empty states and keeps identity when statistics fail", () => {
   const props = { displayName:"Una persona sin avatar y con nombre largo", userId:"owner", index:{value:null,source:null}, insights:buildGolfInsights([]), rounds:[], ready:true, onView(){}, onCreateRound(){}, onOpenRound(){}, ghin:{enabled:false,profile:null} };
   const html = renderCareer("app/components/career-overview.tsx","CareerOverview",props);
-  assert.match(html,/Tu historia empieza con tu primera ronda/); assert.match(html,/no está disponible en este entorno/);
+  assert.match(html,/Tu historia empieza con tu primera ronda/); assert.doesNotMatch(html,/Handicap Index|GHIN/);
   assert.doesNotMatch(html,/sincronizado automáticamente/);
   const error = renderCareer("app/components/career-overview.tsx","CareerOverview",{...props,error:true});
   assert.match(error,/Una persona sin avatar/); assert.match(error,/Esta información no está disponible/);
