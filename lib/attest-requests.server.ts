@@ -37,7 +37,7 @@ export async function incomingAttestRequests(ctx:SocialContext,offset=0):Promise
     try {const {data:card}=await getActivity(ctx,request.activity_id,false);
       const state=card.currentHash!==request.expected_hash?'STALE':card.isAttestedByMe?'ATTESTED':'PENDING';
       if(state==='ATTESTED')continue;
-      data.push({id:request.id,type:'attest_request',activityId:card.id,createdAt:request.created_at,readAt:events.data?.find(e=>e.id===request.id)?.read_at??null,person:card.author,courseName:card.round?.courseName,attestRequest:{expectedHash:request.expected_hash,state}});
+      data.push({id:request.id,type:'attest_request',activityId:card.id,createdAt:request.created_at,readAt:events.data?.find(e=>e.id===request.id)?.read_at??null,person:card.author,courseName:card.round?.courseName,roundDate:card.round?.date,attestRequest:{expectedHash:request.expected_hash,state}});
     }catch(e){if(!(e instanceof SocialServiceError)||!['NOT_FOUND','FORBIDDEN','STALE_REVISION'].includes(e.code))throw e;}
   }
   // Keep the latest actionable request per card, while retaining all versions in storage.

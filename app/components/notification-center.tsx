@@ -76,7 +76,7 @@ export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,on
       .then(result=>{if(!controller.signal.aborted)setActivity(result.data);}).catch(error=>{if(!controller.signal.aborted)setMessage(socialErrorMessage(error));});
     return()=>controller.abort();
   },[accessToken,detail]);
-  const items=useMemo(()=>normalizeNotifications([...(prefs?.enabled ? events : []),...requests],prefs?.enabled && prefs.data.find(item=>item.type==="group_invite")?.inApp ? groups.invitations : []),[events,prefs,groups.invitations,requests]);
+  const items=useMemo(()=>normalizeNotifications([...requests,...(prefs?.enabled ? events : [])],prefs?.enabled && prefs.data.find(item=>item.type==="group_invite")?.inApp ? groups.invitations : []),[events,prefs,groups.invitations,requests]);
   const shown=filter === "Todas" ? items : items.filter(item=>item.category===filter);
   async function read(item:NotificationItem,read:boolean) {
     if(!accessToken)return;

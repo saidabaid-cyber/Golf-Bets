@@ -32,7 +32,7 @@ export function normalizeNotifications(events: readonly SocialNotification[], in
     if (previous) { previous.readIds = [...new Set([...previous.readIds, event.id])]; previous.unread ||= !event.readAt; continue; }
     items.set(key, { key, type: event.type, category: notificationCategory(event.type),
       title: event.person?.displayName || (event.type === "friend_request" ? "Solicitud de amistad" : event.type === "group_invite" ? "Invitación a un grupo" : notificationCategory(event.type) === "Rondas" ? "Tu ronda" : "Actividad de tus compañeros"),
-      message: `${event.attestRequest?.state==='STALE'?'Solicitud desactualizada: la tarjeta cambió.':NOTIFICATION_COPY[event.type]}${event.courseName ? ` · ${event.courseName}` : ""}`, avatar: event.person?.avatarUrl || null,
+      message: `${event.attestRequest?.state==='STALE'?'Solicitud desactualizada: la tarjeta cambió.':event.attestRequest?.state==='ATTESTED'?'✓ Atestaste esta tarjeta.':NOTIFICATION_COPY[event.type]}${event.courseName ? ` · ${event.courseName}` : ""}${event.roundDate?` · ${event.roundDate}`:''}`, avatar: event.person?.avatarUrl || null,
       createdAt: event.createdAt, unread: !event.readAt, pending: event.type === "friend_request" || event.attestRequest?.state==='PENDING' || Boolean(invitation),
       readIds: [event.id], resourceId: event.activityId, personId: event.person?.userId, ...(invitation ? { invitation } : {}),
     });
