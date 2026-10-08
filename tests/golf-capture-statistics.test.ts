@@ -77,3 +77,16 @@ test("missing optional captures produce honest category states instead of fake z
     assert.match(html,/Aún no hay datos suficientes/);assert.doesNotMatch(html,/golfStatsRing|>Penalidades<|>0%<|>Putts por ronda</);
   }
 });
+
+test("FIR and GIR trends use captured denominators and penalty frequency excludes incomplete cards",()=>{
+  const complete=careerRound("complete-zero",1),partial=careerRound("partial-penalty",2);
+  complete.advancedStats=Object.fromEntries(complete.order!.map(h=>[h,{"owner-player":{penaltyStrokes:0}}]));
+  partial.advancedStats={1:{"owner-player":{fairwayHit:true,greenInRegulation:false,penaltyStrokes:2}},2:{"owner-player":{fairwayHit:false,greenInRegulation:true}}};
+  const props={rounds:[complete,partial],insights:buildGolfInsights([complete,partial]),consentOwnerId:"owner",onOpenHistory(){},onOpenRound(){}};
+  const driving=renderToStaticMarkup(createElement(StatsDashboard,{...props,initialCategory:"driving"}));
+  assert.match(driving,/FIR por ronda/);assert.match(driving,/1 de 2 capturas/);assert.match(driving,/1 rondas con captura/);
+  const approach=renderToStaticMarkup(createElement(StatsDashboard,{...props,initialCategory:"approach"}));
+  assert.match(approach,/GIR por ronda/);assert.match(approach,/1 de 2 capturas/);
+  assert.match(approach,/Penalidades por ronda: <b>0\.0<\/b> · 0\/1 tarjetas/);
+  assert.match(approach,/Penalidades<\/span><b>2<\/b>/);
+});
