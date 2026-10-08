@@ -1,5 +1,6 @@
 .premiumScorecard{--card-green:#083e2f;--card-cream:#f6f5ee;--card-gold:#987528;width:100%;min-width:0;max-width:840px;margin:0 auto;padding:0 0 24px;color:#173e32;font-family:var(--font-sans,Arial,sans-serif)}
 .premiumScorecard [hidden]{display:none!important}
+[data-scorecard-origin]{min-width:0;max-width:100%}
 .app [data-home-version="social-home"]:has([data-scorecard-origin])>nav,.app [data-home-version="social-home"]:has([data-scorecard-origin])>button{display:none}
 .premiumScorecard button,.quickHoleSheet button{font:inherit;cursor:pointer;touch-action:manipulation}
 .premiumScorecard button:focus-visible,.premiumHoleScroll:focus-visible,.quickHoleSheet :focus-visible{outline:3px solid #987528;outline-offset:3px}

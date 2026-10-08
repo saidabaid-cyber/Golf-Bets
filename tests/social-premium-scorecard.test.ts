@@ -59,6 +59,7 @@ test("history has one early Premium entry before sharing, achievements, financia
   const source = readFileSync("app/components/cloud-social-activity.tsx", "utf8");
   assert.doesNotMatch(source, /setExpanded|detailedRound|<table/);
   assert.match(source, /socialRequest<\{ data: SocialActivityCard \}>\(base, accessToken\)/);
+  assert.match(readFileSync("app/scorecard-premium.css", "utf8"), /\[data-scorecard-origin\]\{min-width:0;max-width:100%\}/);
 });
 test("Feed → Premium → hole → Premium → Feed restores scroll and retains global navigation", () => {
   const listeners = new Set<() => void>(), scroll: number[] = [], location = { search: "?home=feed", pathname: "/" };
