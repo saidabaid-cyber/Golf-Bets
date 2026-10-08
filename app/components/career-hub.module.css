@@ -30,3 +30,13 @@
 @media(max-width:360px){.overviewMetrics .stat strong{font-size:23px}.overviewMetrics .stat>span{font-size:10px}.panel{padding:12px}.statsShortcut{font-size:11px}}
 .historyToolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:4px 0; color:var(--by-muted); font-size:12px; }
 .historyToolbar button { border:0; background:none; min-height:44px; color:var(--by-forest); font-weight:700; cursor:pointer; }
+
+.achievementHero { padding:16px; gap:14px; }
+.achievementHero>.achievementBadge { width:58px; height:58px; flex-basis:58px; }
+.achievementHero>.achievementBadge svg { width:34px; height:34px; }
+.achievementHero h2 { font-size:24px; margin:6px 0; color:#f7f7ee; }
+.achievementCard { min-height:96px; padding:12px; }
+.achievementDetail { display:grid; gap:12px; font-size:13px; line-height:1.5; }
+.achievementDetail p { margin:0; }
+.tournamentHero { padding:16px; }
+.tournamentHero h2 { font-size:24px; margin:8px 0; }

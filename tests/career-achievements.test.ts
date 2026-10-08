@@ -3,6 +3,8 @@ import test from "node:test";
 import { deriveCareerAchievements, rankFameEntries } from "../lib/round-achievements";
 import { careerRound } from "./helpers/career-round";
 import { renderCareer } from "./helpers/render-career";
+import { readFileSync } from "node:fs";
+import { achievementDisplayName } from "../lib/achievement-presentation";
 test("catalogue calculates progress from deduplicated owned evidence and keeps first unlock provenance", () => {
   const first=careerRound("one",1,3),second=careerRound("two",2,4),next=careerRound("three",3,4);
   const data=deriveCareerAchievements([next,first,second,first],"owner");
@@ -12,6 +14,16 @@ test("catalogue calculates progress from deduplicated owned evidence and keeps f
   assert.equal(data.find(a => a.slug === "par-master")!.value,36);
   assert.equal(data.find(a => a.slug === "ace-club")!.status,"locked");
   assert.equal(deriveCareerAchievements([first],"other").find(a => a.slug === "consistency")!.value,0);
+});
+test("achievement presentation translates labels without changing evidence and opens a dedicated view",()=>{
+  const round=careerRound("real-evidence-fixture",1,4),data=deriveCareerAchievements([round],"owner");
+  const low=data.find(row=>row.slug==="low-round")!,before=JSON.stringify(low);
+  assert.equal(achievementDisplayName(low.slug,low.name),"Mejor ronda");
+  const html=renderCareer("app/components/career-achievements.tsx","CareerAchievements",{rounds:[round],userId:"owner",onCreateRound(){},onOpenRound(){}});
+  assert.match(html,/Mejor ronda/);assert.doesNotMatch(html,/Low Round|Par Master|Consistency/);
+  assert.equal(JSON.stringify(low),before);
+  const source=readFileSync("app/components/career-achievements.tsx","utf8");
+  assert.match(source,/if\(selected\)return <CareerPanel/);assert.match(source,/Volver a Logros/);assert.doesNotMatch(source,/scrollIntoView/);
 });
 test("invalid/partial/cancelled cards never unlock; 9 holes never count as Low Round", () => {
   const round=careerRound("nine",1,3,4,9);
