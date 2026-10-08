@@ -49,7 +49,8 @@ export function PremiumScorecard(props: PremiumScorecardProps & {
   view: Exclude<ScorecardView, { kind: "round" }>; onBack: () => void; onHole: (hole: number, player: string) => void;
 }) {
   const [selected, setSelected] = useState(props.view.kind === 'hole' ? props.view.playerId : props.ownerId ?? props.players[0]?.id ?? '');
-  const [nine, setNine] = useState<"front" | "back" | "total">(props.order.some(number => number <= 9) ? "front" : "back");
+  const [nine, setNine] = useState<"front" | "back" | "all" | "total">(props.order.some(number => number <= 9) ? "front" : "back");
+  const [expandedHole,setExpandedHole]=useState<{hole:number;playerId:string}|null>(null);
   const [editing, setEditing] = useState<ScorecardCell | null>(null), [notice, setNotice] = useState(''), [fullName, setFullName] = useState(false);
   const scroll = useRef<HTMLDivElement>(null), horizontalPositions = useRef(new Map<string, number>());
   const playerId = props.view.kind === 'hole' ? props.view.playerId : selected;
@@ -57,9 +58,9 @@ export function PremiumScorecard(props: PremiumScorecardProps & {
   const cells = useMemo(() => player ? scorecardCells({ course: props.course, order: props.order, scores: props.scores, putts: props.putts, advancedStats: props.advancedStats, playerId: player.id }) : [], [props.course, props.order, props.scores, props.putts, props.advancedStats, player]);
   const summary = summarizeScorecard(cells);
   const front = cells.filter(cell => cell.hole.number <= 9), back = cells.filter(cell => cell.hole.number >= 10);
-  const visible = nine === 'total' ? [] : nine === 'front' ? front : back;
+  const visible = nine === 'total' ? [] : nine === 'all' ? cells : nine === 'front' ? front : back;
   const groups = ([['OUT', front], ['IN', back], ['TOTAL', cells]] as const).filter(([, values]) => values.length);
-  const totals = nine === 'total' ? groups : [[nine === 'front' ? 'OUT' : 'IN', visible]] as const;
+  const totals = nine === 'total' || nine === 'all' ? groups : [[nine === 'front' ? 'OUT' : 'IN', visible]] as const;
   const scrollKey = `${playerId}:${nine}`;
   useLayoutEffect(() => {
     if (props.view.kind === 'card' && scroll.current) scroll.current.scrollLeft = horizontalPositions.current.get(scrollKey) ?? 0;
@@ -87,23 +88,25 @@ export function PremiumScorecard(props: PremiumScorecardProps & {
   ];
   const holeNumber = props.view.kind === 'hole' ? props.view.hole : null;
   const detail = cells.find(cell => cell.hole.number === holeNumber);
+  const inlineDetail=expandedHole?.playerId===playerId?cells.find(cell=>cell.hole.number===expandedHole.hole):undefined;
+  const factCell=detail??inlineDetail;
   const tee = props.assignments?.find(value => value.playerId === player?.id)?.teeName ?? props.course.teeName;
   const header = <header className="premiumCardHeader"><button type="button" aria-label={detail ? 'Volver a tarjeta' : `Volver a ${props.originLabel ?? 'ronda'}`} onClick={props.onBack}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" /></svg></button><h1>{detail ? `Hoyo ${detail.hole.displayLabel ?? detail.hole.number}` : 'Tarjeta de golf'}</h1><span className="premiumCardStatus">{editable ? 'Editable' : 'Solo lectura'}</span></header>;
-  const details: Array<[string, React.ReactNode]> = detail ? [
-    ...(recordedNumber(detail.hole.strokeIndex, 1, 18) !== null ? [['Ventaja · SI', detail.hole.strokeIndex] as [string, React.ReactNode]] : []),
-    ...(detail.hole.par === 3 ? [['FIR', 'No aplicable · par 3'] as [string, React.ReactNode]] : detail.fir !== null ? [['FIR', detail.fir ? 'Fairway' : 'Fairway fallado'] as [string, React.ReactNode]] : []),
-    ...(detail.stat.teeDirection ? [['Salida', directionLabels[detail.stat.teeDirection]] as [string, React.ReactNode]] : []),
-    ...(detail.stat.landingLie ? [['Posición de bola', { fairway: 'Fairway', rough: 'Rough', bunker: 'Bunker', water_ob: 'Agua / OB' }[detail.stat.landingLie]] as [string, React.ReactNode]] : []),
-    ...(detail.gir !== null ? [['GIR', detail.gir ? 'Sí' : 'No'] as [string, React.ReactNode]] : []),
-    ...(detail.stat.bunkerCount !== undefined ? [['Bunker', detail.stat.bunkerCount] as [string, React.ReactNode]] : []),
-    ...(detail.stat.greenSideBunkerCount !== undefined ? [['Bunker de green', detail.stat.greenSideBunkerCount] as [string, React.ReactNode]] : []),
-    ...(detail.stat.fairwayBunkerCount !== undefined ? [['Bunker de fairway', detail.stat.fairwayBunkerCount] as [string, React.ReactNode]] : []),
-    ...(detail.stat.penaltyStrokes !== undefined ? [['Penalidades', detail.stat.penaltyStrokes] as [string, React.ReactNode]] : []),
-    ...(detail.stat.penaltyAreaCount !== undefined ? [['Área de penalidad', detail.stat.penaltyAreaCount] as [string, React.ReactNode]] : []),
-    ...(detail.stat.outOfBoundsCount !== undefined || detail.stat.outOfBounds !== undefined ? [['OB', detail.stat.outOfBoundsCount ?? Number(detail.stat.outOfBounds)] as [string, React.ReactNode]] : []),
-    ...(detail.stat.teeClub ? [['Bastón de salida', detail.stat.teeClub] as [string, React.ReactNode]] : []),
-    ...(detail.stat.teeDistance !== undefined ? [['Distancia de salida', `${detail.stat.teeDistance} yd`] as [string, React.ReactNode]] : []),
-    ...(detail.stat.firstPuttDistanceFeet !== undefined ? [['Primer putt', `${detail.stat.firstPuttDistanceFeet} ft`] as [string, React.ReactNode]] : []),
+  const details: Array<[string, React.ReactNode]> = factCell ? [
+    ...(recordedNumber(factCell.hole.strokeIndex, 1, 18) !== null ? [['Ventaja · SI', factCell.hole.strokeIndex] as [string, React.ReactNode]] : []),
+    ...(factCell.hole.par === 3 ? [['FIR', 'No aplicable · par 3'] as [string, React.ReactNode]] : factCell.fir !== null ? [['FIR', factCell.fir ? 'Fairway' : 'Fairway fallado'] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.teeDirection ? [['Salida', directionLabels[factCell.stat.teeDirection]] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.landingLie ? [['Posición de bola', { fairway: 'Fairway', rough: 'Rough', bunker: 'Bunker', water_ob: 'Agua / OB' }[factCell.stat.landingLie]] as [string, React.ReactNode]] : []),
+    ...(factCell.gir !== null ? [['GIR', factCell.gir ? 'Sí' : 'No'] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.bunkerCount !== undefined ? [['Bunker', factCell.stat.bunkerCount] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.greenSideBunkerCount !== undefined ? [['Bunker de green', factCell.stat.greenSideBunkerCount] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.fairwayBunkerCount !== undefined ? [['Bunker de fairway', factCell.stat.fairwayBunkerCount] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.penaltyStrokes !== undefined ? [['Penalidades', factCell.stat.penaltyStrokes] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.penaltyAreaCount !== undefined ? [['Área de penalidad', factCell.stat.penaltyAreaCount] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.outOfBoundsCount !== undefined || factCell.stat.outOfBounds !== undefined ? [['OB', factCell.stat.outOfBoundsCount ?? Number(factCell.stat.outOfBounds)] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.teeClub ? [['Bastón de salida', factCell.stat.teeClub] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.teeDistance !== undefined ? [['Distancia de salida', `${factCell.stat.teeDistance} yd`] as [string, React.ReactNode]] : []),
+    ...(factCell.stat.firstPuttDistanceFeet !== undefined ? [['Primer putt', `${factCell.stat.firstPuttDistanceFeet} ft`] as [string, React.ReactNode]] : []),
   ] : [];
   return <section className="premiumScorecard" aria-label={detail ? `Detalle del hoyo ${detail.hole.number}` : 'Tarjeta de golf'}>
     {header}<div className={`premiumCardIdentity${detail ? ' premiumHoleIdentity' : ''}`}><div className="premiumIdentityText"><button type="button" className="premiumCourseName" title={props.course.name} aria-label={`Nombre completo del campo: ${props.course.name}`} aria-expanded={fullName} onClick={() => setFullName(value => !value)}><h2>{props.course.name}</h2></button><p>{dateLabel(props.date)}{tee ? <span title={tee}> · {tee}</span> : null}</p><span title={player?.name}>{player?.name ?? 'Jugador'}{props.lifecycle ? ` · ${lifecycleCopy[props.lifecycle]}` : ''}</span></div>
@@ -111,11 +114,21 @@ export function PremiumScorecard(props: PremiumScorecardProps & {
     </div>{fullName && <p className="premiumFullName">{props.course.name}{tee ? ` · ${tee}` : ''}</p>}
     <div hidden={Boolean(detail)}>
       {props.players.length > 1 && <label className="premiumPlayerSelect">Jugador<select aria-label="Jugador de la tarjeta" value={selected} onChange={event => { setSelected(event.target.value); setNotice(''); }}>{props.players.map(value => <option key={value.id} value={value.id}>{value.name}</option>)}</select></label>}
-      <div className="premiumNineSelector" role="group" aria-label="Sección de tarjeta">{([['front', 'Ida / OUT', front], ['back', 'Vuelta / IN', back], ['total', 'TOTAL', cells]] as const).map(([key, label, values]) => { const result = summarizeScorecard(values); return <button type="button" key={key} aria-pressed={nine === key} disabled={!values.length} onClick={() => setNine(key)}>{label}<span>{result.gross ?? '—'} · {toParText(result.toPar)}{result.scored < result.holes && result.gross !== null ? '*' : ''}</span></button>; })}</div>
+      <div className="premiumNineSelector" role="group" aria-label="Sección de tarjeta">{([['front', 'Ida / OUT', front], ['back', 'Vuelta / IN', back], ['all', cells.length > 9 ? '18 HOYOS' : '9 HOYOS', cells], ['total', 'TOTAL', cells]] as const).map(([key, label, values]) => { const result = summarizeScorecard(values); return <button type="button" key={key} aria-pressed={nine === key} disabled={!values.length} onClick={() => setNine(key)}>{label}<span>{result.gross ?? '—'} · {toParText(result.toPar)}{result.scored < result.holes && result.gross !== null ? '*' : ''}</span></button>; })}</div>
       <div className="premiumCardHint"><span>{summary.scored}/{summary.holes} hoyos · Par {summary.par}</span><span>Desliza ↔ · Toca un hoyo</span></div>
-      <div ref={scroll} key={scrollKey} className={`premiumHoleScroll${nine === 'total' ? ' premiumTotalGrid' : ''}`} tabIndex={0} role="region" aria-label={`Tarjeta ${nine === 'total' ? 'totales OUT IN TOTAL' : nine === 'front' ? 'ida' : 'vuelta'}, desliza horizontalmente`} onScroll={event => { horizontalPositions.current.set(scrollKey, event.currentTarget.scrollLeft); }}>
-        <table className="premiumHoleTable"><caption className="scorecardSrOnly">Resultados por hoyo de {player?.name}; score gross y estadísticas capturadas. Ida 1–9, Vuelta 10–18.</caption><thead><tr><th scope="col">Hoyo</th>{visible.map(cell => <th scope="col" key={cell.hole.number}><button type="button" aria-label={`Ver detalle del hoyo ${cell.hole.number}`} onClick={() => props.onHole(cell.hole.number, player!.id)}>{cell.hole.displayLabel ?? cell.hole.number}</button></th>)}{totals.map(([label]) => <th scope="col" className="scorecardAggregate" key={label}>{label}</th>)}</tr></thead><tbody>{rows.filter(row => nine !== 'total' || row.total).map(row => <tr key={row.label}><th scope="row">{row.label}</th>{visible.map(cell => <td key={cell.hole.number}>{row.render(cell)}</td>)}{totals.map(([label, values]) => <td key={label} className="scorecardAggregate">{row.total?.(values) ?? <span aria-label="No se suma">—</span>}</td>)}</tr>)}</tbody></table>
+      <div ref={scroll} key={scrollKey} className={`premiumHoleScroll${nine === 'total' ? ' premiumTotalGrid' : ''}`} tabIndex={0} role="region" aria-label={`Tarjeta ${nine === 'total' ? 'totales OUT IN TOTAL' : nine === 'all' ? '18 hoyos' : nine === 'front' ? 'ida' : 'vuelta'}, desliza horizontalmente`} onScroll={event => { horizontalPositions.current.set(scrollKey, event.currentTarget.scrollLeft); }}>
+        <table className="premiumHoleTable"><caption className="scorecardSrOnly">Resultados por hoyo de {player?.name}; score gross y estadísticas capturadas. Ida 1–9, Vuelta 10–18.</caption><thead><tr><th scope="col">Hoyo</th>{visible.map(cell => <th scope="col" key={cell.hole.number}><button type="button" aria-label={`Ver detalle del hoyo ${cell.hole.number}`} aria-expanded={inlineDetail?.hole.number===cell.hole.number} onClick={() => setExpandedHole({hole:cell.hole.number,playerId:player!.id})}>{cell.hole.displayLabel ?? cell.hole.number}</button></th>)}{totals.map(([label]) => <th scope="col" className="scorecardAggregate" key={label}>{label}</th>)}</tr></thead><tbody>{rows.filter(row => nine !== 'total' || row.total).map(row => <tr key={row.label}><th scope="row">{row.label}</th>{visible.map(cell => <td key={cell.hole.number}>{row.render(cell)}</td>)}{totals.map(([label, values]) => <td key={label} className="scorecardAggregate">{row.total?.(values) ?? <span aria-label="No se suma">—</span>}</td>)}</tr>)}</tbody></table>
       </div>
+      <button type="button" className="premiumHoleDetailsToggle" aria-expanded={Boolean(inlineDetail)} onClick={()=>setExpandedHole(inlineDetail?null:visible[0]?{hole:visible[0].hole.number,playerId:player!.id}:cells[0]?{hole:cells[0].hole.number,playerId:player!.id}:null)}>Detalles del hoyo{inlineDetail?` ${inlineDetail.hole.number}`:''}<span aria-hidden="true">{inlineDetail?'⌃':'⌄'}</span></button>
+      {inlineDetail&&<section className="premiumInlineHole" aria-label={`Detalles desplegados del hoyo ${inlineDetail.hole.number}`}><header><h2>Hoyo {inlineDetail.hole.displayLabel??inlineDetail.hole.number}</h2><button type="button" aria-label="Cerrar detalles del hoyo" onClick={()=>setExpandedHole(null)}>×</button></header>
+        <div className="premiumHoleResult"><GolfScoreSymbol score={inlineDetail.score} result={inlineDetail.result}/><div><strong>{GOLF_RESULT_LABELS[inlineDetail.result]}</strong><span>{inlineDetail.score===null?'Score sin capturar':`${toParText(inlineDetail.score-inlineDetail.hole.par)} vs. par`}</span></div></div>
+        <dl className="premiumHolePrimary"><div><dt>Par</dt><dd>{inlineDetail.hole.par}</dd></div>{recordedNumber(inlineDetail.hole.yards,1,1500)!==null&&<div><dt>Distancia</dt><dd>{inlineDetail.hole.yards} yd</dd></div>}{inlineDetail.putts!==null&&<div><dt>Putts</dt><dd>{inlineDetail.putts}</dd></div>}</dl>
+        {inlineDetail.stat.teeDirection&&<div className="premiumTeeDirection" aria-label="Dirección de salida registrada">{(['left','center','right'] as const).map(direction=><span key={direction} data-selected={inlineDetail.stat.teeDirection===direction||inlineDetail.stat.teeDirection===`far_${direction}`}>{directionLabels[direction]}</span>)}</div>}
+        {details.length>0&&<dl className="premiumHoleFacts">{details.map(([label,value])=><div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}
+        {props.shots?.some(shot=>shot.hole===inlineDetail.hole.number&&shot.playerId===player?.id)&&<section className="premiumHoleShots"><h3>Golpes registrados</h3>{props.shots.filter(shot=>shot.hole===inlineDetail.hole.number&&shot.playerId===player?.id).sort((a,b)=>a.sequence-b.sequence).map(shot=><p key={shot.id}><b>Golpe {shot.sequence}</b><span>{shot.clubLabel}{typeof shot.distanceYards==='number'&&Number.isFinite(shot.distanceYards)?` · ${Math.round(shot.distanceYards)} yd`:''}</span></p>)}</section>}
+        <button type="button" className="premiumDetailLink" onClick={()=>props.onHole(inlineDetail.hole.number,player!.id)}>Ver detalle completo ›</button>
+        {editable&&<button type="button" className="premiumDetailLink" onClick={()=>setEditing(inlineDetail)}>Capturar este hoyo ›</button>}
+      </section>}
       <p className="premiumDataNote">— Sin capturar · N/A No aplicable · 0 Capturado.<br />* Total parcial. FIR/GIR: aciertos sobre hoyos capturados.</p>
       <div className="premiumScoreLegend" aria-label="Leyenda de resultados">{(['eagle','birdie','par','bogey','double'] as const).map((result, index) => <span key={result}><GolfScoreSymbol score={[2,3,4,5,6][index]} result={result} /><small>{GOLF_RESULT_LABELS[result]}</small></span>)}</div>
       {editable && <p className="premiumEditHint">Toca tu score para capturar o corregir el hoyo.</p>}
