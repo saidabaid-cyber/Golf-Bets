@@ -74,6 +74,6 @@ export function ScorecardNavigationBoundary({ children, navigation, originLabel 
 }
 
 /** Existing round callers retain the same API and the same capture permissions. */
-export function ScorecardBoundary({ children, navigation, ...props }: PremiumScorecardProps & { children: (open: () => void) => ReactNode; navigation?: ReactNode }) {
-  return <ScorecardNavigationBoundary destination={{ id: props.roundId, card: props }} navigation={navigation}>{open => children(() => open())}</ScorecardNavigationBoundary>;
+export function ScorecardBoundary({ children, navigation, initialOpen = false, ...props }: PremiumScorecardProps & { children: (open: () => void) => ReactNode; navigation?: ReactNode; initialOpen?: boolean }) {
+  return <ScorecardNavigationBoundary destination={{ id: props.roundId, card: props }} navigation={navigation} initialOpen={initialOpen}>{open => children(() => open())}</ScorecardNavigationBoundary>;
 }

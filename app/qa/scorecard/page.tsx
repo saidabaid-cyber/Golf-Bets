@@ -1,12 +1,17 @@
 import { notFound } from "next/navigation";
 import { ScorecardQa } from "./scorecard-qa";
 import "../../scorecard-premium.css";
+import {scorecardQaEnvironment} from '../../../lib/scorecard-qa-access';
+import {ScorecardQaGate} from './scorecard-qa-gate';
+import {completeScorecardQa} from '../../../lib/scorecard-qa-fixture';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { robots: { index: false, follow: false }, title: 'Scorecard · QA aislado' };
 
 export default function Page() {
-  // Fail closed outside this branch's Preview. Local development uses the same UI.
-  if (process.env.NODE_ENV !== 'development' && !(process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_GIT_COMMIT_REF === 'ux/scorecard-premium-v1')) notFound();
-  return <ScorecardQa />;
+  if(!scorecardQaEnvironment(process.env))notFound();
+  // Offline localhost has no real identity/data; remote DEV must pass the API's
+  // verified account allowlist before receiving/rendering the synthetic fixture.
+  return process.env.NODE_ENV==='development'&&!process.env.VERCEL
+    ? <ScorecardQa fixture={completeScorecardQa}/> : <ScorecardQaGate/>;
 }
