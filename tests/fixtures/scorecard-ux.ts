@@ -15,5 +15,6 @@ export const qaPutts: PuttsByHole = Object.fromEntries(qaOrder.filter(n => n !==
 export const qaAdvanced: AdvancedStatsByHole = Object.fromEntries(qaCourse.holes.filter(h => h.number !== 6).map(h => [h.number, { [qaPlayer.id]: {
   ...(h.par !== 3 ? { fairwayHit: h.number !== 4 } : {}), teeDirection: h.number === 4 ? 'left' : 'center',
   greenInRegulation: h.number !== 4, penaltyStrokes: h.number === 5 ? 1 : 0, teeClub: h.par === 3 ? '8i' : 'Driver',
+  firstPuttDistanceFeet: h.number === 1 ? 0 : 15, outOfBoundsCount: h.number === 5 ? 1 : 0,
 } }]));
 export const qaAccess: QuickEditAccess = { currentDraft: true, roundId: 'qa-memory-round', lifecycle: 'live', readOnly: false, closed: false, ownerId: qaPlayer.id, accountUserId: qaPlayer.accountUserId, organizerAccountUserId: qaPlayer.accountUserId };

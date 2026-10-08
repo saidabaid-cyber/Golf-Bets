@@ -74,6 +74,7 @@ export function quickDraftErrors(draft: QuickHoleDraft) {
   if (draft.putts !== null && draft.score !== null && draft.putts > draft.score) errors.push("Los putts no pueden superar el score.");
   for (const [key, max, label, integer] of [
     ["penaltyStrokes", 50, "penalidades", true], ["bunkerCount", 20, "bunker", true],
+    ["greenSideBunkerCount", 20, "bunker de green", true], ["fairwayBunkerCount", 20, "bunker de fairway", true],
     ["penaltyAreaCount", 20, "área de penalidad", true], ["outOfBoundsCount", 20, "OB", true],
     ["teeDistance", 600, "distancia de salida", false], ["firstPuttDistanceFeet", 300, "primer putt", false],
   ] as const) {

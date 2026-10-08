@@ -109,7 +109,7 @@ test("round → card → hole → card → round keeps parent navigation and rej
 test("scorecard and manual hole detail expose real data, readable labels and read-only actions", () => {
   const props = { roundId: "test-round", course, players: [player, other], order, scores, advancedStats, putts: { 1: { owner: 0 } }, ownerId: player.id, accountUserId: player.accountUserId, onBack() {}, onHole() {} };
   const card = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, view: { kind: "card" } }));
-  for (const label of ["Tarjeta de golf", "Ida", "1–9", "Vuelta", "10–18", "IDA / OUT", "VUELTA / IN", "TOTAL", "Ventaja · SI", "Yardas", "Solo lectura", "Eagle o mejor", "Doble bogey o más"]) assert.ok(card.includes(label), label);
+  for (const label of ["Tarjeta de golf", "Ida", "1–9", "Vuelta", "10–18", "Ida / OUT", "Vuelta / IN", "TOTAL", "Stroke index", "Distancia · yd", "Solo lectura", "Eagle o mejor", "Doble bogey o más"]) assert.ok(card.includes(label), label);
   assert.match(card, /scope="row"/); assert.match(card, /Ver detalle del hoyo 1/); assert.doesNotMatch(card, /Editar score|undefined|NaN|Strokes Gained|GHIN verificado/);
   const hole = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, view: { kind: "hole", hole: 1, playerId: player.id } }));
   assert.match(hole, /Sin golpes registrados/); assert.match(hole, /premiumHolePrimary/); assert.match(hole, /Volver a tarjeta/);
@@ -151,8 +151,35 @@ test("quick editor renders saved values without invoking any write; no value is 
   let writes = 0;
   const markup = renderToStaticMarkup(createElement(QuickHoleEditor, { cell: cells()[0], playerName: player.name, onCancel() {}, onSave() { writes++; } }));
   assert.equal(writes, 0); assert.match(markup, /role="dialog"/); assert.match(markup, /aria-modal="true"/);
-  for (const label of ["Cancelar", "Guardar", "Más detalles", "Aumentar Score", "Disminuir Putts", "Fairway", "Izquierda", "Derecha"]) assert.ok(markup.includes(label), label);
+  for (const label of ["Cancelar", "Guardar", "Captura avanzada", "Aumentar Score", "Disminuir Putts", "Fairway", "Izquierda", "Derecha"]) assert.ok(markup.includes(label), label);
   assert.match(markup, /aria-label="Putts"[^>]*value="0"/);
   const missing = renderToStaticMarkup(createElement(QuickHoleEditor, { cell: cells()[2], playerName: player.name, onCancel() {}, onSave() { writes++; } }));
-  assert.match(missing, /Putts sin capturar/); assert.doesNotMatch(missing, /Salida · FIR/); assert.equal(writes, 0);
+  assert.match(missing, /Putts sin capturar/); assert.match(missing, /FIR no aplica · par 3/); assert.equal(writes, 0);
+});
+
+test('advanced capture persists supported fields through the same checkpoint and preserves unedited evidence', () => {
+  const draft = { score: 5, putts: 2, advanced: { teeDirection: 'far_right' as const, fairwayHit: false, greenInRegulation: false, bunkerCount: 1, penaltyStrokes: 2, penaltyAreaCount: 1, outOfBounds: true, outOfBoundsCount: 1, teeClub: '5 Wood', teeDistance: 241.5, firstPuttDistanceFeet: 15, notes: 'Private test note' } };
+  const next = prepareQuickHole({ access, player, hole: course.holes[0], scores, edits: {}, putts: {}, advancedStats, draft });
+  assert.deepEqual(next.advancedStats[1][player.id], draft.advanced);
+  assert.equal(next.putts[1][player.id], 2);
+  assert.equal(next.scores[1][other.id], scores[1].other);
+  const preserved = { history: ['original'], source: 'GHIN', atest: ['original'], shots: ['original'], bets: { enabled: false } };
+  let serialized: string | null = null;
+  persistRoundDraftCheckpoint({ setItem(_key, value) { serialized = value; }, getItem() { return serialized; } }, { ...preserved, ...next });
+  const saved = JSON.parse(serialized!);
+  for (const key of Object.keys(preserved) as Array<keyof typeof preserved>) assert.deepEqual(saved[key], preserved[key]);
+  assert.deepEqual(saved.advancedStats[1][player.id], draft.advanced);
+});
+
+test('hole table follows the reference row order, supplies OUT totals in the grid and omits unavailable optional facts', () => {
+  const markup = renderToStaticMarkup(createElement(PremiumScorecard, { roundId: 'test-round', course, players: [player], ownerId: player.id, order, scores, putts: { 1: { owner: 0 } }, advancedStats, view: { kind: 'card' }, onBack() {}, onHole() {} }));
+  const labels = ['Distancia · yd', 'Stroke index', 'Par</th>', 'Score gross', 'Putts</th>', 'FIR / Salida', 'Bastón</th>', 'GIR</th>', 'Penalidades</th>'];
+  let last = -1;
+  for (const label of labels) { const position = markup.indexOf(label); assert.ok(position > last, label); last = position; }
+  assert.match(markup, /class="scorecardAggregate">OUT/);
+  assert.match(markup, /class="scorecardAggregate"><strong>35<\/strong><small>E<\/small>/);
+  const empty = renderToStaticMarkup(createElement(PremiumScorecard, { roundId: 'test-round', course, players: [player], order, scores, view: { kind: 'card' }, onBack() {}, onHole() {} }));
+  assert.doesNotMatch(empty, /FIR \/ Salida|Penalidades<\/th>|Bastón<\/th>|GIR<\/th>/);
+  assert.match(empty, /aria-label="Sin capturar"/);
+  assert.doesNotMatch(empty, /Score net/);
 });
