@@ -20,7 +20,7 @@ const controls=(enabled=true)=>renderCareer("app/components/notification-prefere
 
 test("bell counts unique unread social plus valid incoming operational invitations",()=>{
   const list=normalizeNotifications([event(),event({id:"second",type:"group_invite"})],[invite()],now);
-  assert.deepEqual(notificationCounts(list),{Todas:2,Amigos:1,Grupos:1,Rondas:0});
+  assert.deepEqual(notificationCounts(list),{Todas:2,Social:0,Atest:0,Amigos:1,Grupos:1,Rondas:0});
   assert.equal(list.length,2);
 });
 for(const [name,patch] of [
@@ -47,8 +47,9 @@ test("group event referencing group id deduplicates against invitation id",()=>{
   assert.equal(list.length,1);assert.equal(list[0].resourceId,invite().group_id);
 });
 test("filters classify every supported event and do not create empty-category events",()=>{
-  assert.deepEqual(NOTIFICATION_FILTERS,["Todas","Amigos","Grupos","Rondas"]);
+  assert.deepEqual(NOTIFICATION_FILTERS,["Todas","Social","Atest","Amigos","Grupos","Rondas"]);
   for(const type of NOTIFICATION_EVENT_TYPES){assert.equal(notificationCategory(type),type==="group_invite"?"Grupos":type.startsWith("round_")||type==="scorecard_ready"?"Rondas":"Amigos");}
+  assert.equal(notificationCategory('like'),'Social');assert.equal(notificationCategory('comment'),'Social');assert.equal(notificationCategory('attest'),'Atest');assert.equal(notificationCategory('attest_request'),'Atest');
   const list=normalizeNotifications([event(),event({type:"round_started",id:"round"})],[],now);
   assert.equal(list.filter(item=>item.category==="Amigos").length,1);assert.equal(list.filter(item=>item.category==="Rondas").length,1);assert.equal(list.filter(item=>item.category==="Grupos").length,0);
 });

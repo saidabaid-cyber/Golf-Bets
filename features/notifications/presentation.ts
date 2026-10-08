@@ -1,25 +1,28 @@
 import type { SocialNotification } from "../../lib/social-activity-contract";
 import type { GroupInvitation } from "../../lib/group-invitations";
 
-export const NOTIFICATION_FILTERS = ["Todas", "Amigos", "Grupos", "Rondas"] as const;
+export const NOTIFICATION_FILTERS = ["Todas", "Social", "Atest", "Amigos", "Grupos", "Rondas"] as const;
 export type NotificationFilter = typeof NOTIFICATION_FILTERS[number];
 export type NotificationItem = {
   key: string; type: SocialNotification["type"]; category: Exclude<NotificationFilter, "Todas">;
   title: string; message: string; avatar: string | null; createdAt: string | null;
   unread: boolean; pending: boolean; readIds: string[]; resourceId: string; personId?: string;
   invitation?: GroupInvitation;
+  commentId?: string | null;
 };
 export const NOTIFICATION_COPY: Record<SocialNotification["type"], string> = {
   friend_request: "Quiere ser tu amigo en The Backyard.", friend_accepted: "Aceptó tu solicitud de amistad.",
   group_invite: "Tienes una invitación a un grupo.", round_invite: "Te invitaron a una ronda.",
   round_started: "Inició una ronda contigo.", round_finished: "La ronda terminó. Resultados disponibles.",
   scorecard_ready: "Registraron una tarjeta contigo. Revísala y confirma tu participación.",
-  like: "Recibiste un like en tu actividad.", comment: "Hay un nuevo comentario en tu actividad.",
+  like: "Le dio Me gusta a tu tarjeta.", comment: "Comentó en tu tarjeta.",
   attest: "Un compañero confirmó tu tarjeta.", friend_achievement: "Un amigo consiguió un nuevo logro.", equipment: "Un amigo actualizó su equipo.",
   attest_request: "Te solicita atestar su ronda. Revisa la tarjeta.",
 };
 export function notificationCategory(type: SocialNotification["type"]): NotificationItem["category"] {
-  return type === "group_invite" ? "Grupos" : type.startsWith("round_") || type === "scorecard_ready" || type === "attest_request" ? "Rondas" : "Amigos";
+  if(type==='like'||type==='comment'||type==='equipment'||type==='friend_achievement')return 'Social';
+  if(type==='attest'||type==='attest_request')return 'Atest';
+  return type === "group_invite" ? "Grupos" : type.startsWith("round_") || type === "scorecard_ready" ? "Rondas" : "Amigos";
 }
 export function normalizeNotifications(events: readonly SocialNotification[], invitations: readonly GroupInvitation[], now = Date.now()): NotificationItem[] {
   const pending = invitations.filter(item => !item.outgoing && item.state === "PENDING" && Date.parse(item.expires_at) > now);
@@ -30,11 +33,13 @@ export function normalizeNotifications(events: readonly SocialNotification[], in
     const key = invitation ? `group:${invitation.id}` : `event:${repeatable ? event.id : `${event.type}:${event.activityId}`}`;
     const previous = items.get(key);
     if (previous) { previous.readIds = [...new Set([...previous.readIds, event.id])]; previous.unread ||= !event.readAt; continue; }
+    const actor=event.person?.displayName||'Un jugador';
+    const action=event.type==='like'?`${actor} le dio Me gusta a tu tarjeta`:event.type==='comment'?`${actor} comentó en tu tarjeta`:event.type==='attest'?`${actor} atestó tu tarjeta`:null;
     items.set(key, { key, type: event.type, category: notificationCategory(event.type),
-      title: event.person?.displayName || (event.type === "friend_request" ? "Solicitud de amistad" : event.type === "group_invite" ? "Invitación a un grupo" : notificationCategory(event.type) === "Rondas" ? "Tu ronda" : "Actividad de tus compañeros"),
-      message: `${event.attestRequest?.state==='STALE'?'Solicitud desactualizada: la tarjeta cambió.':event.attestRequest?.state==='ATTESTED'?'✓ Atestaste esta tarjeta.':NOTIFICATION_COPY[event.type]}${event.courseName ? ` · ${event.courseName}` : ""}${event.roundDate?` · ${event.roundDate}`:''}`, avatar: event.person?.avatarUrl || null,
+      title: action || event.person?.displayName || (event.type === "friend_request" ? "Solicitud de amistad" : event.type === "group_invite" ? "Invitación a un grupo" : notificationCategory(event.type) === "Rondas" ? "Tu ronda" : "Actividad de tus compañeros"),
+      message: `${action?'':event.attestRequest?.state==='STALE'?'Solicitud desactualizada: la tarjeta cambió.':event.attestRequest?.state==='ATTESTED'?'✓ Atestaste esta tarjeta.':NOTIFICATION_COPY[event.type]}${event.courseName ? `${action?'':' · '}${event.courseName}` : ""}${event.roundDate?` · ${event.roundDate}`:''}${event.commentPreview?` · “${event.commentPreview}”`:''}`, avatar: event.person?.avatarUrl || null,
       createdAt: event.createdAt, unread: !event.readAt, pending: event.type === "friend_request" || event.attestRequest?.state==='PENDING' || Boolean(invitation),
-      readIds: [event.id], resourceId: event.activityId, personId: event.person?.userId, ...(invitation ? { invitation } : {}),
+      readIds: [event.id], resourceId: event.activityId, personId: event.person?.userId, commentId:event.commentId, ...(invitation ? { invitation } : {}),
     });
   }
   for (const invite of pending) {
@@ -46,7 +51,7 @@ export function normalizeNotifications(events: readonly SocialNotification[], in
   return [...items.values()].sort((a,b) => Number(b.pending) - Number(a.pending) || Date.parse(b.createdAt || "1970-01-01") - Date.parse(a.createdAt || "1970-01-01"));
 }
 export function notificationCounts(items: readonly NotificationItem[]) {
-  const counts = { Todas: 0, Amigos: 0, Grupos: 0, Rondas: 0 };
+  const counts = { Todas: 0, Social:0, Atest:0, Amigos: 0, Grupos: 0, Rondas: 0 };
   for (const item of items) if (item.unread || item.invitation) { counts.Todas++; counts[item.category]++; }
   return counts;
 }

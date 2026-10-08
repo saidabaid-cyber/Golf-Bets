@@ -1,7 +1,7 @@
-import type { NotificationEventType } from "./domain";
+import type { NotificationPreferenceType } from "./domain";
 import type { SocialNotification, SocialNotificationPage } from "../../lib/social-activity-contract";
 import { socialRequest } from "../../lib/social-activity-client";
-export type EventPreferencePage = {enabled:boolean;data:Array<{type:NotificationEventType;inApp:boolean;push:boolean;updatedAt:string|null}>};
+export type EventPreferencePage = {enabled:boolean;data:Array<{type:NotificationPreferenceType;inApp:boolean;push:boolean;updatedAt:string|null}>};
 export const NOTIFICATIONS_CHANGED = "backyard:notifications-changed";
 export function notificationsChanged() { window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED)); }
 export async function unreadNotificationEvents(token: string, signal?: AbortSignal) {

@@ -1,5 +1,7 @@
 export const NOTIFICATION_EVENT_TYPES = ["friend_request", "friend_accepted", "group_invite", "round_invite", "round_started", "round_finished", "scorecard_ready"] as const;
 export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number];
+export const NOTIFICATION_PREFERENCE_TYPES = [...NOTIFICATION_EVENT_TYPES, 'like', 'comment', 'attest', 'attest_request', 'friend_achievement', 'equipment'] as const;
+export type NotificationPreferenceType = typeof NOTIFICATION_PREFERENCE_TYPES[number];
 export type NotificationChannel = "IN_APP" | "PUSH";
 
 export type NotificationPreference = { userId: string; type: NotificationEventType; inApp: boolean; push: boolean; updatedAt: string };

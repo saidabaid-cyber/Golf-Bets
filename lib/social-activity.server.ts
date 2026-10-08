@@ -859,7 +859,7 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
   if (eventPrefs.error) dbError(eventPrefs.error); if (master.error) dbError(master.error);
   if (master.data?.notifications_enabled !== true) return {data:[],nextCursor:null};
   const types = [...NOTIFICATION_EVENT_TYPES, "like", "comment", "attest", "attest_request", "friend_achievement", "equipment"];
-  let query = ctx.client.from("notification_events_v2").select("id,event_type,resource_type,resource_id,created_at,read_at")
+  let query = ctx.client.from("notification_events_v2").select("id,event_type,resource_type,resource_id,created_at,read_at,actor_id,reaction_id")
     .eq("recipient_id",ctx.userId).in("event_type",types).order("created_at",{ascending:false}).order("id",{ascending:false});
   if (options.unreadOnly) query = query.is("read_at",null);
   const offset = options.offset || 0;
@@ -871,14 +871,19 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
   const friendIds = ids(["friend_request","friend_accepted"]);
   const activityIds = ids(["like","comment","attest","attest_request","friend_achievement","equipment"]);
   const requestEvents=events.filter(event=>event.event_type==='attest_request');
-  const [rounds, friends, activities, groups, requests] = await Promise.all([
+  const commentIds=events.filter(e=>e.event_type==='comment'&&UUID.test(e.reaction_id||'')).map(e=>e.reaction_id);
+  const [rounds, friends, activities, groups, requests, comments] = await Promise.all([
     roundIds.length ? ctx.client.from("rounds_cloud").select("id,owner_id,snapshot").in("id",roundIds) : {data:[],error:null},
     friendIds.length ? ctx.client.from("friend_requests").select("id,state,requester_id,addressee_id").in("id",friendIds) : {data:[],error:null},
-    activityIds.length ? ctx.client.from("social_activities_v3").select("id,author_id,material_hash").in("id",activityIds).eq("active",true) : {data:[],error:null},
+    activityIds.length ? ctx.client.from("social_activities_v3").select("id,author_id,material_hash,source_round_id").in("id",activityIds).eq("active",true) : {data:[],error:null},
     ids(["group_invite"]).length ? ctx.client.rpc("group_invitation_action_v1",{action:"list",payload:{}}) : {data:{invitations:[]},error:null},
     requestEvents.length ? ctx.client.from('social_attest_requests_v1').select('id,activity_id,expected_hash').in('id',requestEvents.map(e=>e.id)).eq('recipient_id',ctx.userId) : {data:[],error:null},
+    commentIds.length ? ctx.client.from('social_comments_v3').select('id,activity_id,author_id,body').in('id',commentIds) : {data:[],error:null},
   ]);
-  for (const result of [rounds,friends,activities,groups,requests]) if (result.error) dbError(result.error);
+  for (const result of [rounds,friends,activities,groups,requests,comments]) if (result.error) dbError(result.error);
+  const socialRoundIds=[...new Set((activities.data||[]).map(a=>a.source_round_id).filter((id):id is string=>typeof id==='string'&&UUID.test(id)))];
+  const socialRounds=socialRoundIds.length?await ctx.client.from('rounds_cloud').select('id,snapshot').in('id',socialRoundIds):{data:[],error:null};
+  if(socialRounds.error)dbError(socialRounds.error);
   const requestAttestations=requestEvents.length?await ctx.client.from('social_round_attestations_v3').select('activity_id,expected_hash').in('activity_id',ids(['attest_request'])).eq('attester_id',ctx.userId):{data:[],error:null};
   if(requestAttestations.error)dbError(requestAttestations.error);
   const people = new Map<string,Promise<SocialActivityAuthor | null>>();
@@ -895,7 +900,8 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
   for (const event of events) {
     if (eventPrefs.data?.some(pref => pref.event_type === event.event_type && !pref.in_app)) continue;
     const flag = socialFlags[event.event_type as keyof typeof socialFlags]; if (flag && !preferences[flag]) continue;
-    let actor: string | undefined, allowed = false, courseName: string | null = null;
+    let actor: string | undefined, allowed = false, courseName: string | null = null, roundDate:string|null=null;
+    let commentId:string|null=null,commentPreview:string|null=null;
     if (["round_started","round_finished","round_invite","scorecard_ready"].includes(event.event_type)) {
       const round = rounds.data?.find(row => row.id === event.resource_id), snapshot = round?.snapshot as RoundSnapshot | undefined;
       allowed = Boolean(round && (round.owner_id === ctx.userId || snapshot?.players?.filter(player => player.accountUserId === ctx.userId).length === 1)
@@ -910,6 +916,15 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
       allowed = (groups.data?.invitations || []).some((invite: {id:string;group_id:string;outgoing:boolean;state:string;expires_at:string}) => !invite.outgoing && invite.state === "PENDING" && Date.parse(invite.expires_at) > Date.now() && [invite.id,invite.group_id].includes(event.resource_id));
     } else {
       const activity = activities.data?.find(row => row.id === event.resource_id); allowed = Boolean(activity && SHA256.test(activity.material_hash));
+      const source=socialRounds.data?.find(r=>r.id===activity?.source_round_id)?.snapshot as RoundSnapshot|undefined;
+      courseName=source?.courseSnapshot?.name||source?.courseName||null;roundDate=source?.date||null;
+      if(['like','comment','attest'].includes(event.event_type)&&UUID.test(event.actor_id||'')&&event.actor_id!==ctx.userId)actor=event.actor_id;
+      if(event.event_type==='comment'){
+        const comment=comments.data?.find(c=>c.id===event.reaction_id&&c.activity_id===event.resource_id&&c.author_id===actor);
+        // RLS authorizes the comment independently; deletion/inaccessibility
+        // retains notification history but never retains the private preview.
+        if(comment){commentId=comment.id;commentPreview=comment.body.replace(/\s+/g,' ').trim().slice(0,160);}
+      }
       if (event.event_type === 'attest_request')allowed=allowed&&Boolean(requests.data?.some(r=>r.id===event.id&&r.activity_id===activity?.id));
       if (event.event_type === "friend_achievement" || event.event_type === "equipment" || event.event_type==='attest_request') actor = activity?.author_id;
     }
@@ -917,7 +932,7 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
     const currentActivity=request?activities.data?.find(a=>a.id===request.activity_id):undefined;
     const requestState=currentActivity&&request ? currentActivity.material_hash!==request.expected_hash?'STALE':requestAttestations.data?.some(t=>t.activity_id===request.activity_id&&t.expected_hash===request.expected_hash)?'ATTESTED':'PENDING':undefined;
     if (allowed) visible.push({id:event.id,type:event.event_type as SocialNotificationPage["data"][number]["type"],activityId:event.resource_id,
-      createdAt:event.created_at,readAt:event.read_at,person:await person(actor),courseName,...(request&&requestState?{attestRequest:{expectedHash:request.expected_hash,state:requestState}}:{})});
+      createdAt:event.created_at,readAt:event.read_at,person:await person(actor),courseName,roundDate,commentId,commentPreview,...(request&&requestState?{attestRequest:{expectedHash:request.expected_hash,state:requestState}}:{})});
   }
   return {data:visible,nextCursor:data?.length === 50 ? String(offset+50) : null};
 }

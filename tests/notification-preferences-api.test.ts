@@ -41,7 +41,7 @@ function harness(auth=true){
 }
 test("event preferences authenticate and scope every read/write to the verified account",async()=>{
   const fixture=harness();const response=await fixture.exports.GET(fixture.request());assert.equal(response.status,200);
-  assert.match(response.headers.get("cache-control")||"",/no-store/);const initial=await response.json();assert.equal(initial.data.length,7);
+  assert.match(response.headers.get("cache-control")||"",/no-store/);const initial=await response.json();assert.equal(initial.data.length,domain.NOTIFICATION_PREFERENCE_TYPES.length);
   assert.equal((await fixture.exports.PATCH(fixture.request({type:"friend_request",inApp:false}))).status,200);
   const after=await (await fixture.exports.GET(fixture.request())).json();assert.equal(after.data.find((x:{type:string})=>x.type==="friend_request").inApp,false);
   assert.equal(fixture.rows[0].push,true);assert.equal(fixture.rows[1].in_app,true);assert.equal(fixture.updates[0].push,undefined);

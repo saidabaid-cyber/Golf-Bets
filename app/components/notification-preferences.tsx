@@ -13,6 +13,7 @@ const EVENT_GROUPS: Array<{title:string;items:Array<[NotificationEventType,strin
   {title:"Rondas",items:[["round_invite","Invitaciones a rondas","Cuando te inviten a una ronda."],["round_started","Rondas iniciadas","Cuando un compañero inicie una ronda contigo."],["round_finished","Resultados de ronda","Cuando estén disponibles los resultados."],["scorecard_ready","Tarjetas para confirmar","Cuando puedas revisar tu tarjeta."]]},
 ];
 const SOCIAL_ITEMS = [["notifyLike","Likes","Cuando reaccionen a tu actividad."],["notifyComment","Comentarios","Cuando comenten tu actividad."],["notifyAttest","Confirmaciones de tarjeta","Avísame cuando un compañero confirme una tarjeta."],["notifyFriendAchievement","Logros de amigos","Cuando tus amigos consigan nuevos logros."],["notifyEquipment","Actualizaciones de equipo","Cuando tus amigos actualicen su bolsa."]] as const;
+const SOCIAL_EVENT = {notifyLike:'like',notifyComment:'comment',notifyAttest:'attest',notifyFriendAchievement:'friend_achievement',notifyEquipment:'equipment'} as const;
 export function NotificationSwitch({label,copy,checked,disabled,onChange}:{label:string;copy:string;checked:boolean;disabled?:boolean;onChange:(value:boolean)=>void}) {
   return <div className={styles.setting}><div><b>{label}</b><p>{copy}</p></div><button type="button" role="switch" aria-label={label} aria-checked={checked} disabled={disabled} className={styles.switch} onClick={()=>onChange(!checked)}><span /></button></div>;
 }
@@ -24,7 +25,7 @@ export function NotificationPreferenceControls({events,social,delivery,busy,onMa
   return <>
     {events && <div className={styles.master}><NotificationSwitch label="Recibir notificaciones en The Backyard" copy="Pausa los avisos sin perder tus preferencias individuales." checked={events.enabled} disabled={busy} onChange={onMaster}/></div>}
     {EVENT_GROUPS.map(group=><section key={group.title} className={styles.preferenceSection}><h2>{group.title}</h2><div className={styles.settings}>{group.items.map(([type,label,copy])=><NotificationSwitch key={type} label={label} copy={copy} checked={Boolean(events?.data.find(item=>item.type===type)?.inApp && (type!=="friend_request" || social?.notifyFriendRequest))} disabled={disabled || !events || (type==="friend_request" && !social)} onChange={value=>onEvent(type,value)}/>)}</div></section>)}
-    <section className={styles.preferenceSection}><h2>Actividad social</h2><div className={styles.settings}>{SOCIAL_ITEMS.map(([key,label,copy])=><NotificationSwitch key={key} label={label} copy={copy} checked={social?.[key]===true} disabled={disabled || !social} onChange={value=>onSocial(key,value)}/>)}</div></section>
+    <section className={styles.preferenceSection}><h2>Actividad social</h2><div className={styles.settings}>{SOCIAL_ITEMS.map(([key,label,copy])=><NotificationSwitch key={key} label={label} copy={copy} checked={social?.[key]===true && events?.data.find(item=>item.type===SOCIAL_EVENT[key])?.inApp!==false} disabled={disabled || !social} onChange={value=>onSocial(key,value)}/>)}</div></section>
     <section className={styles.preferenceSection}><h2>Entrega de avisos</h2><div className={styles.settings}>
       <NotificationSwitch label="Notificaciones push" copy={delivery?.delivery.push.configured ? "La configuración de entrega está disponible; consulta tus permisos en Configuración." : delivery ? "Push todavía no está disponible en este entorno." : "No pudimos comprobar la disponibilidad de push."} checked={false} disabled onChange={()=>{}}/>
       <NotificationSwitch label="Email" copy={delivery?.delivery.email.configured ? "Consulta las preferencias de entrega en Configuración." : delivery ? "La entrega por email todavía no está disponible." : "No pudimos comprobar la disponibilidad de email."} checked={false} disabled onChange={()=>{}}/>
@@ -71,7 +72,7 @@ export function NotificationPreferences({accessToken,onBack,onMasterChange}:{acc
       <NotificationPreferenceControls events={events} social={social} delivery={delivery} busy={busy}
         onMaster={value=>void save(async()=>{if(!await onMasterChange(value))throw new Error("No se pudo guardar la preferencia.");})}
         onEvent={(type,value)=>void save(()=>eventChange(type,value))}
-        onSocial={(key,value)=>void save(async()=>{if(accessToken && social)await socialRequest("/api/social/preferences",accessToken,{method:"PUT",body:{...social,[key]:value}});})}/>
+        onSocial={(key,value)=>void save(async()=>{if(accessToken && social){await socialRequest("/api/social/preferences",accessToken,{method:"PUT",body:{...social,[key]:value}});await socialRequest('/api/social/notification-preferences',accessToken,{method:'PATCH',body:{type:SOCIAL_EVENT[key],inApp:value}});if(key==='notifyAttest')await socialRequest('/api/social/notification-preferences',accessToken,{method:'PATCH',body:{type:'attest_request',inApp:value}});}})}/>
     </>}
     {message && <p role="status" className={styles.notice}>{message}</p>}
     {!loading && (!events || !social || !delivery) && accessToken && <button type="button" className={styles.secondary} onClick={()=>void reload()}>Reintentar</button>}

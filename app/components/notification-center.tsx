@@ -13,25 +13,29 @@ import { SocialRoundActivityCard } from "./cloud-social-activity";
 import { BackyardIcon } from "./backyard-icon";
 import styles from "./notification-center.module.css";
 import {AttestCardReview} from './attest-card-review';
+import {SocialActivityComments} from './social-feed-detail';
 
-type Detail = {kind:"round"|"activity"|"group";id:string};
+type Detail = {kind:"round"|"activity"|"group";id:string;view?:'comments';commentId?:string};
 function detailFromUrl(): Detail|null {
   const params=new URLSearchParams(location.search),kind=params.get("notice"),id=params.get("resource");
-  return ["round","activity","group"].includes(kind||"") && id && /^[0-9a-f-]{36}$/i.test(id) ? {kind:kind as Detail["kind"],id} : null;
+  const comment=params.get('comment');
+  return ["round","activity","group"].includes(kind||"") && id && /^[0-9a-f-]{36}$/i.test(id) ? {kind:kind as Detail["kind"],id,...(params.get('noticeView')==='comments'?{view:'comments' as const,...(comment&&/^[0-9a-f-]{36}$/i.test(comment)?{commentId:comment}:{})}:{})} : null;
 }
 function writeDetail(detail:Detail|null) {
   const url=new URL(location.href);url.searchParams.delete("notice");url.searchParams.delete("resource");
+  url.searchParams.delete('noticeView');url.searchParams.delete('comment');
   if(!detail){url.searchParams.delete('card');url.searchParams.delete('cardHole');url.searchParams.delete('cardPlayer');}
   if(detail){url.searchParams.set("notice",detail.kind);url.searchParams.set("resource",detail.id);}
+  if(detail?.view){url.searchParams.set('noticeView',detail.view);if(detail.commentId)url.searchParams.set('comment',detail.commentId);}
   window.history.replaceState(window.history.state,"",url);
 }
 export function NotificationRow({item,busy,onOpen,onRead,onFriend,onGroupAccept}:{item:NotificationItem;busy:boolean;onOpen:()=>void;onRead:(read:boolean)=>void;onFriend:(action:"ACCEPTED"|"REJECTED")=>void;onGroupAccept:()=>void}) {
   return <li className={`${styles.row} ${item.unread ? styles.unread : ""}`}>
-    <span className={styles.avatar}>{item.avatar ? <ProfileAvatarMedia value={item.avatar} fallback={item.title[0]} /> : <BackyardIcon name={item.category === "Rondas" ? "flag" : item.category === "Grupos" ? "players" : item.type === "friend_achievement" ? "spark" : "players"}/>}</span>
+    <span className={styles.avatar} data-notice-type={item.type}>{item.avatar ? <ProfileAvatarMedia value={item.avatar} fallback={item.title[0]} /> : <BackyardIcon name={item.type==='like'?'heart':item.type==='comment'?'comment':item.category==='Atest'?'check':item.category === "Rondas" ? "flag" : item.category === "Grupos" ? "players" : item.type === "friend_achievement" ? "spark" : "players"}/>}</span>
     <div className={styles.rowBody}><button type="button" className={styles.openRow} disabled={busy} onClick={onOpen}><span className={styles.rowTitle}><b title={item.title}>{item.title}</b>{item.unread && <i aria-label="Sin leer" />}{item.createdAt && <time dateTime={item.createdAt}>{notificationTime(item.createdAt)}</time>}</span><span className={styles.message}>{item.message}</span></button>
       {item.type === "friend_request" && <div className={styles.actions}><button type="button" className={styles.primary} disabled={busy} onClick={()=>onFriend("ACCEPTED")}>Aceptar</button><button type="button" className={styles.secondary} disabled={busy} onClick={()=>onFriend("REJECTED")}>Rechazar</button>{item.personId && <button type="button" className={styles.textButton} disabled={busy} onClick={onOpen}>Ver perfil</button>}</div>}
       {item.invitation && <div className={styles.actions}><button type="button" className={styles.primary} disabled={busy} onClick={onGroupAccept}>Unirme</button><button type="button" className={styles.textButton} disabled={busy} onClick={onOpen}>Ver invitación</button></div>}
-      {item.category === "Rondas" && <button type="button" className={styles.textButton} disabled={busy} onClick={onOpen}>{item.type === "scorecard_ready" || item.type === "attest_request" ? "Revisar tarjeta" : item.type === "round_finished" ? "Ver resultados" : "Ver ronda"} ›</button>}
+      {(item.category === "Rondas"||item.category==='Atest'||item.category==='Social') && <button type="button" className={styles.textButton} disabled={busy} onClick={onOpen}>{item.type==='comment'?'Ver comentario':item.type === "scorecard_ready" || item.category==='Atest' ? "Revisar tarjeta" : item.type === "round_finished" ? "Ver resultados" : item.category==='Social'?'Ver publicación':"Ver ronda"} ›</button>}
     </div>
     {item.readIds.length > 0 && <details className={styles.rowMenu}><summary aria-label={`Acciones de ${item.title}`}>⋯</summary><button type="button" disabled={busy} onClick={()=>onRead(item.unread)}>{item.unread ? "Marcar como leído" : "Marcar como no leído"}</button></details>}
   </li>;
@@ -94,7 +98,7 @@ export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,on
     if(kind === "friend"){onFriend(item.personId);return;}
     const request=[...requests,...events].find(r=>r.type==='attest_request'&&r.activityId===item.resourceId);
     setReviewHash(item.type==='attest_request'?request?.attestRequest?.expectedHash??null:null);
-    const next={kind,id:item.invitation?.id || item.resourceId};writeDetail(next);setDetail(next);
+    const next:Detail={kind,id:item.invitation?.id || item.resourceId,...(item.type==='comment'?{view:'comments',...(item.commentId?{commentId:item.commentId}:{})}:{})};writeDetail(next);setDetail(next);
   }
   async function friend(item:NotificationItem,action:"ACCEPTED"|"REJECTED") {
     if(!accessToken)return;
@@ -121,7 +125,7 @@ export function NotificationCenter({viewerId,accessToken,onBack,onPreferences,on
     <header className={styles.heading}><button type="button" className={styles.iconButton} aria-label={detail ? "Volver a Notificaciones" : "Volver"} onClick={detail ? closeDetail : onBack}>‹</button><div><h1>Notificaciones</h1><span className={styles.eyebrow}>GOLF MORE TOGETHER</span></div><button type="button" className={styles.iconButton} aria-label="Preferencias de notificaciones" onClick={onPreferences}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m10 3-1 3-3 1-3 3v4l3 3 3 1 1 3h4l1-3 3-1 3-3v-4l-3-3-3-1-1-3h-4Zm2 6a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg></button></header>
     {!accessToken ? <div className={styles.empty}><h2>Tu centro de notificaciones</h2><p>Inicia sesión para ver tus avisos y actuar sobre ellos.</p></div> : detail ? <>
       {detail.kind === "round" && <RoundParticipationCard key={detail.id} roundId={detail.id} accessToken={accessToken} onConfirmed={async()=>{await retryCloudSync();await refresh();notificationsChanged();}}/>}
-      {detail.kind === "activity" && (activity ? (reviewHash!==null||attestRequest) ? <AttestCardReview card={activity} viewerId={viewerId} accessToken={accessToken} expectedHash={reviewHash??attestRequest?.attestRequest?.expectedHash} onBack={closeDetail} onRefresh={async()=>{const r=await socialRequest<{data:SocialActivityCard}>(`/api/social/activity/${activity.id}`,accessToken);if(live.current)setActivity(r.data);await refresh();notificationsChanged();}}/> : <SocialRoundActivityCard key={activity.id} card={activity} viewerId={viewerId} accessToken={accessToken} onRefresh={async()=>{const result=await socialRequest<{data:SocialActivityCard}>(`/api/social/activity/${activity.id}`,accessToken);if(live.current)setActivity(result.data);await refresh();notificationsChanged();}}/> : !message && <div className={styles.skeleton} role="status" aria-label="Cargando actividad"/>)}
+      {detail.kind === "activity" && (activity ? detail.view==='comments' ? <SocialActivityComments card={activity} viewerId={viewerId} accessToken={accessToken} initialCommentId={detail.commentId} originLabel="Notificaciones" onRefresh={refresh} onClose={closeDetail}/> : (reviewHash!==null||attestRequest) ? <AttestCardReview card={activity} viewerId={viewerId} accessToken={accessToken} expectedHash={reviewHash??attestRequest?.attestRequest?.expectedHash} onBack={closeDetail} onRefresh={async()=>{const r=await socialRequest<{data:SocialActivityCard}>(`/api/social/activity/${activity.id}`,accessToken);if(live.current)setActivity(r.data);await refresh();notificationsChanged();}}/> : <SocialRoundActivityCard key={activity.id} card={activity} viewerId={viewerId} accessToken={accessToken} onRefresh={async()=>{const result=await socialRequest<{data:SocialActivityCard}>(`/api/social/activity/${activity.id}`,accessToken);if(live.current)setActivity(result.data);await refresh();notificationsChanged();}}/> : !message && <div className={styles.skeleton} role="status" aria-label="Cargando actividad"/>)}
       {detail.kind === "group" && <div className={styles.settings}><h2>{invitation?.group_name || "Invitación de grupo"}</h2><p>{invitation ? "Juega y comparte más golf con este grupo." : "Esta invitación ya no está disponible."}</p>{invitation?.state === "PENDING" && Date.parse(invitation.expires_at)>Date.now() && <button type="button" className={styles.primary} disabled={groups.busy} onClick={()=>void groups.accept(invitation.id)}>Unirme</button>}</div>}
     </> : <>
       <nav className={styles.filters} aria-label="Filtros de notificaciones">{NOTIFICATION_FILTERS.map(label=><button type="button" key={label} aria-pressed={filter===label} onClick={()=>setFilter(label)}>{label}</button>)}</nav>

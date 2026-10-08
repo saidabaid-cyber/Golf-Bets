@@ -87,6 +87,8 @@ export type SocialNotification = {
   person?: SocialActivityAuthor | null;
   courseName?: string | null;
   roundDate?: string | null;
+  commentId?: string | null;
+  commentPreview?: string | null;
   attestRequest?: {expectedHash:string;state:'PENDING'|'ATTESTED'|'STALE'};
 };
 

@@ -58,3 +58,16 @@ test("unread pagination crosses fifty rows without truncating the badge to the f
   const first=await f.list({unreadOnly:true});const second=await f.list({offset:50,unreadOnly:true});assert.equal(first.data.length,50);assert.equal(first.nextCursor,"50");assert.equal(second.data.length,50);
   assert.ok(f.calls.filter(call=>call.table==="notification_events_v2").every(call=>call.filters.some(([key,value])=>key==="read_at"&&value===null)));
 });
+test('reaction actor comes from the persisted reaction, never the activity owner; authorized comment context is bounded',async()=>{
+  const f=harness();
+  f.tables.social_activities_v3=[{id:activityId,author_id:owner,material_hash:'a'.repeat(64),source_round_id:roundId,active:true}];
+  f.tables.rounds_cloud=[{id:roundId,owner_id:owner,snapshot:{date:'2026-10-06',courseSnapshot:{name:'Campo real'}}}];
+  const comment='77777777-7777-4777-8777-777777777777';
+  f.tables.notification_events_v2=[{...f.events[4],actor_id:peer},{...f.events[4],id:'comment',event_type:'comment',actor_id:peer,reaction_id:comment}];
+  f.tables.social_comments_v3=[{id:comment,activity_id:activityId,author_id:peer,body:'Texto autorizado '.repeat(30)}];
+  const r=await f.list();assert.equal((r.data[0].person as {userId:string}).userId,peer);assert.equal(r.data[1].commentId,comment);assert.equal((r.data[1].commentPreview as string).length,160);assert.equal(r.data[1].courseName,'Campo real');assert.equal(r.data[1].roundDate,'2026-10-06');
+  f.tables.social_comments_v3=[];const deleted=await f.list();assert.equal(deleted.data.length,2);assert.equal(deleted.data[1].commentId,null);assert.equal(deleted.data[1].commentPreview,null);
+});
+test('reactions without trustworthy actor metadata remain generic and never guess from newest reaction',async()=>{
+  const f=harness();f.tables.notification_events_v2=[f.events[4]];f.tables.social_likes_v3=[{activity_id:activityId,user_id:peer}];const r=await f.list();assert.equal(r.data[0].person,null);
+});
