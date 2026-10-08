@@ -7,12 +7,12 @@ import { socialUI,uiFind,uiNodes,uiText,settleUI } from "./helpers/social-ui";
 import type { SocialActivityCard } from "../lib/social-activity-contract";
 export function socialCard(id="card-1"):SocialActivityCard{return{id,type:"ROUND_COMPLETED",audience:"FRIENDS",author:{userId:"peer",displayName:"QA Peer",username:"qa_peer",avatarUrl:null},createdAt:"2026-10-05T12:00:00Z",sourceVersion:1,currentHash:"hash-1",roundId:`round-${id}`,round:{roundId:`round-${id}`,localRoundId:id,date:"2026-10-05",courseName:"Campo QA",teeName:null,holesPlayed:18,ownerScore:72,coursePar:72},achievements:[],likesCount:0,likedByMe:false,commentsCount:0,attestCount:0,isAttestedByMe:false,canAttest:false,requiresParticipantConfirmation:false,participantPlayerKey:null,targetUserId:"peer"};}
 const homeProps={displayName:"QA Owner",identityUserId:"owner",username:"qa_owner",accessToken:"qa-token",onOpenAchievements(){},onOpenRounds(){},onOpenFriends(){},onPrivacy(){}};
-test("Inicio resumes only a real live round through the account-owned navigation callback",()=>{
+test("Inicio never exposes the active-round banner or invokes recovery; PLAY keeps its existing callbacks",()=>{
   const h=socialUI("app/components/home-dashboard.tsx",{"home-social-navigation":navigation});let resumed=0;
   const activeRound={status:"live",courseName:"Campo de la ronda",totalHoles:18,currentHole:2,playerCount:3,roundDate:"2026-10-05"};
   let tree=h.render("HomeDashboard",{...homeProps,activeRound,onContinueRound:()=>{resumed++;}});
-  const button=uiFind(tree,n=>n.type==="button"&&uiText(n).startsWith("Continuar ronda"));
-  assert.match(uiText(button),/Campo de la ronda · Hoyo 2 de 18/);button.props.onClick();assert.equal(resumed,1);
+  assert.doesNotMatch(uiText(tree),/Continuar ronda/);
+  assert.equal(resumed,0);assert.equal(activeRound.currentHole,2);assert.equal(activeRound.status,"live");
   for(const unavailable of [null,{...activeRound,status:"setup"},{...activeRound,status:"review"}]) {
     tree=h.render("HomeDashboard",{...homeProps,activeRound:unavailable,onContinueRound:()=>{resumed++;}});
     assert.doesNotMatch(uiText(tree),/Continuar ronda/);

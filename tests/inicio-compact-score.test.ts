@@ -15,7 +15,7 @@ test("Friends view keeps live round outside the social list",()=>{
   const h=socialUI("app/components/home-dashboard.tsx",{"home-social-navigation":navigation});
   const props={identityUserId:"owner",displayName:"Owner",onContinueRound(){},activeRound:{status:"live",courseName:"Real",currentHole:2,totalHoles:18}};
   let tree=h.render("HomeDashboard",props);
-  assert.match(uiText(tree),/Continuar ronda/);
+  assert.doesNotMatch(uiText(tree),/Continuar ronda/);
   uiFind(tree,n=>n.type==="button"&&uiText(n)==="Amigos").props.onClick();
   tree=h.render("HomeDashboard",props);assert.doesNotMatch(uiText(tree),/Continuar ronda/);
 });

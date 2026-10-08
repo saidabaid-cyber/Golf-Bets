@@ -28,7 +28,7 @@ export type HomeDashboardProps = {
 };
 
 /** Home composes the existing server-filtered activity feed, never local private snapshots. */
-export function HomeDashboard({ displayName, avatarUrl, identityUserId, accessToken, onOpenAchievements, onOpenOwnProfile, friendsInitialView="list", friendsEntry=0, targetId, onCloseTarget, username="", activeRound, onContinueRound }: HomeDashboardProps) {
+export function HomeDashboard({ displayName, avatarUrl, identityUserId, accessToken, onOpenAchievements, onOpenOwnProfile, friendsInitialView="list", friendsEntry=0, targetId, onCloseTarget, username="" }: HomeDashboardProps) {
   const [view, setView] = useState<HomeSocialView>("feed");
   const [profileId,setProfileId]=useState<string|null>(null),positions=useRef(new Map<string,number>()),returning=useRef(false),currentProfile=useRef<string|null>(null);
   useEffect(()=>{const read=()=>{positions.current.set(currentProfile.current??'home',window.scrollY);const id=socialPlayerFromSearch(location.search);currentProfile.current=id;returning.current=true;setProfileId(id);};setProfileId(socialPlayerFromSearch(location.search));currentProfile.current=socialPlayerFromSearch(location.search);window.addEventListener('popstate',read);return()=>window.removeEventListener('popstate',read);},[]);
@@ -41,9 +41,6 @@ export function HomeDashboard({ displayName, avatarUrl, identityUserId, accessTo
   return <section className={styles.home} data-home-version="social-home" aria-label="Inicio social">
     <div hidden={Boolean(profileId)}>
     <nav className={styles.selector} aria-label="Secciones de Inicio">{([['feed','Feed'],['friends','Amigos'],['add-friends','Agregar amigos']] as const).map(([id,label])=><button type="button" key={id} aria-current={view===id?"page":undefined} className={id==="add-friends"?styles.addFriends:undefined} onClick={()=>select(id)}>{id==="add-friends"&&<BackyardIcon name="personAdd" size={19}/>}<span>{label}</span></button>)}</nav>
-    {view === "feed" && activeRound?.status === "live" && onContinueRound && <button type="button" className={styles.continueRound} onClick={onContinueRound}>
-      <span><strong>Continuar ronda</strong><small>{activeRound.courseName} · Hoyo {activeRound.currentHole ?? 1} de {activeRound.totalHoles}</small></span><span aria-hidden="true">›</span>
-    </button>}
     {view === "feed" ? <CloudSocialActivity key={identityUserId} viewerId={identityUserId} accessToken={accessToken} viewerName={displayName} viewerAvatarUrl={avatarUrl} friendsOnly includeOwn onOpenProfile={openPlayer} onOpenAchievements={onOpenAchievements} /> : <FriendsHub key={`${identityUserId}:${view}:${friendsEntry}`} ownerId={identityUserId} accessToken={accessToken} name={displayName} username={username} avatar={avatarUrl || ""} embedded onOpenProfile={openPlayer} initialView={view === "add-friends" ? "add" : friendsInitialView === "requests" ? "requests" : "list"} targetId={targetId} onCloseTarget={onCloseTarget} onViewChange={next=>{if(next==="add"&&view!=="add-friends")select("add-friends");}} />}
     </div>{profileId&&accessToken&&<SocialPlayerProfile key={profileId} userId={profileId} viewerId={identityUserId} accessToken={accessToken} onBack={closePlayer} onOpenPlayer={openPlayer} onOwnProfile={onOpenOwnProfile}/>}
   </section>;
