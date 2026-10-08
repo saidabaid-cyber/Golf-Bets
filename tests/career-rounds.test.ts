@@ -25,9 +25,15 @@ test("scorecard preview renders real owner holes and historical navigation",()=>
 });
 test("rounds empty, single point and many data charts remain honest and accessible",()=>{
   const html=renderCareer("app/components/career-rounds.tsx","CareerRounds",{rounds:[],history:[],userId:"owner",insights:buildGolfInsights([]),onCreateRound(){}});
-  assert.match(html,/Tu historia empieza con tu primera ronda/);assert.match(html,/Sin datos suficientes/);
+  assert.match(html,/Tu historia empieza con tu primera ronda/);assert.match(html,/Ver estadísticas/);
+  assert.doesNotMatch(html,/Vista previa del scorecard|Evolución de score|Precisión registrada/);
   const one=careerScoreSamples([careerRound("one",1)],buildGolfInsights([careerRound("one",1)]),"owner");
   const chart=renderCareer("app/components/career-rounds.tsx","RoundTrendChart",{rows:one});assert.match(chart,/role="img"/);assert.doesNotMatch(chart,/NaN|Infinity/);
   const many=Array.from({length:80},(_,i)=>({...one[0],id:`many-${i}`,date:`2026-${String(Math.floor(i/27)+1).padStart(2,"0")}-${String(i%27+1).padStart(2,"0")}`}));
   assert.match(renderCareer("app/components/career-rounds.tsx","RoundTrendChart",{rows:many}),/promedio por mes/);
+});
+test("history puts compact real round access ahead of analytics and avoids duplicate scorecard",()=>{
+  const round=careerRound("card",1),html=renderCareer("app/components/career-rounds.tsx","CareerRounds",{rounds:[round],history:[round],userId:"owner",insights:buildGolfInsights([round]),onOpenRound(){},onOpenStats(){},onCreateRound(){}});
+  assert.match(html,/Ver scorecard de/);assert.match(html,/Histórico de rondas/);
+  assert.doesNotMatch(html,/Primeros 9 hoyos|Ver scorecard completo|Evolución de score|Distribución de scores/);
 });
