@@ -17,6 +17,7 @@ import { socialPremiumScorecard } from "../../lib/social-premium-scorecard";
 import { ScorecardNavigationBoundary, type ScorecardDestination } from "./scorecard-boundary";
 import { SocialFeedViews, SocialActivityComments, SocialRoundResults, sameSocialActivity } from "./social-feed-detail";
 import type { SocialFeedView } from "../../lib/social-feed-view";
+import { AttestRequestDialog } from './attest-request-dialog';
 
 function SocialPostContent({ render, onOpen }: { render:(open:(destination?:ScorecardDestination)=>void)=>ReactNode;onOpen:(destination?:ScorecardDestination)=>void }) { return render(onOpen); }
 
@@ -97,6 +98,7 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
   const inFlight = useRef(false);
   const [showBag,setShowBag]=useState(false);
   const [attestInfo,setAttestInfo]=useState(false);
+  const [requesting,setRequesting]=useState(false),[pendingRequests,setPendingRequests]=useState(0);
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const base = `/api/social/activity/${encodeURIComponent(card.id)}`;
@@ -142,23 +144,24 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
 
     {card.courseEvent && <p>Nuevo campo jugado · fuera de su Home Club</p>}
     {card.achievements.length > 0 && <>{card.achievements.length > 1 && <ul className={styles.achievements}>{card.achievements.slice(1,4).map((item) => <li key={item}>{item}</li>)}</ul>}{card.author.userId === viewerId && onOpenAchievements && <button type="button" className="textButton" onClick={onOpenAchievements}>Ver en Logros</button>}</>}
-    {card.round && <div className={styles.attest}><span>{card.attestCount ? `Atestada por ${card.attestCount} ${card.attestCount === 1 ? "jugador" : "jugadores"}` : "Pendiente de atest"}{card.isAttestedByMe && " · Ya atestaste esta tarjeta"}</span><button type="button" aria-label="Qué significa Atest" aria-expanded={attestInfo} onClick={()=>setAttestInfo(v=>!v)}><BackyardIcon name="info" size={16}/></button>{attestInfo&&<p>Confirmación de compañeros. No es certificación GHIN/WHS.</p>}</div>}
+    {card.round && <div className={styles.attest}><span>{card.isAttestedByMe ? '✓ Atestada por ti' : card.attestCount ? `✓ Atestada por ${card.attestCount} ${card.attestCount===1?'compañero':'compañeros'}` : (pendingRequests||card.pendingAttestRequests) ? 'Solicitud enviada · Pendiente' : 'Atest pendiente'}</span>{card.author.userId===viewerId&&<button type="button" className={styles.requestAttest} onClick={()=>setRequesting(true)}>Solicitar Atest</button>}<button type="button" aria-label="Qué significa Atest" aria-expanded={attestInfo} onClick={()=>setAttestInfo(v=>!v)}><BackyardIcon name="info" size={16}/></button>{attestInfo&&<p>Confirmación de compañeros. No es certificación GHIN/WHS.</p>}</div>}
     <div className={styles.postActions} aria-label="Reacciones de la publicación">
       <button type="button" disabled={busy} aria-label={`Me gusta · ${card.likesCount}`} aria-pressed={card.likedByMe} onClick={() => void act(like)}><BackyardIcon name="heart" size={23}/><span>{card.likesCount}</span></button>
       <button type="button" disabled={busy} aria-label={`Comentar · ${card.commentsCount}`} onClick={() => openDetail("comments")}><BackyardIcon name="comment" size={23}/><span>{card.commentsCount}</span></button>
       <button type="button" className={styles.share} disabled={busy} onClick={() => void act(share)}><svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="m3 10 18-7-7 18-3-8-8-3ZM11 13 21 3"/></svg><span>Compartir</span></button>
     </div>
-    {card.canAttest && <button type="button" className={styles.attestButton} disabled={busy} onClick={() => { if (window.confirm("Confirmo que esta tarjeta corresponde a la ronda que jugué con este jugador. No es una certificación oficial.")) void act(attest, "Atest guardado para esta versión de la tarjeta."); }}>Atestar esta tarjeta</button>}
+    {card.canAttest && <button type="button" className={styles.attestButton} disabled={busy} onClick={() => { if (window.confirm("Confirmo que esta tarjeta corresponde a la ronda que jugué con este jugador. No es una certificación oficial.")) void act(attest, "Atest guardado para esta versión de la tarjeta."); }}>Atestar</button>}
 
     {card.requiresParticipantConfirmation && card.participantPlayerKey && <button type="button" className={styles.attestButton} disabled={busy} onClick={() => { if (window.confirm("Confirmo que participé en esta ronda con mi cuenta. Esto no atesta todavía la tarjeta de otro jugador.")) void act(async () => { await socialRequest(`/api/social/rounds/${encodeURIComponent(card.roundId!)}/links`, accessToken, { method: "POST", body: { playerKey: card.participantPlayerKey, expectedVersion: card.sourceVersion, expectedHash: card.currentHash } }); await onRefresh(); }, "Participación confirmada. Ya puedes revisar y atestar la tarjeta."); }}>Confirmar mi participación</button>}
 
     {message && <p className={styles.notice} role="status">{message}</p>}
+    {requesting&&<AttestRequestDialog card={card} accessToken={accessToken} onClose={()=>setRequesting(false)} onSent={setPendingRequests}/>}
   </article>;
   const render = (open:(destination?:ScorecardDestination)=>void) => detail ? <><div hidden={detail.kind==="comments"}>{renderPost(open)}</div>{detail.kind==="comments" ? <SocialActivityComments card={detail.card} viewerId={viewerId} accessToken={accessToken} viewerName={viewerName} viewerAvatarUrl={viewerAvatarUrl} onRefresh={onRefresh} onClose={()=>setDetail(null)} onOpenProfile={onOpenProfile}/> : <SocialRoundResults card={detail.card} onClose={()=>setDetail(null)} onOpenProfile={onOpenProfile} onOpenScorecard={()=>{setDetail(null);openScorecard(open);}}/>}</> : renderPost(open);
   return onOpenScorecard ? <SocialPostContent render={render} onOpen={()=>undefined}/> : <ScorecardNavigationBoundary originLabel="publicación">{open=><SocialPostContent render={render} onOpen={open}/>}</ScorecardNavigationBoundary>;
 }
 
-const notificationLabels: Record<SocialNotification["type"], string> = { like: "Recibiste un like", comment: "Nuevo comentario", attest: "Un compañero atestó tu tarjeta", friend_achievement: "Un amigo consiguió un logro", equipment: "Un amigo actualizó su bolsa", friend_request: "Nueva solicitud de amistad", friend_accepted:"Solicitud aceptada",group_invite:"Invitación a un grupo",round_invite:"Invitación a una ronda",round_finished:"Resultados de ronda disponibles", round_started: "Un compañero inició una ronda contigo · Ver ronda", scorecard_ready: "Registraron tu tarjeta · Revisar tarjeta" };
+const notificationLabels: Record<SocialNotification["type"], string> = { like: "Recibiste un like", comment: "Nuevo comentario", attest: "Un compañero atestó tu tarjeta", attest_request:"Te solicitan atestar una ronda", friend_achievement: "Un amigo consiguió un logro", equipment: "Un amigo actualizó su bolsa", friend_request: "Nueva solicitud de amistad", friend_accepted:"Solicitud aceptada",group_invite:"Invitación a un grupo",round_invite:"Invitación a una ronda",round_finished:"Resultados de ronda disponibles", round_started: "Un compañero inició una ronda contigo · Ver ronda", scorecard_ready: "Registraron tu tarjeta · Revisar tarjeta" };
 
 export function CloudSocialNotifications({ viewerId, accessToken, onFriends, onReadChange }: { viewerId: string; accessToken?: string; onFriends?: () => void; onReadChange?: () => void }) {
   const { retryCloudSync } = useBackyardAccount();
@@ -200,7 +203,7 @@ export function CloudSocialNotifications({ viewerId, accessToken, onFriends, onR
 }
 
 /** Key this component by authenticated identity; never carry another account's feed across login. */
-export function CloudSocialActivity({ viewerId, accessToken, localRoundId, friendsOnly = false, onOpenAchievements, onOpenProfile, viewerName, viewerAvatarUrl }: { viewerId: string; accessToken?: string; localRoundId?: string; friendsOnly?: boolean; onOpenAchievements?: () => void; onOpenProfile?:(userId:string)=>void;viewerName?:string;viewerAvatarUrl?:string|null }) {
+export function CloudSocialActivity({ viewerId, accessToken, localRoundId, friendsOnly = false, includeOwn = false, authorId, onOpenAchievements, onOpenProfile, viewerName, viewerAvatarUrl }: { viewerId: string; accessToken?: string; localRoundId?: string; friendsOnly?: boolean; includeOwn?: boolean; authorId?:string; onOpenAchievements?: () => void; onOpenProfile?:(userId:string)=>void;viewerName?:string;viewerAvatarUrl?:string|null }) {
   const emptyCopy=useVisualContent().find(c=>c.target_key==="home_empty_feed")?.values;
   const [cards, setCards] = useState<SocialActivityCard[]>([]);
   const [message, setMessage] = useState("");
@@ -210,16 +213,18 @@ export function CloudSocialActivity({ viewerId, accessToken, localRoundId, frien
   const [destination, setDestination] = useState<ScorecardDestination>();
   const [scorecardOrigin, setScorecardOrigin] = useState("Feed");
   const paging = useRef(false);
+  const refreshRevision=useRef(0);
   const live = useRef(true);
   const feed=useRef<HTMLElement>(null), sentinel=useRef<HTMLDivElement>(null);
   const [pull,setPull]=useState(0),[refreshing,setRefreshing]=useState(false);
-  const path = `/api/social/activity${localRoundId ? `?localRoundId=${encodeURIComponent(localRoundId)}` : friendsOnly ? "?friendsOnly=true" : ""}`;
+  const path = `/api/social/activity${localRoundId ? `?localRoundId=${encodeURIComponent(localRoundId)}` : friendsOnly ? `?friendsOnly=true${includeOwn?"&includeOwn=true":""}` : authorId ? `?authorId=${encodeURIComponent(authorId)}` : ""}`;
+  const invalidateRefresh=useCallback(()=>{refreshRevision.current++;paging.current=false;},[]);
   const refresh = useCallback(async (signal?: AbortSignal) => {
     if (!accessToken || paging.current) return;
-    paging.current=true;setRefreshing(true);
+    const revision=++refreshRevision.current;paging.current=true;setRefreshing(true);
     try { const result = await socialRequest<SocialActivityPage>(path, accessToken, { signal });
       if (live.current && !signal?.aborted) { setCards(mergeSocialCards([],result.data)); setNextCursor(result.nextCursor); setMessage(""); }
-    } finally {paging.current=false;if(live.current)setRefreshing(false);}
+    } finally {if(revision===refreshRevision.current){paging.current=false;if(live.current)setRefreshing(false);}}
   }, [accessToken, path]);
   const loadMore=useCallback(async()=> {
     if (!accessToken || !nextCursor || paging.current) return;
@@ -239,18 +244,21 @@ export function CloudSocialActivity({ viewerId, accessToken, localRoundId, frien
     live.current = true; const controller = new AbortController();
     if (accessToken) void refresh(controller.signal).catch((error) => { if (!controller.signal.aborted) setMessage(socialErrorMessage(error)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     else setLoading(false);
-    return () => { live.current = false; controller.abort(); };
-  }, [accessToken, refresh]);
-  useEffect(() => {
-    if (!accessToken) return;
-    const id = new URLSearchParams(window.location.search).get("card")?.match(/^social:([0-9a-f-]{36})$/i)?.[1];
+    return () => { live.current = false; controller.abort();invalidateRefresh(); };
+  }, [accessToken, refresh,invalidateRefresh]);
+    useEffect(() => {
+      if (!accessToken) return;
+      const params=new URLSearchParams(window.location.search);
+      // A profile owns its child card; the background Home feed must not restore it too.
+      if(params.get('player')&&(!authorId||params.get('playerTab')!=='activity'))return;
+      const id = new URLSearchParams(window.location.search).get("card")?.match(/^social:([0-9a-f-]{36})$/i)?.[1];
     if (!id) return;
     const controller = new AbortController();
     void socialRequest<{ data: SocialActivityCard }>(`/api/social/activity/${encodeURIComponent(id)}`, accessToken, { signal: controller.signal })
-      .then(result => { if (!controller.signal.aborted && result.data.id === id && result.data.round) { setScorecardOrigin(new URLSearchParams(window.location.search).get("feedView")==="results"?"resultados":"Feed"); setDestination(socialScorecardDestination(result.data)); } })
+      .then(result => { if (!controller.signal.aborted && result.data.id === id && result.data.round && (!authorId||result.data.author.userId===authorId)) { setScorecardOrigin(authorId?'perfil del jugador':new URLSearchParams(window.location.search).get("feedView")==="results"?"resultados":"Feed"); setDestination(socialScorecardDestination(result.data)); } })
       .catch(error => { if (!controller.signal.aborted) setMessage(socialErrorMessage(error)); });
     return () => controller.abort();
-  }, [accessToken]);
+    }, [accessToken,authorId]);
   useEffect(()=>{
     if(!accessToken||localRoundId)return;
     const foreground=()=>{if(document.visibilityState==="visible")void refresh().catch(error=>setMessage(socialErrorMessage(error)));};

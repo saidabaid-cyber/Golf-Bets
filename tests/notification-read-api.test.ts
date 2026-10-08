@@ -8,6 +8,7 @@ import { NOTIFICATION_EVENT_TYPES } from "../features/notifications/domain";
 const id="11111111-1111-4111-8111-111111111111",otherId="22222222-2222-4222-8222-222222222222";
 function harness(){
   const rows=[{id,recipient_id:"owner",event_type:"group_invite",read_at:null as string|null},
+    {id:'33333333-3333-4333-8333-333333333333',recipient_id:'owner',event_type:'attest_request',read_at:null as string|null},
     {id:otherId,recipient_id:"other",event_type:"friend_request",read_at:null as string|null},
     {id:"critical",recipient_id:"owner",event_type:"security_alert",read_at:null as string|null}];
   const pages:Record<string,unknown>[]=[],tables:string[]=[];
@@ -30,13 +31,13 @@ function harness(){
 test("read, unread and mark-all affect only the authenticated recipient and center event types",async()=>{
   const f=harness();assert.equal((await f.exports.PATCH(f.request({id,read:true}))).status,200);assert.ok(f.rows[0].read_at);
   assert.equal((await f.exports.PATCH(f.request({id,read:false}))).status,200);assert.equal(f.rows[0].read_at,null);
-  assert.equal((await f.exports.PATCH(f.request({all:true,read:true}))).status,200);assert.ok(f.rows[0].read_at);assert.equal(f.rows[1].read_at,null);assert.equal(f.rows[2].read_at,null);
+  assert.equal((await f.exports.PATCH(f.request({all:true,read:true}))).status,200);assert.ok(f.rows[0].read_at);assert.ok(f.rows[1].read_at);assert.equal(f.rows[2].read_at,null);assert.equal(f.rows[3].read_at,null);
   assert.ok(f.tables.every(table=>table==="notification_events_v2"),"read state cannot accept/reject group invitations");
 });
 test("forged owner, another recipient, invalid read and unauthenticated update cannot succeed",async()=>{
   const f=harness();assert.equal((await f.exports.PATCH(f.request({id:otherId,read:true}))).status,404);
   for(const body of [{id,read:true,user_id:"other"},{id,read:"true"},{all:true,read:false}])assert.equal((await f.exports.PATCH(f.request(body))).status,400);
-  assert.equal((await f.exports.PATCH(f.request({id,read:true},"",false))).status,401);assert.equal(f.rows[1].read_at,null);
+  assert.equal((await f.exports.PATCH(f.request({id,read:true},"",false))).status,401);assert.equal(f.rows[2].read_at,null);
 });
 test("notification pagination preserves server scope and supports unread pages beyond fifty rows",async()=>{
   const f=harness();assert.equal((await f.exports.GET(f.request(undefined,"?cursor=50&unreadOnly=true"))).status,200);

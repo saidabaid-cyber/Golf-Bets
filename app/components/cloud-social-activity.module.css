@@ -67,3 +67,5 @@
 
 .author small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.card{padding:14px}.highlightLabel{margin:10px 0;font-size:12px}.attest{font-size:10px}.attest button{width:30px;height:32px}.feed [hidden]{display:none!important}
 @media(max-width:360px){.avatarLink{width:44px;height:44px}.card{padding:12px}.roundStats{padding:8px 6px;gap:5px}.metrics{gap:5px}.roundStats .mainScore strong,.metric b{width:44px;height:44px;font-size:20px}.metric b{font-size:17px}.roundStats small{font-size:10px}.toPar b{padding:5px;font-size:12px}.roundLinks button{font-size:10px;gap:3px}}
+.attest .requestAttest{width:auto;height:auto;min-height:36px;border-radius:14px;padding:5px 10px;font-size:12px;font-weight:600;background:#e6eee0;color:#184834;white-space:nowrap}
+.attestReview{padding:10px 0;font-size:13px;color:#234e38}.attestReview p{line-height:1.5}

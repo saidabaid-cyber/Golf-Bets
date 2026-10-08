@@ -16,9 +16,10 @@ export const NOTIFICATION_COPY: Record<SocialNotification["type"], string> = {
   scorecard_ready: "Registraron una tarjeta contigo. Revísala y confirma tu participación.",
   like: "Recibiste un like en tu actividad.", comment: "Hay un nuevo comentario en tu actividad.",
   attest: "Un compañero confirmó tu tarjeta.", friend_achievement: "Un amigo consiguió un nuevo logro.", equipment: "Un amigo actualizó su equipo.",
+  attest_request: "Te solicita atestar su ronda. Revisa la tarjeta.",
 };
 export function notificationCategory(type: SocialNotification["type"]): NotificationItem["category"] {
-  return type === "group_invite" ? "Grupos" : type.startsWith("round_") || type === "scorecard_ready" ? "Rondas" : "Amigos";
+  return type === "group_invite" ? "Grupos" : type.startsWith("round_") || type === "scorecard_ready" || type === "attest_request" ? "Rondas" : "Amigos";
 }
 export function normalizeNotifications(events: readonly SocialNotification[], invitations: readonly GroupInvitation[], now = Date.now()): NotificationItem[] {
   const pending = invitations.filter(item => !item.outgoing && item.state === "PENDING" && Date.parse(item.expires_at) > now);
@@ -31,8 +32,8 @@ export function normalizeNotifications(events: readonly SocialNotification[], in
     if (previous) { previous.readIds = [...new Set([...previous.readIds, event.id])]; previous.unread ||= !event.readAt; continue; }
     items.set(key, { key, type: event.type, category: notificationCategory(event.type),
       title: event.person?.displayName || (event.type === "friend_request" ? "Solicitud de amistad" : event.type === "group_invite" ? "Invitación a un grupo" : notificationCategory(event.type) === "Rondas" ? "Tu ronda" : "Actividad de tus compañeros"),
-      message: `${NOTIFICATION_COPY[event.type]}${event.courseName ? ` · ${event.courseName}` : ""}`, avatar: event.person?.avatarUrl || null,
-      createdAt: event.createdAt, unread: !event.readAt, pending: event.type === "friend_request" || Boolean(invitation),
+      message: `${event.attestRequest?.state==='STALE'?'Solicitud desactualizada: la tarjeta cambió.':NOTIFICATION_COPY[event.type]}${event.courseName ? ` · ${event.courseName}` : ""}`, avatar: event.person?.avatarUrl || null,
+      createdAt: event.createdAt, unread: !event.readAt, pending: event.type === "friend_request" || event.attestRequest?.state==='PENDING' || Boolean(invitation),
       readIds: [event.id], resourceId: event.activityId, personId: event.person?.userId, ...(invitation ? { invitation } : {}),
     });
   }
@@ -62,5 +63,6 @@ export function notificationTime(value: string | null, now = Date.now()) {
 export function notificationDestination(item: NotificationItem): "friend" | "group" | "round" | "activity" {
   if (item.type === "friend_request" || item.type === "friend_accepted") return "friend";
   if (item.type === "group_invite") return "group";
+  if (item.type === "attest_request") return "activity";
   return item.category === "Rondas" ? "round" : "activity";
 }

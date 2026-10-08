@@ -9,10 +9,11 @@ function RoundContent({ render, onOpen }: { render: (open: (destination?: Scorec
 }
 
 export type ScorecardDestination = { id: string; card: PremiumScorecardProps } | { id: string; summary: ReactNode };
-type BoundaryOptions = { children: (open: (destination?: ScorecardDestination) => void) => ReactNode; navigation?: ReactNode; originLabel?: string };
+type BoundaryOptions = { children: (open: (destination?: ScorecardDestination) => void) => ReactNode; navigation?: ReactNode; originLabel?: string;initialOpen?:boolean;onReturn?:()=>void };
 
 /** A shared child-view stack for a round or a feed. The origin remains mounted. */
-export function ScorecardNavigationBoundary({ children, navigation, originLabel = "ronda", destination }: BoundaryOptions & { destination?: ScorecardDestination }) {
+export function ScorecardNavigationBoundary({ children, navigation, originLabel = "ronda", destination,initialOpen=false,onReturn }: BoundaryOptions & { destination?: ScorecardDestination }) {
+  const returnHandler=useRef(onReturn);useEffect(()=>{returnHandler.current=onReturn;},[onReturn]);
   const [opened, setOpened] = useState<ScorecardDestination>();
   const active = destination ?? opened;
   const props = active && "card" in active ? active.card : undefined;
@@ -31,8 +32,12 @@ export function ScorecardNavigationBoundary({ children, navigation, originLabel 
     window.history.scrollRestoration = "manual";
     const read = () => roundId ? scorecardViewFromSearch(window.location.search, roundId, holes.split(",").map(Number), JSON.parse(playerIds) as string[]) : { kind: "round" } as const;
     parentScreen.current = new URLSearchParams(window.location.search).get("screen");
-    const initial = read(); current.current = initial; setView(initial);
-    function pop() { positions.current.set(key(current.current), window.scrollY); const next = read(); returning.current = true; current.current = next; setView(next); }
+    let initial = read();
+    if(initialOpen&&initial.kind==='round'){
+      initial={kind:'card'};window.history.pushState({...window.history.state,backyardScorecard:roundId},'',scorecardViewHref(window.location.search,roundId,initial,window.location.pathname));
+    }
+    current.current = initial; setView(initial);
+    function pop() { positions.current.set(key(current.current), window.scrollY); const next = read(); returning.current = true; current.current = next; setView(next);if(initialOpen&&next.kind==='round')returnHandler.current?.(); }
     window.addEventListener("popstate", pop);
     return () => {
       window.removeEventListener("popstate", pop);
@@ -42,7 +47,7 @@ export function ScorecardNavigationBoundary({ children, navigation, originLabel 
       if (roundId && params.get("card") === roundId && params.get("screen") !== parentScreen.current)
         window.history.replaceState(window.history.state, "", scorecardViewHref(window.location.search, roundId, { kind: "round" }, window.location.pathname));
     };
-  }, [roundId, holes, playerIds]);
+  }, [roundId, holes, playerIds,initialOpen]);
   useLayoutEffect(() => {
     const top = returning.current ? positions.current.get(key(view)) ?? 0 : 0;
     returning.current = false;
@@ -59,6 +64,7 @@ export function ScorecardNavigationBoundary({ children, navigation, originLabel 
     returning.current = false; current.current = next; setView(next);
   }
   function back() {
+    if(initialOpen&&view.kind==='card'&&window.history.state?.backyardScorecard!==roundId){returnHandler.current?.();return;}
     if (window.history.state?.backyardScorecard === roundId) window.history.back();
     else { const next: ScorecardView = view.kind === "hole" ? { kind: "card" } : { kind: "round" }; returning.current = true; window.history.replaceState(window.history.state, "", scorecardViewHref(window.location.search, roundId, next, window.location.pathname)); current.current = next; setView(next); }
   }

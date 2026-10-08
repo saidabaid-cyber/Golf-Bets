@@ -538,7 +538,7 @@ async function recoverVisibleSourcesBestEffort(ctx: SocialContext) {
 }
 
 export async function listActivity(
-  ctx: SocialContext, query: { localRoundId?: string; limit?: number; cursor?: string; friendsOnly?: boolean } = {},
+  ctx: SocialContext, query: { localRoundId?: string; limit?: number; cursor?: string; friendsOnly?: boolean; includeOwn?:boolean; authorId?:string } = {},
 ): Promise<SocialActivityPage> {
   await recoverVisibleSourcesBestEffort(ctx);
   const limit = Math.min(30, Math.max(1, Math.floor(query.limit || 15)));
@@ -548,9 +548,11 @@ export async function listActivity(
     const friends = await ctx.client.from("friendships").select("user_a_id,user_b_id").or(`user_a_id.eq.${ctx.userId},user_b_id.eq.${ctx.userId}`);
     if (friends.error) dbError(friends.error);
     const ids = (friends.data || []).map(row => row.user_a_id === ctx.userId ? row.user_b_id : row.user_a_id);
+    if(query.includeOwn)ids.push(ctx.userId);
     if (!ids.length) return { data: [], nextCursor: null };
     builder = builder.in("author_id", ids);
   }
+  if(query.authorId){validId(query.authorId);builder=builder.eq('author_id',query.authorId);}
   if (query.localRoundId) {
     if (query.localRoundId.length > 120) throw new SocialServiceError("INVALID_REQUEST", 400, "Ronda inválida.");
     builder = builder.eq("local_round_id", query.localRoundId);
@@ -591,19 +593,31 @@ export async function listActivity(
     }
   }
   await attachVisibleLeaderboards(ctx,result);
+  await attachPendingRequests(ctx,result);
   const last = page.at(-1);
   return { data: result, nextCursor: last && (grouped.size > limit || rows.length > limit * 3)
     ? `${last.created_at}|${last.id}` : null };
 }
 
-export async function getActivity(ctx: SocialContext, id: string): Promise<SocialActivityDetail> {
-  await recoverVisibleSources(ctx);
+export async function getActivity(ctx: SocialContext, id: string, recoverSources = true): Promise<SocialActivityDetail> {
+  if(recoverSources)await recoverVisibleSources(ctx);
   const row = await refreshAuthorizedRow(ctx, await authorizedRow(ctx, id));
   await prepareSocialPresentation(ctx,[row]);
   const card = await cardFromAuthorizedRow(ctx, row, true);
   if (!card) throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; actualiza para verla.");
   await attachVisibleLeaderboards(ctx,[card]);
+  await attachPendingRequests(ctx,[card]);
   return { data: card };
+}
+async function attachPendingRequests(ctx:SocialContext,cards:SocialActivityCard[]) {
+  const own=cards.filter(c=>c.author.userId===ctx.userId&&c.roundId);
+  if(!own.length)return;
+  const requests=await ctx.client.from('social_attest_requests_v1').select('activity_id,recipient_id,expected_hash').in('activity_id',own.map(c=>c.id)).eq('requester_id',ctx.userId).limit(601);
+  if(requests.error)dbError(requests.error);
+  if((requests.data?.length??0)>600)throw new SocialServiceError('MUTATION_FAILED',503,'No se pudo consultar el estado completo.');
+  const confirmations=await ctx.client.from('social_round_attestations_v3').select('activity_id,attester_id,expected_hash').in('activity_id',own.map(c=>c.id)).limit(1000);
+  if(confirmations.error)dbError(confirmations.error);
+  for(const card of own)card.pendingAttestRequests=(requests.data||[]).filter(r=>r.activity_id===card.id&&r.expected_hash===card.currentHash&&!(confirmations.data||[]).some(t=>t.activity_id===card.id&&t.expected_hash===r.expected_hash&&t.attester_id===r.recipient_id)).length;
 }
 
 /** Bounded, account-authorized presentation batch. Large engagement sets fail honestly rather than reporting truncated counts. */
@@ -824,14 +838,14 @@ export async function attestRound(
   if (!card.canAttest) {
     if (card.requiresParticipantConfirmation)
       throw new SocialServiceError("PARTICIPANT_CONFIRMATION_REQUIRED", 409, "Confirma tu participación antes de confirmar la ronda de otra persona.");
-    if (card.isAttestedByMe) throw new SocialServiceError("ALREADY_ATTESTED", 409, "Ya confirmaste esta ronda.");
+    if (card.isAttestedByMe) return {data:{attested:true}};
     throw new SocialServiceError("PARTICIPANT_NOT_LINKED", 403, "Tu cuenta no figura como participante confirmado.");
   }
   const { error: insertError } = await ctx.client.from("social_round_attestations_v3").insert({
     activity_id: row.id, round_id: roundId, attester_id: ctx.userId,
     target_user_id: request.targetUserId, expected_version: Number(row.source_version), expected_hash: hash,
   });
-  if (insertError) dbError(insertError);
+  if (insertError && insertError.code!=="23505") dbError(insertError);
   return { data: { attested: true } };
 }
 
@@ -844,7 +858,7 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
   ]);
   if (eventPrefs.error) dbError(eventPrefs.error); if (master.error) dbError(master.error);
   if (master.data?.notifications_enabled !== true) return {data:[],nextCursor:null};
-  const types = [...NOTIFICATION_EVENT_TYPES, "like", "comment", "attest", "friend_achievement", "equipment"];
+  const types = [...NOTIFICATION_EVENT_TYPES, "like", "comment", "attest", "attest_request", "friend_achievement", "equipment"];
   let query = ctx.client.from("notification_events_v2").select("id,event_type,resource_type,resource_id,created_at,read_at")
     .eq("recipient_id",ctx.userId).in("event_type",types).order("created_at",{ascending:false}).order("id",{ascending:false});
   if (options.unreadOnly) query = query.is("read_at",null);
@@ -855,14 +869,18 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
   // Batch resource reads under the same authenticated RLS as their canonical views.
   const roundIds = ids(["round_started","scorecard_ready","round_finished","round_invite"]);
   const friendIds = ids(["friend_request","friend_accepted"]);
-  const activityIds = ids(["like","comment","attest","friend_achievement","equipment"]);
-  const [rounds, friends, activities, groups] = await Promise.all([
+  const activityIds = ids(["like","comment","attest","attest_request","friend_achievement","equipment"]);
+  const requestEvents=events.filter(event=>event.event_type==='attest_request');
+  const [rounds, friends, activities, groups, requests] = await Promise.all([
     roundIds.length ? ctx.client.from("rounds_cloud").select("id,owner_id,snapshot").in("id",roundIds) : {data:[],error:null},
     friendIds.length ? ctx.client.from("friend_requests").select("id,state,requester_id,addressee_id").in("id",friendIds) : {data:[],error:null},
     activityIds.length ? ctx.client.from("social_activities_v3").select("id,author_id,material_hash").in("id",activityIds).eq("active",true) : {data:[],error:null},
     ids(["group_invite"]).length ? ctx.client.rpc("group_invitation_action_v1",{action:"list",payload:{}}) : {data:{invitations:[]},error:null},
+    requestEvents.length ? ctx.client.from('social_attest_requests_v1').select('id,activity_id,expected_hash').in('id',requestEvents.map(e=>e.id)).eq('recipient_id',ctx.userId) : {data:[],error:null},
   ]);
-  for (const result of [rounds,friends,activities,groups]) if (result.error) dbError(result.error);
+  for (const result of [rounds,friends,activities,groups,requests]) if (result.error) dbError(result.error);
+  const requestAttestations=requestEvents.length?await ctx.client.from('social_round_attestations_v3').select('activity_id,expected_hash').in('activity_id',ids(['attest_request'])).eq('attester_id',ctx.userId):{data:[],error:null};
+  if(requestAttestations.error)dbError(requestAttestations.error);
   const people = new Map<string,Promise<SocialActivityAuthor | null>>();
   const person = async (id: string | undefined) => {
     if (!id) return null;
@@ -872,7 +890,7 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
     })());
     return people.get(id)!;
   };
-  const socialFlags = {like:"notifyLike",comment:"notifyComment",attest:"notifyAttest",friend_achievement:"notifyFriendAchievement",equipment:"notifyEquipment",friend_request:"notifyFriendRequest"} as const;
+  const socialFlags = {like:"notifyLike",comment:"notifyComment",attest:"notifyAttest",attest_request:"notifyAttest",friend_achievement:"notifyFriendAchievement",equipment:"notifyEquipment",friend_request:"notifyFriendRequest"} as const;
   const visible: SocialNotificationPage["data"] = [];
   for (const event of events) {
     if (eventPrefs.data?.some(pref => pref.event_type === event.event_type && !pref.in_app)) continue;
@@ -892,10 +910,14 @@ export async function listNotifications(ctx: SocialContext, options: { offset?: 
       allowed = (groups.data?.invitations || []).some((invite: {id:string;group_id:string;outgoing:boolean;state:string;expires_at:string}) => !invite.outgoing && invite.state === "PENDING" && Date.parse(invite.expires_at) > Date.now() && [invite.id,invite.group_id].includes(event.resource_id));
     } else {
       const activity = activities.data?.find(row => row.id === event.resource_id); allowed = Boolean(activity && SHA256.test(activity.material_hash));
-      if (event.event_type === "friend_achievement" || event.event_type === "equipment") actor = activity?.author_id;
+      if (event.event_type === 'attest_request')allowed=allowed&&Boolean(requests.data?.some(r=>r.id===event.id&&r.activity_id===activity?.id));
+      if (event.event_type === "friend_achievement" || event.event_type === "equipment" || event.event_type==='attest_request') actor = activity?.author_id;
     }
+    const request=event.event_type==='attest_request'?requests.data?.find(r=>r.id===event.id):undefined;
+    const currentActivity=request?activities.data?.find(a=>a.id===request.activity_id):undefined;
+    const requestState=currentActivity&&request ? currentActivity.material_hash!==request.expected_hash?'STALE':requestAttestations.data?.some(t=>t.activity_id===request.activity_id&&t.expected_hash===request.expected_hash)?'ATTESTED':'PENDING':undefined;
     if (allowed) visible.push({id:event.id,type:event.event_type as SocialNotificationPage["data"][number]["type"],activityId:event.resource_id,
-      createdAt:event.created_at,readAt:event.read_at,person:await person(actor),courseName});
+      createdAt:event.created_at,readAt:event.read_at,person:await person(actor),courseName,...(request&&requestState?{attestRequest:{expectedHash:request.expected_hash,state:requestState}}:{})});
   }
   return {data:visible,nextCursor:data?.length === 50 ? String(offset+50) : null};
 }

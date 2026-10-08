@@ -133,6 +133,41 @@ try {
     "a provisional SQL md5 cannot leak source metadata through REST before server SHA validation");
   await admin();
   await run(`update public.social_activities_v3 set material_hash='${HASH}' where id='${activity.id}'`);
+  // The isolated social schema predates account lifecycle; emulate its existing gate.
+  await db.exec("create function private.account_data_access_allowed() returns boolean language sql as $$select coalesce(current_setting('qa.account_enabled',true),'true')='true'$$; grant execute on function private.account_data_access_allowed() to authenticated;");
+  await db.exec(readFileSync('supabase/migrations/20261008152624_social_attest_requests_v1.sql','utf8'));
+  await role(OWNER);
+  let roster=(await run('select public.attest_request_roster_v1($1,$2) as roster',[activity.id,HASH])).rows[0].roster;
+  assert.equal(roster.length,3); assert.ok(!roster.some(p=>p.userId===OWNER));
+  assert.ok(roster.every(p=>p.participation==='PENDING_CONFIRMATION'));
+  const requested=(await run('select public.send_attest_requests_v1($1,$2,$3::uuid[]) as requests',[activity.id,HASH,[FRIEND,PARTICIPANT_B,FRIEND]])).rows[0].requests;
+  assert.equal(requested.length,2);
+  const again=(await run('select public.send_attest_requests_v1($1,$2,$3::uuid[]) as requests',[activity.id,HASH,[FRIEND]])).rows[0].requests;
+  assert.equal(again[0].id,requested.find(r=>r.recipientId===FRIEND).id);
+  await expectError(()=>run('select public.send_attest_requests_v1($1,$2,$3::uuid[])',[activity.id,HASH,[OWNER]]),['42501'],'self request');
+  await expectError(()=>run('select public.send_attest_requests_v1($1,$2,$3::uuid[])',[activity.id,HASH,[PARTICIPANT_C,FRIEND_NONPARTICIPANT]]),['42501'],'all-or-nothing canonical roster');
+  await expectError(()=>run('select public.send_attest_requests_v1($1,$2,$3::uuid[])',[activity.id,NEXT_HASH,[FRIEND]]),['40001'],'stale request');
+  await run("set qa.account_enabled='false'");
+  await expectError(()=>run('select public.send_attest_requests_v1($1,$2,$3::uuid[])',[activity.id,HASH,[FRIEND]]),['42501'],'inactive account cannot bypass HTTP through RPC');
+  assert.equal((await run('select count(*)::int n from public.social_attest_requests_v1')).rows[0].n,0,'inactive account cannot read request records');
+  await run("set qa.account_enabled='true'");
+  await role(FRIEND);
+  assert.equal((await run('select count(*)::int n from public.social_attest_requests_v1')).rows[0].n,1);
+  await expectError(()=>run('select public.attest_request_roster_v1($1,$2)',[activity.id,HASH]),['42501'],'recipient cannot enumerate full roster');
+  await expectError(()=>run('select public.send_attest_requests_v1($1,$2,$3::uuid[])',[activity.id,HASH,[PARTICIPANT_C]]),['42501'],'non-author cannot request');
+  await expectError(()=>run('update public.social_attest_requests_v1 set recipient_id=$1',[OTHER]),['42501'],'request identity immutable');
+  await admin();
+  assert.equal((await run("select count(*)::int n from public.notification_events_v2 where event_type='attest_request'")).rows[0].n,2);
+  await run("update public.notification_events_v2 set read_at=now() where event_type='attest_request'");
+  await role(OWNER);
+  roster=(await run('select public.attest_request_roster_v1($1,$2) as roster',[activity.id,HASH])).rows[0].roster;
+  assert.equal(roster.find(p=>p.userId===FRIEND).state,'PENDING','reading never confirms');
+  assert.equal(roster.find(p=>p.userId===PARTICIPANT_C).state,'UNSENT','failed batch wrote nothing');
+  await role(OTHER);
+  assert.equal((await run('select count(*)::int n from public.social_attest_requests_v1')).rows[0].n,0);
+  await anon();
+  await expectError(()=>run('select public.send_attest_requests_v1($1,$2,$3::uuid[])',[activity.id,HASH,[FRIEND]]),['42501'],'anonymous');
+  await admin();
 
   await role(OTHER);
   assert.equal((await run("select count(*) as n from public.social_activities_v3")).rows[0].n,0);
@@ -176,6 +211,10 @@ try {
   await run(`insert into public.social_round_attestations_v3(
     activity_id,round_id,attester_id,target_user_id,expected_version,expected_hash)
     values('${activity.id}','${ROUND}','${FRIEND}','${OWNER}',2,'${HASH}')`);
+  await role(OWNER);
+  roster=(await run('select public.attest_request_roster_v1($1,$2) as roster',[activity.id,HASH])).rows[0].roster;
+  assert.equal(roster.find(p=>p.userId===FRIEND).state,'ATTESTED');
+  await role(FRIEND);
   await expectError(() => run(`insert into public.social_round_attestations_v3(
     activity_id,round_id,attester_id,target_user_id,expected_version,expected_hash)
     values('${activity.id}','${ROUND}','${FRIEND}','${OWNER}',2,'${HASH}')`),["23505"]);
@@ -279,6 +318,10 @@ try {
   await admin();
   await run(`update public.social_activities_v3 set material_hash='${NEXT_HASH}'
     where id='${activity.id}' and source_version=3 and material_hash='${activity.material_hash}'`);
+  await role(OWNER);
+  roster=(await run('select public.attest_request_roster_v1($1,$2) as roster',[activity.id,NEXT_HASH])).rows[0].roster;
+  assert.equal(roster.find(p=>p.userId===FRIEND).state,'STALE','old confirmation never validates a new card');
+  await admin();
   await role(FRIEND);
   await run(`insert into public.social_comments_v3(activity_id,author_id,body,expected_hash)
     values('${activity.id}','${FRIEND}','La ronda sigue vigente','${NEXT_HASH}')`);

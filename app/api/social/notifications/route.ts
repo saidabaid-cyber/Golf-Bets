@@ -1,7 +1,7 @@
 import { listNotifications } from "../../../../lib/social-activity.server";
 import { socialHttp, socialBody, socialId } from "../../../../lib/social-http.server";
 import { NOTIFICATION_EVENT_TYPES } from "../../../../features/notifications/domain";
-const centerTypes = [...NOTIFICATION_EVENT_TYPES,"like","comment","attest","friend_achievement","equipment"];
+const centerTypes = [...NOTIFICATION_EVENT_TYPES,"like","comment","attest","attest_request","friend_achievement","equipment"];
 export async function GET(request: Request) {
   const params = new URL(request.url).searchParams, cursor = params.get("cursor") || "0";
   if (!/^\d{1,6}$/.test(cursor) || Number(cursor) > 100_000) return Response.json({error:"Página inválida."},{status:400,headers:{"cache-control":"private, no-store"}});

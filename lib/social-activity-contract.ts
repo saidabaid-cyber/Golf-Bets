@@ -68,6 +68,7 @@ export type SocialActivityCard = {
   participantPlayerKey: string | null;
   /** The target for attestation is the real account-linked author, never a name from the query. */
   targetUserId: string | null;
+  pendingAttestRequests?: number;
 };
 
 export type SocialActivityPage = {
@@ -79,12 +80,13 @@ export type SocialActivityDetail = { data: SocialActivityCard };
 
 export type SocialNotification = {
   id: string;
-  type: "like" | "comment" | "attest" | "friend_achievement" | "equipment" | "friend_request" | "friend_accepted" | "group_invite" | "round_invite" | "round_started" | "round_finished" | "scorecard_ready";
+  type: "like" | "comment" | "attest" | "attest_request" | "friend_achievement" | "equipment" | "friend_request" | "friend_accepted" | "group_invite" | "round_invite" | "round_started" | "round_finished" | "scorecard_ready";
   activityId: string;
   createdAt: string;
   readAt: string | null;
   person?: SocialActivityAuthor | null;
   courseName?: string | null;
+  attestRequest?: {expectedHash:string;state:'PENDING'|'ATTESTED'|'STALE'};
 };
 
 export type SocialNotificationPage = { data: SocialNotification[]; nextCursor: string | null };

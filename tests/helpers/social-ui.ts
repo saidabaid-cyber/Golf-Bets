@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { careerIndexChart } from "../../lib/career-index-chart";
+import * as socialPlayerNavigation from "../../lib/social-player-navigation";
 export type UINode={type:any;props:Record<string,any>};
 function presentationNode(node:any):any{if(node?.type==="ScorecardNavigationBoundary"||node?.type==="SocialFeedViews")return presentationNode(node.props.children(()=>{}));return typeof node?.type==="function"&&["ScoreSummary","HandicapChart","SocialFeedSkeleton","RoundContent","SocialPostContent","FeedContent"].includes(node.type.name)?presentationNode(node.type(node.props)):node;}
 export function uiNodes(node:any):UINode[]{node=presentationNode(node);return Array.isArray(node)?node.flatMap(uiNodes):node?.props?[node,...uiNodes(node.props.children)]:[];}
@@ -17,7 +18,7 @@ export function socialUI(file:string,boundaries:Record<string,any>={},globals:Re
   const listeners=new Map<string,Set<(...args:any[])=>void>>();
   const add=(type:string,fn:any)=>{if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type)!.add(fn);};
   const remove=(type:string,fn:any)=>listeners.get(type)?.delete(fn);
-  const location={search:"",origin:"https://dev.thebackyard.com.mx",pathname:"/"};const trail:any[]=[];const history={state:{} as Record<string,unknown>,pushState(state:any,_title:string,url:string){trail.push({state:history.state,search:location.search});history.state=state;location.search=new URL(url,location.origin).search;},replaceState(state:any,_title:string,url:string){history.state=state;location.search=new URL(url,location.origin).search;},back(){const prior=trail.pop();if(prior){history.state=prior.state;location.search=prior.search;listeners.get("popstate")?.forEach(fn=>fn({}));}}};
+  const location={search:"",origin:"https://dev.thebackyard.com.mx",pathname:"/",get href(){return `${this.origin}${this.pathname}${this.search}`;}};const trail:any[]=[];const history={state:{} as Record<string,unknown>,pushState(state:any,_title:string,url:string){trail.push({state:history.state,search:location.search});history.state=state;location.search=new URL(url,location.origin).search;},replaceState(state:any,_title:string,url:string){history.state=state;location.search=new URL(url,location.origin).search;},back(){const prior=trail.pop();if(prior){history.state=prior.state;location.search=prior.search;listeners.get("popstate")?.forEach(fn=>fn({}));}}};
   const window={location,history,scrollY:0,scrollTo(value:any,top?:number){window.scrollY=typeof value==="object"?value.top:top??0;},addEventListener:add,removeEventListener:remove,confirm:()=>true,dispatchEvent(event:Event){listeners.get(event.type)?.forEach(fn=>fn(event));}};
   const document={visibilityState:"visible",addEventListener:add,removeEventListener:remove};
   const surface={addEventListener:add,removeEventListener:remove,focus(){}};let intersect:((entries:any[])=>void)|undefined;
@@ -31,10 +32,11 @@ export function socialUI(file:string,boundaries:Record<string,any>={},globals:Re
     if(id.endsWith(".css"))return{__esModule:true,default:new Proxy({},{get:(_t,k)=>String(k)})};
     for(const [key,value]of Object.entries(boundaries))if(id===key||id.endsWith(`/${key}`))return value;
     if(id.endsWith("/career-index-chart"))return{careerIndexChart};
+    if(id.endsWith("/social-player-navigation"))return socialPlayerNavigation;
     if(id.endsWith("/use-visual-content"))return{useVisualContent:()=>[]};
     if(id.endsWith("/account-provider"))return{useBackyardAccount:()=>({retryCloudSync:async()=>{}})};
     return new Proxy({},{get:(_t,k)=>String(k)});
   }});
-  return{window,location,render(name:string,props:any){cursor=0;const tree=exports[name](props);for(const n of uiNodes(tree))if(n.props.ref)n.props.ref.current=surface;const batch=pending;pending=[];batch.forEach(fn=>fn());return tree;},emit(type:string,event:any={}){listeners.get(type)?.forEach(fn=>fn(event));},intersect(){intersect?.([{isIntersecting:true}]);},unmount(){effects.forEach(e=>e?.cleanup?.());}};
+  return{window,location,render(name:string,props:any){cursor=0;const tree=exports[name](props);for(const n of uiNodes(tree))if(n.props.ref)n.props.ref.current=surface;const batch=pending;pending=[];batch.forEach(fn=>fn());return tree;},emit(type:string,event:any={}){listeners.get(type)?.forEach(fn=>fn(event));},intersect(){intersect?.([{isIntersecting:true}]);},unmount(){effects.forEach(e=>e?.cleanup?.());},replayEffects(){effects.forEach(e=>e?.cleanup?.());effects.length=0;}};
 }
 export const settleUI=()=>new Promise(resolve=>setImmediate(resolve));
