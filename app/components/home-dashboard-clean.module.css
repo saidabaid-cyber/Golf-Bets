@@ -1,4 +1,4 @@
-.home{display:grid;gap:16px;min-width:0;overflow:visible;padding-bottom:24px;color:var(--by-forest)}
+.home{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0;overflow:visible;padding-bottom:24px;color:var(--by-forest)}
 .home:has([data-feed-view="comments"])>.selector,.home:has([data-feed-view="comments"])>.continueRound{display:none}
 :global(.app):has(.home [data-feed-view="comments"])>:global(.primaryHeader),:global(.app):has(.home [data-feed-view="comments"])>:global(.topbar),:global(.app):has(.home [data-feed-view="comments"])>:global(.pageBack){display:none}
 .selector{display:grid;grid-template-columns:.85fr .9fr 1.5fr;gap:4px;background:#edf0e8;border:1px solid #e4e8df;border-radius:28px;padding:3px;min-width:0}
