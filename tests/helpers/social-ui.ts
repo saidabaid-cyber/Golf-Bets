@@ -4,7 +4,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { careerIndexChart } from "../../lib/career-index-chart";
 export type UINode={type:any;props:Record<string,any>};
-function presentationNode(node:any){return typeof node?.type==="function"&&["ScoreSummary","HandicapChart","SocialFeedSkeleton"].includes(node.type.name)?node.type(node.props):node;}
+function presentationNode(node:any){if(node?.type==="ScorecardNavigationBoundary")return node.props.children(()=>{});return typeof node?.type==="function"&&["ScoreSummary","HandicapChart","SocialFeedSkeleton","RoundContent"].includes(node.type.name)?node.type(node.props):node;}
 export function uiNodes(node:any):UINode[]{node=presentationNode(node);return Array.isArray(node)?node.flatMap(uiNodes):node?.props?[node,...uiNodes(node.props.children)]:[];}
 export function uiText(node:any):string{node=presentationNode(node);return Array.isArray(node)?node.map(uiText).join(" ").replace(/\s+/g," ").trim():node?.props?uiText(node.props.children):typeof node==="string"||typeof node==="number"?String(node):"";}
 export function uiFind(tree:any,predicate:(n:UINode)=>boolean){const node=uiNodes(tree).find(predicate);assert.ok(node);return node;}
@@ -12,7 +12,8 @@ export function uiFind(tree:any,predicate:(n:UINode)=>boolean){const node=uiNode
 export function socialUI(file:string,boundaries:Record<string,any>={},globals:Record<string,unknown>={}) {
   const slots:any[]=[],effects:any[]=[];let cursor=0,pending:Array<()=>void>=[];
   const memo=(fn:any,deps:any[])=>{const i=cursor++;if(!slots[i]||!deps.every((d,j)=>Object.is(d,slots[i].deps[j])))slots[i]={deps,value:fn()};return slots[i].value;};
-  const react={useState(value:any){const i=cursor++;if(!(i in slots))slots[i]=typeof value==="function"?value():value;return[slots[i],(next:any)=>{slots[i]=typeof next==="function"?next(slots[i]):next;}];},useRef(value:any){return slots[cursor++]||=( {current:value});},useMemo:memo,useCallback(fn:any,deps:any[]){return memo(()=>fn,deps);},useEffect(fn:any,deps:any[]){const i=cursor++;if(effects[i]&&deps.every((d,j)=>Object.is(d,effects[i].deps[j])))return;effects[i]?.cleanup?.();effects[i]={deps};pending.push(()=>{effects[i].cleanup=fn();});}};
+  const effect=(fn:any,deps:any[])=>{const i=cursor++;if(effects[i]&&deps.every((d,j)=>Object.is(d,effects[i].deps[j])))return;effects[i]?.cleanup?.();effects[i]={deps};pending.push(()=>{effects[i].cleanup=fn();});};
+  const react={useState(value:any){const i=cursor++;if(!(i in slots))slots[i]=typeof value==="function"?value():value;return[slots[i],(next:any)=>{slots[i]=typeof next==="function"?next(slots[i]):next;}];},useRef(value:any){return slots[cursor++]||=( {current:value});},useMemo:memo,useCallback(fn:any,deps:any[]){return memo(()=>fn,deps);},useEffect:effect,useLayoutEffect:effect};
   const listeners=new Map<string,Set<(...args:any[])=>void>>();
   const add=(type:string,fn:any)=>{if(!listeners.has(type))listeners.set(type,new Set());listeners.get(type)!.add(fn);};
   const remove=(type:string,fn:any)=>listeners.get(type)?.delete(fn);

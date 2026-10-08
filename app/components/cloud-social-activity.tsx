@@ -13,6 +13,14 @@ import { NotificationSwitch } from "./notification-preferences";
 import { notificationsChanged } from "../../features/notifications/client";
 import Image from "next/image";
 import { mergeSocialCards, socialRelativeTime, pullRefreshDistance } from "../../lib/social-feed-presentation";
+import { socialPremiumScorecard } from "../../lib/social-premium-scorecard";
+import { ScorecardNavigationBoundary, type ScorecardDestination } from "./scorecard-boundary";
+
+export function socialScorecardDestination(card: SocialActivityCard): ScorecardDestination {
+  const premium = socialPremiumScorecard(card);
+  const id = `social:${card.id}`;
+  return premium ? { id, card: premium } : { id, summary: <div className="premiumCardIdentity"><div className="premiumIdentityText"><h2>{card.round?.courseName}</h2><p>{card.round?.date} · {card.round?.teeName || "Tee no registrado"}</p><b>{card.author.displayName}</b><p>{card.round?.holesPlayed} hoyos · {card.round?.totalOnly ? "Total declarado" : "Actividad compartida"}</p><p>No hay datos autorizados por hoyo para mostrar una tarjeta detallada.</p></div><div className="premiumScoreSummary"><span>Score gross</span><strong>{card.round?.ownerScore ?? "—"}</strong></div></div> };
+}
 
 const preferenceLabels: Array<[keyof Omit<SocialActivityPreferences, "updatedAt">, string]> = [
   ["enabledForFriends", "Permitir que mis amigos vean la actividad que elija compartir"],
@@ -71,12 +79,11 @@ export function ScoreSummary({round}:{round:NonNullable<SocialActivityCard["roun
   return <div className={styles.roundStats} aria-label="Resumen de score"><div className={styles.mainScore}><small>Score</small><strong>{round.ownerScore ?? "—"}</strong>{round.toPar!==undefined&&<span aria-label={`${round.toPar} contra par`}>{round.toPar>0?"+":""}{round.toPar===0?"E":round.toPar}</span>}</div>{([['Putts',round.putts],['GIR',round.girPct],['FIR',round.firPct]] as const).filter(([,value])=>value!==undefined).map(([label,value])=><div key={label}><small>{label}</small><b>{value}{label!=="Putts"?"%":""}</b></div>)}</div>;
 }
 
-export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh, onOpenAchievements, onOpenProfile, viewerName, viewerAvatarUrl }: {
+export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh, onOpenAchievements, onOpenProfile, viewerName, viewerAvatarUrl, onOpenScorecard }: {
   card: SocialActivityCard; viewerId: string; accessToken: string; onRefresh: () => Promise<void>; onOpenAchievements?: () => void;
   onOpenProfile?: (userId:string)=>void; viewerName?:string; viewerAvatarUrl?:string|null;
+  onOpenScorecard?: (card: SocialActivityCard) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const [detail, setDetail] = useState<SocialActivityCard | null>(null);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState<SocialComment[]>([]);
   const [text, setText] = useState("");
@@ -89,7 +96,6 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
   const live = useRef(true);
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
   const base = `/api/social/activity/${encodeURIComponent(card.id)}`;
-  const detailedRound = detail?.currentHash === card.currentHash ? detail.round : card.round;
   async function loadComments() {
     const result = await socialRequest<{ data: SocialComment[] }>(`${base}/comments`, accessToken);
     if (live.current) setComments(result.data);
@@ -116,14 +122,16 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
     await onRefresh();
   }
   const highlighted=card.achievements.length>0;
-  function openScorecard() {
-    if (expanded) { setExpanded(false); return; }
-    void act(async () => { const result = await socialRequest<{ data: SocialActivityCard }>(base, accessToken); if (live.current) { setDetail(result.data); setExpanded(true); } });
+  function openScorecard(open: (destination?: ScorecardDestination) => void) {
+    void act(async () => { const result = await socialRequest<{ data: SocialActivityCard }>(base, accessToken); if (live.current) {
+      if (result.data.id !== card.id || result.data.author.userId !== card.author.userId || result.data.roundId !== card.roundId || !result.data.round) throw new Error("La tarjeta ya no está disponible.");
+      if (onOpenScorecard) onOpenScorecard(result.data); else open(socialScorecardDestination(result.data));
+    } });
   }
-  return <article className={`${styles.card} ${highlighted?styles.highlight:""}`} aria-label={`${card.type === "EQUIPMENT_UPDATED" ? "Equipo" : "Ronda"} de ${card.author.displayName}`}>
-    <header className={styles.author}><ProfileAvatarMedia className={styles.avatar} value={card.author.avatarUrl} fallback={card.author.displayName[0] || "G"} /><div>{onOpenProfile?<button type="button" className={styles.authorLink} onClick={()=>onOpenProfile(card.author.userId)}>{card.author.displayName}</button>:<b>{card.author.displayName}</b>}<small>{card.type==="EQUIPMENT_UPDATED"?"Actualizó su bolsa de golf":card.round?`jugó en ${card.round.courseName}`:"Consiguió un logro"}</small><small>{socialRelativeTime(card.createdAt)} · {card.audience === "OWNER" ? "Privado" : "Amigos"}</small></div><details className={styles.postMenu}><summary aria-label={`Acciones de la publicación de ${card.author.displayName}`}><BackyardIcon name="more" size={23}/></summary><div>{onOpenProfile&&<button type="button" onClick={()=>onOpenProfile(card.author.userId)}>Ver perfil</button>}{card.round&&<button type="button" disabled={busy} onClick={openScorecard}>{expanded?"Cerrar tarjeta":"Ver scorecard"}</button>}<span>{dateLabel(card.createdAt)} · {card.audience==="OWNER"?"Sólo tú":"Compartido con amigos"}</span></div></details></header>
+  const renderPost = (open: (destination?: ScorecardDestination) => void) => <article className={`${styles.card} ${highlighted?styles.highlight:""}`} aria-label={`${card.type === "EQUIPMENT_UPDATED" ? "Equipo" : "Ronda"} de ${card.author.displayName}`}>
+    <header className={styles.author}><ProfileAvatarMedia className={styles.avatar} value={card.author.avatarUrl} fallback={card.author.displayName[0] || "G"} /><div>{onOpenProfile?<button type="button" className={styles.authorLink} onClick={()=>onOpenProfile(card.author.userId)}>{card.author.displayName}</button>:<b>{card.author.displayName}</b>}<small>{card.type==="EQUIPMENT_UPDATED"?"Actualizó su bolsa de golf":card.round?`jugó en ${card.round.courseName}`:"Consiguió un logro"}</small><small>{socialRelativeTime(card.createdAt)} · {card.audience === "OWNER" ? "Privado" : "Amigos"}</small></div><details className={styles.postMenu}><summary aria-label={`Acciones de la publicación de ${card.author.displayName}`}><BackyardIcon name="more" size={23}/></summary><div>{onOpenProfile&&<button type="button" onClick={()=>onOpenProfile(card.author.userId)}>Ver perfil</button>}{card.round&&<button type="button" disabled={busy} onClick={() => openScorecard(open)}>Ver scorecard</button>}<span>{dateLabel(card.createdAt)} · {card.audience==="OWNER"?"Sólo tú":"Compartido con amigos"}</span></div></details></header>
     {highlighted&&<p className={styles.highlightLabel}><svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M7 3h10v6a5 5 0 0 1-10 0zM7 5H3v3a4 4 0 0 0 4 4m10-7h4v3a4 4 0 0 1-4 4M12 14v6M8 21h8"/></svg>{card.achievements[0]}</p>}
-    {card.round && <><ScoreSummary round={card.round}/><button type="button" className={styles.scorecardLink} disabled={busy} aria-expanded={expanded} onClick={openScorecard}><span>{card.round.holesPlayed} hoyos{card.round.totalOnly?" · Total declarado":""}{card.round.teeName?` · ${card.round.teeName}`:""}</span><span>{expanded?"Cerrar":"Ver tarjeta"} <BackyardIcon name="chevron" size={14}/></span></button></>}
+    {card.round && <><ScoreSummary round={card.round}/><button type="button" className={styles.scorecardLink} disabled={busy} onClick={() => openScorecard(open)}><span>{card.round.holesPlayed} hoyos{card.round.totalOnly?" · Total declarado":""}{card.round.teeName?` · ${card.round.teeName}`:""}</span><span>{card.round.totalOnly ? "Ver resumen" : "Ver tarjeta"} <BackyardIcon name="chevron" size={14}/></span></button></>}
     {card.type==="EQUIPMENT_UPDATED"&&<section className={styles.bag}><h3>Mi bolsa de golf</h3><small>EQUIPO ACTUAL</small>{card.equipment?.items.length?<>{(showBag?card.equipment.items:card.equipment.items.slice(0,3)).map(item=><div className={styles.bagItem} key={item.id}>{item.imageUrl?<Image src={item.imageUrl} alt={`${item.brand} ${item.model}`} width={56} height={56} loading="lazy" />:<span className={styles.clubIcon}><BackyardIcon name={item.category==="Bola"?"ball":"club"} size={30}/></span>}<small>{item.category}</small><b>{item.brand} {item.model}</b></div>)}{card.equipment.items.length>3&&<button type="button" className={styles.bagLink} aria-expanded={showBag} onClick={()=>setShowBag(v=>!v)}>{showBag?"Mostrar menos":"Ver bolsa"} ›</button>}</>:<p>El resumen del equipo no está disponible por el momento.</p>}</section>}
     {card.round?.leaderboard&&<section className={styles.leaderboard}><header><div><h3>Resultados de la ronda</h3><small>{card.round.leaderboard.length} jugadores · Score bruto</small></div>{card.round.leaderboard.length>3&&<button type="button" className={styles.bagLink} aria-expanded={showPlayers} onClick={()=>setShowPlayers(v=>!v)}>{showPlayers?"Ver menos":"Ver todos"} <BackyardIcon name="chevron" size={14}/></button>}</header><ol>{(showPlayers?card.round.leaderboard:card.round.leaderboard.slice(0,3)).map((player,i)=><li key={player.userId}><span>{i+1}</span><ProfileAvatarMedia className={styles.miniAvatar} value={player.avatarUrl} fallback={player.name[0]} /><b>{player.name}</b><strong>{player.score}</strong><small>{player.toPar===undefined?`${player.holes} H`:player.toPar===0?"E":`${player.toPar>0?"+":""}${player.toPar}`}</small></li>)}</ol></section>}
     {card.courseEvent && <p>Nuevo campo jugado · fuera de su Home Club</p>}
@@ -134,7 +142,6 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
       <button type="button" disabled={busy} aria-pressed={card.likedByMe} onClick={() => void act(like)}><BackyardIcon name="heart" size={23}/><span>Me gusta</span></button>
       <button type="button" disabled={busy} aria-expanded={showComments} onClick={() => { const next = !showComments; setShowComments(next); if (next) void act(loadComments); }}><BackyardIcon name="comment" size={23}/><span>Comentar</span></button>
     </div>
-    {expanded && detailedRound && <section className={styles.roundDetails} aria-label="Tarjeta de la ronda"><h4>Tarjeta guardada</h4><p>{detailedRound.teeName || "Tee no registrado"} · Par {detailedRound.coursePar ?? "—"}</p>{detailedRound.scorecard?.length ? <table><thead><tr><th>Hoyo</th><th>Par</th><th>Score</th></tr></thead><tbody>{detailedRound.scorecard.map((hole) => <tr key={hole.hole}><th>{hole.hole}</th><td>{hole.par}</td><td>{hole.score ?? "—"}</td></tr>)}</tbody></table> : <p>No hay captura suficiente para mostrar el detalle.</p>}</section>}
     {card.canAttest && <button type="button" className={styles.attestButton} disabled={busy} onClick={() => { if (window.confirm("Confirmo que esta tarjeta corresponde a la ronda que jugué con este jugador. No es una certificación oficial.")) void act(attest, "Attest guardado para esta versión de la tarjeta."); }}>Atestar esta tarjeta</button>}
     {card.isAttestedByMe && <p className={styles.attest}>Ya atestaste esta versión de la tarjeta.</p>}
     {card.requiresParticipantConfirmation && card.participantPlayerKey && <button type="button" className={styles.attestButton} disabled={busy} onClick={() => { if (window.confirm("Confirmo que participé en esta ronda con mi cuenta. Esto no atesta todavía la tarjeta de otro jugador.")) void act(async () => { await socialRequest(`/api/social/rounds/${encodeURIComponent(card.roundId!)}/links`, accessToken, { method: "POST", body: { playerKey: card.participantPlayerKey, expectedVersion: card.sourceVersion, expectedHash: card.currentHash } }); await onRefresh(); }, "Participación confirmada. Ya puedes revisar y atestar la tarjeta."); }}>Confirmar mi participación</button>}
@@ -145,6 +152,7 @@ export function SocialRoundActivityCard({ card, viewerId, accessToken, onRefresh
     </section>}
     {message && <p className={styles.notice} role="status">{message}</p>}
   </article>;
+  return onOpenScorecard ? renderPost(() => undefined) : <ScorecardNavigationBoundary originLabel="publicación">{renderPost}</ScorecardNavigationBoundary>;
 }
 
 const notificationLabels: Record<SocialNotification["type"], string> = { like: "Recibiste un like", comment: "Nuevo comentario", attest: "Un compañero atestó tu tarjeta", friend_achievement: "Un amigo consiguió un logro", equipment: "Un amigo actualizó su bolsa", friend_request: "Nueva solicitud de amistad", friend_accepted:"Solicitud aceptada",group_invite:"Invitación a un grupo",round_invite:"Invitación a una ronda",round_finished:"Resultados de ronda disponibles", round_started: "Un compañero inició una ronda contigo · Ver ronda", scorecard_ready: "Registraron tu tarjeta · Revisar tarjeta" };
@@ -196,6 +204,7 @@ export function CloudSocialActivity({ viewerId, accessToken, localRoundId, frien
   const [loading, setLoading] = useState(true);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [destination, setDestination] = useState<ScorecardDestination>();
   const paging = useRef(false);
   const live = useRef(true);
   const feed=useRef<HTMLElement>(null), sentinel=useRef<HTMLDivElement>(null);
@@ -228,6 +237,16 @@ export function CloudSocialActivity({ viewerId, accessToken, localRoundId, frien
     else setLoading(false);
     return () => { live.current = false; controller.abort(); };
   }, [accessToken, refresh]);
+  useEffect(() => {
+    if (!accessToken) return;
+    const id = new URLSearchParams(window.location.search).get("card")?.match(/^social:([0-9a-f-]{36})$/i)?.[1];
+    if (!id) return;
+    const controller = new AbortController();
+    void socialRequest<{ data: SocialActivityCard }>(`/api/social/activity/${encodeURIComponent(id)}`, accessToken, { signal: controller.signal })
+      .then(result => { if (!controller.signal.aborted && result.data.id === id && result.data.round) setDestination(socialScorecardDestination(result.data)); })
+      .catch(error => { if (!controller.signal.aborted) setMessage(socialErrorMessage(error)); });
+    return () => controller.abort();
+  }, [accessToken]);
   useEffect(()=>{
     if(!accessToken||localRoundId)return;
     const foreground=()=>{if(document.visibilityState==="visible")void refresh().catch(error=>setMessage(socialErrorMessage(error)));};
@@ -249,12 +268,12 @@ export function CloudSocialActivity({ viewerId, accessToken, localRoundId, frien
     return()=>{node.removeEventListener("touchstart",begin);node.removeEventListener("touchmove",move);node.removeEventListener("touchend",end);node.removeEventListener("touchcancel",cancel);};
   },[accessToken,localRoundId,refresh]);
   if (!accessToken) return <section className={styles.empty}><h2>Rondas y amigos</h2><p>Inicia sesión para compartir, comentar o confirmar tarjetas. Tu actividad local sigue siendo privada.</p></section>;
-  return <section ref={feed} className={styles.feed} aria-label="Actividad social guardada">
+  return <ScorecardNavigationBoundary destination={destination} originLabel="Feed">{open => <section ref={feed} className={styles.feed} aria-label="Actividad social guardada">
     {(pull>0||refreshing&&!loading)&&<div className={styles.pullIndicator} role="status">{refreshing?"Actualizando…":pull>=64?"Suelta para actualizar":"Desliza para actualizar"}</div>}
     {loading && <SocialFeedSkeleton/>}
     {message && <div className={styles.notice} role="status"><p>{message}</p><button type="button" onClick={() => void refresh().catch((error) => setMessage(socialErrorMessage(error)))}>Reintentar</button></div>}
     {!loading && !message && !cards.length && <div className={styles.empty}><h2>{localRoundId ? "Tarjeta social pendiente" : emptyCopy?.active!==false&&emptyCopy?.title ? emptyCopy.title : "Aún no hay actividad compartida"}</h2><p>{localRoundId ? "Estará disponible cuando la ronda termine y su sincronización cloud se confirme." : emptyCopy?.active!==false&&emptyCopy?.body ? emptyCopy.body : "Tus preferencias controlan qué compartes. No publicamos rondas en tiempo real."}</p></div>}
-    {cards.map((card) => <SocialRoundActivityCard key={`${viewerId}:${card.id}`} card={card} viewerId={viewerId} viewerName={viewerName} viewerAvatarUrl={viewerAvatarUrl} accessToken={accessToken} onRefresh={()=>refreshCard(card.id)} onOpenAchievements={onOpenAchievements} onOpenProfile={onOpenProfile} />)}
+    {cards.map((card) => <SocialRoundActivityCard key={`${viewerId}:${card.id}`} card={card} viewerId={viewerId} viewerName={viewerName} viewerAvatarUrl={viewerAvatarUrl} accessToken={accessToken} onRefresh={()=>refreshCard(card.id)} onOpenAchievements={onOpenAchievements} onOpenProfile={onOpenProfile} onOpenScorecard={detail => { const next = socialScorecardDestination(detail); setDestination(next); open(next); }} />)}
     {nextCursor && <div ref={sentinel} className={styles.loadMore} role="status">{loadingMore?"Cargando más actividad…":""}<button type="button" className={styles.accessibleMore} disabled={loadingMore||refreshing} onClick={()=>void loadMore()}>Cargar siguiente página</button></div>}
-  </section>;
+  </section>}</ScorecardNavigationBoundary>;
 }

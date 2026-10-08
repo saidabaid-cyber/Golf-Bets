@@ -108,7 +108,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
   })) || [], [recap.golf, recap.meta.lifecycleState]);
 
   const scorecard = useMemo(() => {
-    if (!recap.golf) return undefined;
+    if (!recap.golf || !recap.golf.scorecard.some(hole => hole.players.some(player => player.score !== undefined))) return undefined;
     const players: Player[] = recap.golf.leaderboard.map((player) => ({
       id: player.playerId,
       name: player.name,
@@ -147,6 +147,7 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
   ].filter((part): part is string => Boolean(part));
 
   const content = (openScorecard: () => void) => <div className="historicalDetail">
+    {scorecard && <button type="button" className="secondary historicalScorecardToggle" onClick={openScorecard}>Ver tarjeta completa</button>}
     {accountUserId && attributableHistory([round], accountUserId).length > 0 && <RoundAchievementSummary round={round} priorRounds={priorRounds} accountUserId={accountUserId} />}
     {accountUserId && accessToken && <RoundSharingPanel key={`${accountUserId}:${round.id}`} round={round} userId={accountUserId} accessToken={accessToken} />}
     {accountUserId && accessToken && round.scorekeeping?.version === 1 && !round.cloudReadOnly && round.lifecycleState === "completed" && <OwnerRoundFinalizeSync round={round} userId={accountUserId} accessToken={accessToken} />}
@@ -177,11 +178,6 @@ export function HistoricalRoundDetail({ round, priorRounds, accountUserId, acces
       <section className="card historicalGolfResult">
         <GolfLeaderboard rows={leaderboardRows} mode={leaderboardMode} onModeChange={setLeaderboardMode} context="history" />
       </section>
-      <button
-        type="button"
-        className="secondary historicalScorecardToggle"
-        onClick={openScorecard}
-      >Ver tarjeta completa</button>
     </> : <section className="card historicalUnavailable">
       <h2>Resultado de golf no disponible</h2>
       <p>Este registro no contiene campo, jugadores y scores suficientes para reconstruir una clasificación confiable.</p>

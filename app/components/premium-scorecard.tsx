@@ -9,6 +9,7 @@ import { QuickHoleEditor } from "./quick-hole-editor";
 
 export type PremiumScorecardProps = {
   roundId: string; course: Course; players: Player[]; order: number[]; scores: ScoreRows;
+  originLabel?: string;
   date?: string; lifecycle?: RoundLifecycleState; ownerId?: string; accountUserId?: string;
   putts?: PuttsByHole; advancedStats?: AdvancedStatsByHole; assignments?: PlayerTeeAssignmentSnapshot[];
   shots?: readonly RoundShotSnapshot[]; clubs?: readonly string[]; access?: QuickEditAccess;
@@ -87,7 +88,7 @@ export function PremiumScorecard(props: PremiumScorecardProps & {
   const holeNumber = props.view.kind === 'hole' ? props.view.hole : null;
   const detail = cells.find(cell => cell.hole.number === holeNumber);
   const tee = props.assignments?.find(value => value.playerId === player?.id)?.teeName ?? props.course.teeName;
-  const header = <header className="premiumCardHeader"><button type="button" aria-label={detail ? 'Volver a tarjeta' : 'Volver a ronda'} onClick={props.onBack}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" /></svg></button><h1>{detail ? `Hoyo ${detail.hole.displayLabel ?? detail.hole.number}` : 'Tarjeta de golf'}</h1><span className="premiumCardStatus">{editable ? 'Editable' : 'Solo lectura'}</span></header>;
+  const header = <header className="premiumCardHeader"><button type="button" aria-label={detail ? 'Volver a tarjeta' : `Volver a ${props.originLabel ?? 'ronda'}`} onClick={props.onBack}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7" /></svg></button><h1>{detail ? `Hoyo ${detail.hole.displayLabel ?? detail.hole.number}` : 'Tarjeta de golf'}</h1><span className="premiumCardStatus">{editable ? 'Editable' : 'Solo lectura'}</span></header>;
   const details: Array<[string, React.ReactNode]> = detail ? [
     ...(recordedNumber(detail.hole.strokeIndex, 1, 18) !== null ? [['Ventaja · SI', detail.hole.strokeIndex] as [string, React.ReactNode]] : []),
     ...(detail.hole.par === 3 ? [['FIR', 'No aplicable · par 3'] as [string, React.ReactNode]] : detail.fir !== null ? [['FIR', detail.fir ? 'Fairway' : 'Fairway fallado'] as [string, React.ReactNode]] : []),
