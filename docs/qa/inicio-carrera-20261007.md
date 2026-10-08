@@ -46,3 +46,4 @@ No se copiarán valores ni recursos propietarios de las referencias.
 - A: auditoría y checkpoint; datos QA de lectura preservados.
 - B–K: registrar validaciones y evidencias al completar cada bloque.
 - B: Feed compacto con Score/Vs par separados y semántica bajo/par/sobre; avatar abre perfil; Inicio explícito reinicia Feed sin interferir con Back de tarjeta. 26 tests relevantes PASS. Comparación de componente React real a 390px con fixtures aislados; métricas ausentes ocultas y cero visible. No publicación de fixtures en DEV.
+- C: Amigos y Agregar amigos conservan APIs, QR, solicitudes y privacidad. Filas/solicitudes/QR compactados sin HCP ni distancias ficticias. Comparación estructural con referencias 08/09; 33 tests de comunidad y acciones PASS. Confirmación visual final pendiente en DEV real.

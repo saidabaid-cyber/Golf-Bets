@@ -71,3 +71,9 @@
 @media(min-width:560px){.panel .requests>li{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:15px}.panel .requests .actions{width:auto;min-width:185px}.panel .requests .actions>button{flex:0 0 auto;padding:8px 17px}.person{min-height:78px}.identity b{font-size:18px}.avatar{width:52px;height:52px}}
 @media(max-width:360px){.qrOptions>button{padding:13px 9px;gap:7px}.qrOptions svg{width:26px;height:26px}.qrOptions b{font-size:17px}.qrOptions small{font-size:10px}.counts>span{gap:6px;padding:11px 6px}.counts svg{width:21px;height:21px}.counts b{font-size:25px}.counts small{font-size:10px}.identity b{font-size:15px}}
 @media(prefers-reduced-motion:reduce){.skeletonList>span{animation:none}}
+/* Keep the social list and QR choices within one phone screen where possible. */
+.screen{gap:12px}.counts>span{min-height:62px;padding:9px 8px}.person{min-height:68px}.panel .person{padding:8px 0}
+.panel .requests>li{grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px}.panel .requests .actions{width:auto;max-width:165px;gap:5px;flex-wrap:nowrap}.panel .requests .actions>button{padding:8px 10px;font-size:12px!important}
+.panel .requests .identity small:last-child{display:none}.qrOptions>button{min-height:86px;padding:12px 10px;gap:8px}.qrOptions>button>span{min-width:0}.qrOptions b{white-space:normal;font-size:17px}.qrOptions small{line-height:1.35}
+.panel .requests .cancel{white-space:normal;max-width:83px}.requests .state{padding:7px 9px;font-size:11px}
+@media(max-width:360px){.panel .requests>li{grid-template-columns:minmax(0,1fr)}.panel .requests .actions{justify-self:end;max-width:none}.qrOptions b{font-size:16px}.panel h3,.sectionHeader h3{font-size:21px}}
