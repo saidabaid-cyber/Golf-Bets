@@ -85,7 +85,7 @@ test("el detalle histórico presenta golf, economía y liquidación persistida s
   assert.match(markup, /Pars/);
   assert.match(markup, /Putts/);
   assert.match(markup, /Ver tarjeta completa/);
-  assert.match(markup, /aria-controls="historical-full-scorecard"/);
+  assert.doesNotMatch(markup, /aria-controls="historical-full-scorecard"/);
   assert.doesNotMatch(markup, /NaN|Infinity|undefined/);
 });
 
@@ -154,8 +154,8 @@ test("el recap histórico conserva controles táctiles y contención horizontal 
   assert.match(css, /\.scorecardZoom button\{min-height:44px\}/);
   assert.match(css, /@media\(max-width:430px\)[\s\S]*\.historicalEconomyGrid,\.historicalCategoryList,\.historicalStatsGrid\{grid-template-columns:minmax\(0,1fr\)\}/);
   assert.match(css, /\.historicalDetail \.tableWrap\{max-width:100%;/);
-  assert.match(component, /<FullScorecard/);
-  assert.match(component, /context="history"/);
+  assert.match(component, /<ScorecardBoundary/);
+  assert.doesNotMatch(component, /<FullScorecard/);
   // Stored Index evidence can be validated for its new historical eligibility
   // message. Financial results must still never invoke the mutable bet engine.
   assert.doesNotMatch(component, /\bcalculate\s*\(|buildPersonalOpponentHistory|resultDetails/);
