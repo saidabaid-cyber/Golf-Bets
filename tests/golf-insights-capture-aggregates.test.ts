@@ -74,10 +74,11 @@ test("Stats muestra categorías reales, dirección completa y muestras de captur
     1: { owner: { greenSideBunkerCount: 0, fairwayBunkerCount: 2, teeDirection: "center", outOfBoundsCount: 0 } },
     2: { owner: { bunkerCount: 1, teeDirection: "left", outOfBounds: true } },
   })]);
-  const markup = renderToStaticMarkup(createElement(StatsDashboard, { insights, onOpenHistory: () => undefined, onOpenRound: () => undefined }));
-  for (const label of ["Green-side bunker", "Fairway bunker", "Bunker sin clasificar", "OB", "Muy izquierda", "Izquierda", "HIT", "Derecha", "Muy derecha"]) assert.match(markup, new RegExp(label));
+  const props = { insights, onOpenHistory: () => undefined, onOpenRound: () => undefined };
+  const markup = renderToStaticMarkup(createElement(StatsDashboard, { ...props, initialCategory: "driving" })) + renderToStaticMarkup(createElement(StatsDashboard, { ...props, initialCategory: "approach" }));
+  for (const label of ["Bunker de green", "Bunker de fairway", "Bunker sin clasificar", "OB", "Muy izquierda", "Izquierda", "Centro", "Derecha", "Muy derecha"]) assert.match(markup, new RegExp(label));
   assert.match(markup, /Dirección de 2 salidas capturadas/);
-  assert.match(markup, /snapshot anterior/);
+  assert.match(markup, /captura anterior/);
   assert.match(markup, /OB no se suma a penalidades/);
   assert.doesNotMatch(markup, /NaN|Infinity|undefined/);
 });

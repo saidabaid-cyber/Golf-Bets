@@ -1,3 +1,7 @@
+import * as statsNavigation from "../lib/golf-stats-navigation";
+import * as captureStatistics from "../lib/golf-capture-statistics";
+import * as careerStatistics from "../lib/career-statistics";
+import * as statsDomain from "../features/stats/domain";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -115,7 +119,10 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
     "limits": { MAX_SCORECARD_PHOTOS: 4 },
     "live-questions": { classifyLiveQuestion: () => "score", liveQuestionFacts: () => ({}) },
     "client": { MAX_LAUNCH_MONITOR_PHOTOS: 4, prepareLaunchMonitorPhotos: async () => options.extraction ? [{ id: "launch-qa-id" }] : [], recordProductEvent: async () => undefined },
-    "domain": { buildGolfTrends: () => [] },
+    "domain": statsDomain,
+    "golf-stats-navigation": statsNavigation,
+    "golf-capture-statistics": captureStatistics,
+    "career-statistics": careerStatistics,
     "insights": { structuredGolfInsightInput: () => ({ sampleRounds: 1 }) },
     "launch-monitor": options.extraction ? launchSchema : { normalizeLaunchMonitorVisionExtraction: () => ({ shots: [] }) },
     "golf-equipment": golfEquipment,
@@ -147,7 +154,7 @@ function featureHarness(file: string, options: { active?: boolean; remoteError?:
     accessToken: options.guest ? undefined : "qa-token", requiresRemoteConsent: !options.guest,
     storageOwnerId: "qa-user", userId: "qa-user",
     consentOwnerId: "qa-user", scoreboard: { status: "ACTIVE" },
-    insights: { scoredRounds: 1, scoreScopeHoles: 18, scoreCohorts: { 18: { recentRounds: [], holeCount: 18, rounds: 1 } }, advancedRounds: 0 },
+    insights: { recentRounds: [], scoredRounds: 1, scoreScopeHoles: 18, scoreCohorts: { 18: { recentRounds: [], holeCount: 18, rounds: 1 } }, advancedRounds: 0 },
     round: { roundId: "qa-round", players: [], roundHoles: 18, startHole: 1, course: { name: "QA" } },
     onConfirm: () => undefined, onManualEdit: () => undefined, onCancel: () => undefined,
     targetClub: "DRIVER", capturedCount: 0,

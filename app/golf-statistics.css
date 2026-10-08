@@ -1,0 +1,54 @@
+.golfStats { min-width:0; display:grid; gap:12px; color:var(--by-forest); }
+.golfStatsHeader { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.golfStatsHeader h1 { margin:0; font:700 26px var(--by-editorial,Georgia,serif); }
+.golfStatsHeader button,.golfStatsEmpty button { border:0; background:var(--by-sage); color:var(--by-forest); border-radius:24px; padding:10px 16px; min-height:44px; cursor:pointer; }
+.golfStatsTabs { display:flex; gap:3px; overflow-x:auto; scrollbar-width:none; background:var(--by-sage); padding:4px; border-radius:26px; }
+.golfStatsTabs button { flex:1 0 auto; min-height:40px; padding:8px 10px; border:0; border-radius:24px; background:none; color:var(--by-forest); font-size:12px; cursor:pointer; }
+.golfStatsTabs button[aria-pressed="true"] { background:var(--by-forest); color:#fff; }
+.golfStatsControls { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.golfStatsControls label { display:flex; align-items:center; gap:8px; font-size:12px; flex:1; min-width:0; }
+.golfStatsControls select { min-width:0; width:100%; min-height:44px; border:1px solid var(--by-line); background:var(--by-paper); border-radius:12px; padding:8px; color:var(--by-forest); }
+.golfStatsControls details { flex-basis:100%; font-size:12px; }
+.golfStats summary { cursor:pointer; min-height:44px; align-content:center; }
+.golfStatsSample { margin:0; font-size:12px; color:var(--by-muted); }
+.golfStatsPanel { padding:14px; border:1px solid var(--by-line); border-radius:18px; background:var(--by-paper); min-width:0; }
+.golfStats h2 { font:700 20px var(--by-editorial,Georgia,serif); margin:0 0 8px; }
+.golfStats p,.golfStats small { color:var(--by-muted); }
+.golfStats p { font-size:12px; line-height:1.5; margin:8px 0; }
+.golfStats .betaStatTiles { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
+.golfStats .betaStatTiles article { padding:10px 6px; background:var(--by-sage); border:0; border-radius:12px; min-width:0; display:grid; gap:4px; }
+.golfStats .betaStatTiles b { font:700 25px var(--by-editorial,Georgia,serif); color:var(--by-forest); line-height:1.1; }
+.golfStats .betaStatTiles span { font-size:12px; }
+.golfStats .betaStatTiles small { font-size:10px; overflow-wrap:anywhere; }
+.golfStats .golfStatsThree { grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); }
+.golfStats .sectionTitle { gap:8px; align-items:start; }
+.golfStats .sectionTitle>span { font-size:12px; white-space:nowrap; }
+.golfStats .betaTrendDates { font-size:10px; gap:4px; }
+.golfStats .betaTrendDates span:nth-child(even) { visibility:hidden; }
+.golfStats .betaRecentScores button { min-height:64px; gap:12px; }
+.golfStats .betaRecentScores strong { font-size:23px; }
+.golfStats .betaRecentScores small { display:block; font-size:12px; line-height:1.5; }
+.golfStatsBars { display:grid; gap:14px; margin-top:16px; }
+.golfStatsBars>div { display:grid; grid-template-columns:minmax(98px,1fr) minmax(40px,1fr) 36px; align-items:center; gap:8px; font-size:12px; }
+.golfStatsBars>div>span { display:flex; align-items:center; gap:8px; }
+.golfStatsBars>div>div { background:var(--by-sage); height:8px; border-radius:8px; overflow:hidden; }
+.golfStatsBars i { background:var(--by-forest); display:block; height:100%; border-radius:8px; }
+.golfStatsBars b { text-align:right; }
+.golfStatsBars b small { display:block; font-size:10px; font-weight:400; }
+.golfStatsSymbol { width:17px; height:17px; flex:none; background:none!important; border:1px solid var(--by-gold); }
+.golfStatsSymbol[data-result="birdie"],.golfStatsSymbol[data-result="eagle"] { border-radius:50%; border-color:var(--by-forest); }
+.golfStatsSymbol[data-result="eagle"],.golfStatsSymbol[data-result="double"] { outline:1px solid currentColor; outline-offset:2px; }
+.golfStatsSymbol[data-result="par"] { border:0; }
+.golfStatsSymbol[data-result="par"]::after { content:"—"; }
+.golfStatsEmpty { padding:20px 14px; border:1px solid var(--by-line); background:var(--by-paper); border-radius:18px; text-align:center; }
+.golfStatsEmpty h2 { font-size:21px; }
+.golfStatsRate { text-align:center; }
+.golfStatsRing { margin:20px auto; width:128px; height:128px; display:grid; place-items:center; border-radius:50%; }
+.golfStatsRing b { background:var(--by-paper); border-radius:50%; width:100px; height:100px; display:grid; place-items:center; font:700 30px var(--by-editorial,Georgia,serif); }
+.golfStatsPuttTrend { display:flex; align-items:end; justify-content:space-around; gap:6px; overflow-x:auto; margin-top:18px; }
+.golfStatsPuttTrend>div { display:grid; justify-items:center; gap:6px; min-width:30px; font-size:12px; }
+.golfStatsPuttTrend i { width:14px; background:var(--by-forest); border-radius:4px 4px 0 0; }
+.golfStatsPuttTrend small { font-size:10px; white-space:nowrap; }
+.golfStatsAudit { font-size:12px; padding:0 8px; color:var(--by-muted); }
+.golfStats button:focus-visible,.golfStats summary:focus-visible { outline:2px solid var(--by-gold); outline-offset:2px; }
+@media(max-width:350px) { .golfStats .betaStatTiles { grid-template-columns:repeat(2,minmax(0,1fr)); } .golfStatsHeader h1 { font-size:23px; } }

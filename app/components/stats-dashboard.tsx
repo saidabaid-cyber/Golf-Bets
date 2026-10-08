@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { GolfInsights, ScoredRoundInsight } from "../../lib/golf-insights";
+import { buildGolfInsights, type GolfInsights, type ScoredRoundInsight } from "../../lib/golf-insights";
 import type { RoundSnapshot } from "../../lib/types";
 import { buildFilteredGolfInsights, buildGolfTrends, filterStatsRounds, type StatsWindow } from "../../features/stats/domain";
 import { structuredGolfInsightInput, type GolfInsightExplanation } from "../../features/ai/insights";
@@ -10,9 +10,14 @@ import { requestBackyardAi } from "../../lib/backyard-ai/client-api";
 import { resolveAuthoritativeAiProcessingConsent } from "../../lib/backyard-ai/consent-client";
 import { browserAiProcessingConsentStorage, hasActiveAiProcessingConsent } from "../../lib/backyard-ai/processing-consent";
 import { AI_PROVIDER_PROCESSING_CONSENT, backyardAiProviderConsent } from "../../lib/backyard-ai/privacy";
+import { golfCaptureStatistics } from "../../lib/golf-capture-statistics";
+import { golfStatsSelection } from "../../lib/golf-stats-navigation";
+import { ownCareerHistory } from "../../lib/career-statistics";
 import { recordProductEvent } from "../../features/analytics/client";
 
+export type StatsCategory = "summary" | "scoring" | "putting" | "driving" | "approach";
 export type StatsDashboardProps = {
+  initialCategory?: StatsCategory;
   insights: GolfInsights;
   rounds?: RoundSnapshot[];
   consentOwnerId?: string;
@@ -50,6 +55,7 @@ function roundDate(value: string) {
 }
 
 type TrendMode = "gross" | "relative";
+const NO_SCORED_ROUNDS: ScoredRoundInsight[] = [];
 
 function trendValue(round: ScoredRoundInsight, mode: TrendMode) {
   return mode === "gross" ? round.gross : round.relativeToPar;
@@ -77,7 +83,7 @@ function TrendChart({ rounds, mode }: { rounds: ScoredRoundInsight[]; mode: Tren
     round,
     value: trendValue(round, mode),
     x: ordered.length === 1 ? 150 : 18 + (index * 264) / (ordered.length - 1),
-    y: 15 + ((trendValue(round, mode) - low) / range) * 62,
+    y: 77 - ((trendValue(round, mode) - low) / range) * 62,
   }));
   const metricLabel = mode === "gross" ? "score bruto" : "resultado contra par";
 
@@ -94,12 +100,14 @@ function TrendChart({ rounds, mode }: { rounds: ScoredRoundInsight[]; mode: Tren
   </div>;
 }
 
-export function StatsDashboard({ insights: suppliedInsights, rounds = [], consentOwnerId, accessToken, requiresRemoteConsent = false, onOpenHistory, onOpenRound }: StatsDashboardProps) {
-  const [requestedScope, setRequestedScope] = useState<9 | 18>();
+export function StatsDashboard({ insights: suppliedInsights, initialCategory = "summary", rounds = [], consentOwnerId, accessToken, requiresRemoteConsent = false, onOpenHistory, onOpenRound }: StatsDashboardProps) {
+  const [selection] = useState(() => golfStatsSelection(typeof window === "undefined" ? "" : window.location?.search ?? ""));
+  const [category, setCategory] = useState<StatsCategory>(selection.view === "summary" ? initialCategory : selection.view);
+  const [requestedScope, setRequestedScope] = useState<9 | 18 | undefined>(selection.scope);
   const [trendMode, setTrendMode] = useState<TrendMode>("gross");
-  const [statsWindow, setStatsWindow] = useState<StatsWindow>(10);
-  const [courseFilter, setCourseFilter] = useState("");
-  const [teeFilter, setTeeFilter] = useState("");
+  const [statsWindow, setStatsWindow] = useState<StatsWindow>(selection.window);
+  const [courseFilter, setCourseFilter] = useState(selection.course);
+  const [teeFilter, setTeeFilter] = useState(selection.tee);
   const [aiBusy, setAiBusy] = useState(false);
   const [aiMessage, setAiMessage] = useState("");
   const [aiExplanation, setAiExplanation] = useState<GolfInsightExplanation | null>(null);
@@ -107,13 +115,24 @@ export function StatsDashboard({ insights: suppliedInsights, rounds = [], consen
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const filters = useMemo(() => ({ window: statsWindow, ...(courseFilter ? { courseName: courseFilter } : {}), ...(teeFilter ? { teeName: teeFilter } : {}) }), [courseFilter, statsWindow, teeFilter]);
-  const filteredRounds = useMemo(() => rounds.length ? filterStatsRounds(rounds, filters) : [], [filters, rounds]);
-  const insights = useMemo(() => rounds.length ? buildFilteredGolfInsights(rounds, filters) : suppliedInsights, [filters, rounds, suppliedInsights]);
-  const capture = insights.capture;
+  const ownedRounds = useMemo(() => consentOwnerId ? ownCareerHistory(rounds, consentOwnerId) : rounds, [rounds, consentOwnerId]);
+  const baseInsights = useMemo(() => rounds.length ? buildGolfInsights(ownedRounds) : suppliedInsights, [rounds.length, ownedRounds, suppliedInsights]);
+  const scope = requestedScope ?? initialScoreScope(baseInsights);
+  const scopedRounds = useMemo(() => { const eligible = new Set(baseInsights.recentRounds.filter(row => row.holeCount === scope).map(row => row.id)); return ownedRounds.filter(round => eligible.has(round.id)); }, [ownedRounds, scope, baseInsights]);
+  const filteredRounds = useMemo(() => filterStatsRounds(scopedRounds, filters), [filters, scopedRounds]);
+  const insights = useMemo(() => rounds.length ? buildFilteredGolfInsights(scopedRounds, filters) : suppliedInsights, [filters, rounds.length, scopedRounds, suppliedInsights]);
   const metricTrends = useMemo(() => buildGolfTrends(filteredRounds, Math.min(5, Math.max(3, Math.floor(filteredRounds.length / 2)))), [filteredRounds]);
   const courseOptions = useMemo(() => [...new Set(rounds.map((round) => round.courseName).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es-MX")), [rounds]);
   const teeOptions = useMemo(() => [...new Set(rounds.flatMap((round) => [round.teeName, ...(round.playerTeeAssignments?.map((tee) => tee.teeName) ?? [])]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es-MX")), [rounds]);
   const insightInput = useMemo(() => structuredGolfInsightInput(insights, metricTrends), [insights, metricTrends]);
+  useEffect(() => {
+    if (typeof window === "undefined" || new URLSearchParams(window.location?.search ?? "").get("screen") !== "stats" || typeof window.history?.replaceState !== "function") return;
+    const search = new URLSearchParams(window.location.search);
+    search.set("statsView", category); search.set("statsPeriod", String(statsWindow)); search.set("statsHoles", String(scope));
+    if (courseFilter) search.set("statsCourse", courseFilter); else search.delete("statsCourse");
+    if (teeFilter) search.set("statsTee", teeFilter); else search.delete("statsTee");
+    window.history.replaceState(window.history.state, "", `${window.location.pathname}?${search}`);
+  }, [category, statsWindow, scope, courseFilter, teeFilter]);
   async function requestAiInsight() {
     if (aiInFlight.current) return;
     if (!consentOwnerId) { setAiMessage("Revisa tu autorización en Perfil → Cuenta y privacidad → Privacidad / IA."); return; }
@@ -136,116 +155,51 @@ export function StatsDashboard({ insights: suppliedInsights, rounds = [], consen
     catch { if (mounted.current) setAiMessage("No pude verificar la autorización o explicar esta muestra ahora. Tus estadísticas calculadas siguen intactas."); }
     finally { aiInFlight.current = false; if (mounted.current) setAiBusy(false); }
   }
-  const scoreScopes = ([9, 18] as const).filter((holes) => Boolean(insights.scoreCohorts[holes]));
-  const preferredScope = requestedScope && insights.scoreCohorts[requestedScope]
-    ? requestedScope
-    : initialScoreScope(insights);
-  const selectedCohort = insights.scoreCohorts[preferredScope]
-    || insights.scoreCohorts[insights.scoreScopeHoles || 18]
-    || insights.scoreCohorts[18]
-    || insights.scoreCohorts[9];
-
-  if (!insights.scoredRounds || !selectedCohort) {
-    return <section className="betaStatsScreen" aria-labelledby="beta-stats-title">
-      <section className="hero betaStatsHero"><div><span className="eyebrow">THE BACKYARD · STATS</span><h1 id="beta-stats-title">Tu juego, con datos reales.</h1><p>Las estadísticas se calculan únicamente con tarjetas completas.</p></div></section>
-      <section className="card betaStatsEmpty"><span className="betaEmptyFlag" aria-hidden="true">↗</span><h2>{rounds.length && (courseFilter || teeFilter) ? "No hay rondas con estos filtros." : "Todavía no hay scores completos."}</h2><p>{rounds.length && (courseFilter || teeFilter) ? "Tu histórico no cambió. Limpia los filtros para volver a ver toda la muestra." : insights.rounds ? "Tus rondas guardadas siguen disponibles, pero aún no contienen una tarjeta completa para calcular estadísticas confiables." : "Cierra y guarda tu primera ronda para empezar a medir tu juego."}</p>{rounds.length && (courseFilter || teeFilter) ? <button type="button" className="primary" onClick={() => { setCourseFilter(""); setTeeFilter(""); }}>Limpiar filtros</button> : <button type="button" className="primary" onClick={onOpenHistory}>{insights.rounds ? "Revisar histórico" : "Abrir histórico"}</button>}</section>
-    </section>;
-  }
-
-  const totalScoringHoles = insights.pars + insights.birdies + insights.eaglesOrBetter + insights.bogeys + insights.doublesOrWorse;
-  const comparableRounds = selectedCohort.recentRounds;
-  const scopeLabel = `${selectedCohort.holeCount} hoyos`;
-  const completePuttTotals = comparableRounds.flatMap((round) => round.putts === null ? [] : [round.putts]);
-  const averagePutts = completePuttTotals.length
-    ? completePuttTotals.reduce((total, putts) => total + putts, 0) / completePuttTotals.length
-    : undefined;
+  const scoreScopes = ([9, 18] as const).filter(holes => Boolean(baseInsights.scoreCohorts[holes]));
+  const selectedCohort = insights.scoreCohorts[scope];
+  const comparableRounds = selectedCohort?.recentRounds ?? NO_SCORED_ROUNDS;
+  const facts = useMemo(() => golfCaptureStatistics(filteredRounds, comparableRounds, consentOwnerId), [filteredRounds, comparableRounds, consentOwnerId]);
+  const capture = rounds.length ? insights.capture : selectedCohort?.recentRounds.reduce((total, row) => {
+    if (!row.capture) return total;
+    if (!total) return { ...row.capture, teeShots: { ...row.capture.teeShots } };
+    for (const key of Object.keys(row.capture) as (keyof NonNullable<ScoredRoundInsight["capture"]>)[]) {
+      if (key === "teeShots") for (const direction of Object.keys(total.teeShots) as (keyof typeof total.teeShots)[]) total.teeShots[direction] += row.capture.teeShots[direction];
+      else total[key] += row.capture[key];
+    }
+    return total;
+  }, undefined as ScoredRoundInsight["capture"]);
+  const scopeLabel = `${scope} hoyos`;
+  const completePuttTotals = comparableRounds.flatMap(round => round.putts === null ? [] : [round.putts]);
+  const averagePutts = completePuttTotals.length ? completePuttTotals.reduce((sum, value) => sum + value, 0) / completePuttTotals.length : undefined;
   const scoringRows = [
-    ["Eagle o mejor", insights.eaglesOrBetter],
-    ["Birdies", insights.birdies],
-    ["Pars", insights.pars],
-    ["Bogeys", insights.bogeys],
-    ["Dobles +", insights.doublesOrWorse],
+    ["Eagle o mejor", "eagle", comparableRounds.reduce((sum, row) => sum + row.eaglesOrBetter, 0)],
+    ["Birdies", "birdie", comparableRounds.reduce((sum, row) => sum + row.birdies, 0)],
+    ["Pars", "par", comparableRounds.reduce((sum, row) => sum + row.pars, 0)],
+    ["Bogeys", "bogey", comparableRounds.reduce((sum, row) => sum + row.bogeys, 0)],
+    ["Dobles o peor", "double", comparableRounds.reduce((sum, row) => sum + row.doublesOrWorse, 0)],
   ] as const;
-
-  return <section className="betaStatsScreen" aria-labelledby="beta-stats-title">
-    <section className="hero betaStatsHero"><div><span className="eyebrow">THE BACKYARD · STATS</span><h1 id="beta-stats-title">Así viene tu juego.</h1><p>Scores comparables con {selectedCohort.rounds} tarjeta{selectedCohort.rounds === 1 ? "" : "s"} completa{selectedCohort.rounds === 1 ? "" : "s"} de {scopeLabel}. Resultado por hoyo considera las {insights.scoredRounds} completas.</p></div><button type="button" className="secondary" onClick={onOpenHistory}>Ver histórico</button></section>
-
-    {rounds.length > 0 && <section className="card betaStatsFilters" aria-label="Filtros de estadísticas">
-      <div className="segmented scopeFilters" role="group" aria-label="Ventana de rondas">{([[5, "Últimas 5"], [10, "Últimas 10"], [20, "Últimas 20"], ["SEASON", "Temporada"], ["ALL", "Todo"]] as const).map(([value, label]) => <button type="button" key={value} className={statsWindow === value ? "active" : ""} aria-pressed={statsWindow === value} onClick={() => setStatsWindow(value)}>{label}</button>)}</div>
-      <div className="betaStatsFilterSelects"><label>Campo<select value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}><option value="">Todos</option>{courseOptions.map((course) => <option key={course} value={course}>{course}</option>)}</select></label><label>Tee<select value={teeFilter} onChange={(event) => setTeeFilter(event.target.value)}><option value="">Todos</option>{teeOptions.map((tee) => <option key={tee} value={tee}>{tee}</option>)}</select></label></div>
-      <small>{filteredRounds.length} ronda{filteredRounds.length === 1 ? "" : "s"} en la muestra. Los filtros no alteran tu histórico.</small>
-    </section>}
-
-    {scoreScopes.length === 2 && <div className="segmented scopeFilters" role="group" aria-label="Formato de ronda para comparar">
-      {scoreScopes.map((holes) => <button type="button" key={holes} className={selectedCohort.holeCount === holes ? "active" : ""} aria-pressed={selectedCohort.holeCount === holes} onClick={() => setRequestedScope(holes)}>{holes} hoyos <small>· {insights.scoreCohorts[holes]?.rounds}</small></button>)}
-    </div>}
-
-    <section className="betaStatTiles" aria-label="Estadísticas principales">
-      <article><span>Promedio</span><b>{decimal(selectedCohort.averageScore)}</b><small>score bruto · {scopeLabel}</small></article>
-      <article><span>Mejor score</span><b>{selectedCohort.bestScore ?? "—"}</b><small>{scopeLabel}</small></article>
-      <article><span>vs par</span><b>{relative(selectedCohort.averageVsPar)}</b><small>promedio · {scopeLabel}</small></article>
-      <article><span>Campos</span><b>{insights.coursesPlayed}</b><small>en histórico</small></article>
-    </section>
-
-    <section className="card betaTrendCard">
-      <div className="sectionTitle"><div><h2>Evolución</h2><p>{trendMode === "gross" ? "Score bruto" : "Resultado vs par"} · {scopeLabel} · hasta las últimas 10 rondas</p></div><span className="betaStatsSample">{comparableRounds.slice(0, 10).length} rondas</span></div>
-      <div className="segmented scopeFilters" role="group" aria-label="Métrica de evolución">
-        <button type="button" className={trendMode === "gross" ? "active" : ""} aria-pressed={trendMode === "gross"} onClick={() => setTrendMode("gross")}>Gross</button>
-        <button type="button" className={trendMode === "relative" ? "active" : ""} aria-pressed={trendMode === "relative"} onClick={() => setTrendMode("relative")}>vs Par</button>
-      </div>
-      <TrendChart rounds={comparableRounds} mode={trendMode} />
-      <div className="betaAverageStrip"><span>Últimas 5 <b>{decimal(selectedCohort.last5Average)}</b></span><span>Últimas 10 <b>{decimal(selectedCohort.last10Average)}</b></span><span>Mejor vs par <b>{relative(selectedCohort.bestVsPar)}</b></span></div>
-      {metricTrends.length > 0 && <div className="betaTrendFacts" aria-label="Tendencias comparables">{metricTrends.map((trend) => <span key={trend.metric}><b>{trend.metric === "score" ? "Score" : trend.metric === "putts" ? "Putts" : "Fairways"}</b> {trend.previous.toFixed(trend.metric === "fairways" ? 2 : 1)} → {trend.current.toFixed(trend.metric === "fairways" ? 2 : 1)} <small>n={trend.sampleSize} por periodo</small></span>)}</div>}
-    </section>
-
-    <section className="card betaAiInsight">
-      <div className="sectionTitle"><div><h2>Backyard AI Insights</h2><p>La IA recibe únicamente estos agregados; no recalcula scores, HCP, ganadores ni dinero.</p></div><button type="button" className="secondary" disabled={aiBusy || insightInput.sampleRounds < 1} onClick={requestAiInsight}>{aiBusy ? "Analizando…" : "Explicar mi juego"}</button></div>
-      {aiExplanation && <div><b>{aiExplanation.summary}</b><ul>{aiExplanation.observations.map((observation) => <li key={observation}>{observation}</li>)}</ul><small>{aiExplanation.caveat}</small></div>}
-      {aiMessage && <p role="status">{aiMessage}</p>}
-    </section>
-
-    <section className="card betaScoringCard">
-      <div className="sectionTitle"><div><h2>Resultado por hoyo</h2><p>{totalScoringHoles} hoyos con score válido.</p></div></div>
-      <div className="betaScoringMix">{scoringRows.map(([label, count]) => {
-        const percentage = totalScoringHoles ? (count / totalScoringHoles) * 100 : 0;
-        return <div key={label}><span><b>{label}</b><small>{count} · {percentage.toFixed(0)}%</small></span><div aria-hidden="true"><i style={{ width: `${percentage}%` }} /></div></div>;
-      })}</div>
-    </section>
-
-    <section className="betaSecondaryStats">
-      <article className="card"><span className="eyebrow">APUESTAS REGISTRADAS</span><b className={insights.betBalance === undefined ? "" : insights.betBalance >= 0 ? "good" : "bad"}>{insights.betBalance === undefined ? "—" : money(insights.betBalance)}</b><small>{insights.betRounds ? `Balance de ${insights.betRounds} ronda${insights.betRounds === 1 ? "" : "s"} con resultado verificable.` : "Sin liquidaciones verificables en el histórico."}</small></article>
-      <article className="card"><span className="eyebrow">PUTTS</span>{averagePutts !== undefined ? <><b>{decimal(averagePutts)}</b><small>Promedio en {completePuttTotals.length} ronda{completePuttTotals.length === 1 ? "" : "s"} de {scopeLabel} con captura completa.</small></> : <><b>—</b><small>No hay una tarjeta de {scopeLabel} con putts en todos sus hoyos.</small></>}</article>
-    </section>
-
-    {insights.advancedRounds > 0 && <section className="card betaAdvancedStats">
-      <div className="sectionTitle"><div><h2>Estadísticas avanzadas</h2><p>Solo usa datos capturados expresamente; los huecos no se completan.</p></div><span className="betaStatsSample">{insights.advancedRounds} ronda{insights.advancedRounds === 1 ? "" : "s"}</span></div>
-      <div className="betaStatTiles" aria-label="Estadísticas avanzadas registradas">
-        <article><span>Fairways</span><b>{percentage(insights.fairwaysHit, insights.fairwayAttempts)}</b><small>{insights.fairwaysHit} de {insights.fairwayAttempts} capturados</small></article>
-        <article><span>GIR</span><b>{percentage(insights.greensInRegulation, insights.greenAttempts)}</b><small>{insights.greensInRegulation} de {insights.greenAttempts} capturados</small></article>
-        <article><span>Penalidades</span><b>{insights.penaltyStrokes}</b><small>golpes registrados</small></article>
-      </div>
-      {capture && (capture.greenSideBunkerHoles || capture.fairwayBunkerHoles || capture.unclassifiedBunkerHoles || capture.outOfBoundsHoles) > 0 && <section aria-label="Bunkers y OB capturados">
-        <h3>Bunkers y OB</h3><p className="hint">Solo se cuentan eventos explícitos en los hoyos jugados. OB no se suma a penalidades.</p>
-        <div className="betaStatTiles" aria-label="Eventos de bunker y fuera de límites">
-          <article><span>Green-side bunker</span><b>{capture.greenSideBunkerHoles ? capture.greenSideBunkers : "—"}</b><small>{capture.greenSideBunkerHoles ? `en ${capture.greenSideBunkerHoles} hoyos capturados` : "Sin captura por ubicación"}</small></article>
-          <article><span>Fairway bunker</span><b>{capture.fairwayBunkerHoles ? capture.fairwayBunkers : "—"}</b><small>{capture.fairwayBunkerHoles ? `en ${capture.fairwayBunkerHoles} hoyos capturados` : "Sin captura por ubicación"}</small></article>
-          {capture.unclassifiedBunkerHoles > 0 && <article><span>Bunker sin clasificar</span><b>{capture.unclassifiedBunkers}</b><small>snapshot anterior · {capture.unclassifiedBunkerHoles} hoyos</small></article>}
-          <article><span>OB</span><b>{capture.outOfBoundsHoles ? capture.outOfBounds : "—"}</b><small>{capture.outOfBoundsHoles ? `en ${capture.outOfBoundsHoles} hoyos capturados` : "Sin OB capturado"}</small></article>
-        </div>
-      </section>}
-      {capture && capture.teeShotHoles > 0 && <section aria-label="Dirección de Tee Shot capturada">
-        <h3>Tee Shot</h3><p className="hint">Dirección de {capture.teeShotHoles} salida{capture.teeShotHoles === 1 ? "" : "s"} capturada{capture.teeShotHoles === 1 ? "" : "s"}; no se estiman hoyos sin dato.</p>
-        <div className="betaStatTiles" aria-label="Distribución de dirección de Tee Shot">
-          {([["far_left", "Muy izquierda"], ["left", "Izquierda"], ["center", "HIT"], ["right", "Derecha"], ["far_right", "Muy derecha"]] as const).map(([direction, label]) => <article key={direction}><span>{label}</span><b>{capture.teeShots[direction]}</b><small>de {capture.teeShotHoles} capturadas</small></article>)}
-        </div>
-      </section>}
-    </section>}
-
-    <section className="card betaRecentScores">
-      <div className="sectionTitle"><div><h2>Rondas recientes · {scopeLabel}</h2><p>Abre una tarjeta para ver todo su detalle.</p></div></div>
-      <div>{comparableRounds.slice(0, 5).map((round) => <button type="button" key={round.id} onClick={() => onOpenRound(round.id)}><span><b>{round.courseName}</b><small>{roundDate(round.date)} · {round.holeCount} hoyos · {round.teeName || "Tee sin nombre"}</small></span><strong>{round.gross}<small>{relative(round.relativeToPar)}</small></strong></button>)}</div>
-    </section>
-
-    <p className="betaDataNote">No se completan datos faltantes: una métrica sólo aparece cuando la captura necesaria está disponible.</p>
+  const totalScoringHoles = scoringRows.reduce((sum, row) => sum + row[2], 0);
+  const firHits = facts.firHits, firAttempts = facts.firAttempts;
+  const girHits = facts.girHits, girAttempts = facts.girAttempts;
+  const period = statsWindow === "SEASON" ? `Temporada ${new Date().getFullYear()}` : statsWindow === "ALL" ? "Histórico" : `Últimas ${statsWindow} rondas`;
+  const categories = [["summary", "Resumen"], ["scoring", "Scoring"], ["putting", "Putting"], ["driving", "Driving"], ["approach", "Approach"]] as const;
+  const emptyCapture = (name: string) => <div className="golfStatsEmpty"><h2>Aún no hay datos suficientes</h2><p>{name} · {period.toLocaleLowerCase("es-MX")} · {scopeLabel}.</p><small>Los campos sin capturar permanecen ausentes.</small></div>;
+  const trend = <section className="golfStatsPanel betaTrendCard"><div className="sectionTitle"><div><h2>Evolución</h2><p>{trendMode === "gross" ? "Score bruto" : "Resultado vs par"} · {scopeLabel}</p></div><span>{comparableRounds.slice(0, 10).length} rondas</span></div><div className="segmented scopeFilters" role="group" aria-label="Métrica de evolución"><button type="button" className={trendMode === "gross" ? "active" : ""} aria-pressed={trendMode === "gross"} onClick={() => setTrendMode("gross")}>Gross</button><button type="button" className={trendMode === "relative" ? "active" : ""} aria-pressed={trendMode === "relative"} onClick={() => setTrendMode("relative")}>vs Par</button></div><TrendChart rounds={comparableRounds} mode={trendMode}/></section>;
+  const tiles = <section className="betaStatTiles" aria-label="Estadísticas principales"><article><span>Promedio</span><b>{decimal(selectedCohort?.averageScore)}</b><small>gross · {scopeLabel}</small></article><article><span>Mejor score</span><b>{selectedCohort?.bestScore ?? "—"}</b><small>{scopeLabel}</small></article><article><span>vs par</span><b>{relative(selectedCohort?.averageVsPar)}</b><small>promedio</small></article><article><span>Campos</span><b>{new Set(comparableRounds.map(row => row.courseName)).size}</b><small>en la muestra</small></article></section>;
+  const recent = <section className="golfStatsPanel betaRecentScores"><h2>Rondas recientes · {scopeLabel}</h2><div>{comparableRounds.slice(0, 5).map(round => <button type="button" key={round.id} onClick={() => onOpenRound(round.id)}><span><b>{round.courseName}</b><small>{roundDate(round.date)} · {round.teeName || "Tee sin nombre"}</small></span><strong>{round.gross}<small>{relative(round.relativeToPar)}</small></strong></button>)}</div></section>;
+  return <section className="betaStatsScreen golfStats" aria-labelledby="beta-stats-title">
+    <header className="golfStatsHeader"><h1 id="beta-stats-title">Mis estadísticas</h1><button type="button" onClick={onOpenHistory}>Rondas ›</button></header>
+    <nav className="golfStatsTabs" aria-label="Categorías de estadísticas">{categories.map(([value, label]) => <button type="button" key={value} aria-pressed={category === value} onClick={() => setCategory(value)}>{label}</button>)}</nav>
+    <div className="golfStatsControls"><label>Período<select value={statsWindow} onChange={event => setStatsWindow(event.target.value === "ALL" || event.target.value === "SEASON" ? event.target.value : Number(event.target.value) as StatsWindow)}>{([[5,"Últimas 5 rondas"],[10,"Últimas 10 rondas"],[20,"Últimas 20 rondas"],["SEASON","Temporada"],["ALL","Histórico"]] as const).map(([value,label]) => <option key={value} value={value}>{label}</option>)}</select></label>{scoreScopes.length === 2 && <div className="segmented scopeFilters" role="group" aria-label="Formato de ronda para comparar">{scoreScopes.map(holes => <button type="button" key={holes} className={scope === holes ? "active" : ""} aria-pressed={scope === holes} onClick={() => setRequestedScope(holes)}>{holes} hoyos</button>)}</div>}<details><summary>Campo y tee</summary><div className="betaStatsFilterSelects"><label>Campo<select value={courseFilter} onChange={event => setCourseFilter(event.target.value)}><option value="">Todos</option>{courseOptions.map(course => <option key={course}>{course}</option>)}</select></label><label>Tee<select value={teeFilter} onChange={event => setTeeFilter(event.target.value)}><option value="">Todos</option>{teeOptions.map(tee => <option key={tee}>{tee}</option>)}</select></label></div></details></div>
+    <p className="golfStatsSample">{selectedCohort?.rounds ?? 0} tarjetas completas · {scopeLabel} · {period}</p>
+    {!selectedCohort ? <div className="golfStatsEmpty"><h2>{courseFilter || teeFilter ? "No hay rondas con estos filtros." : "Todavía no hay scores completos."}</h2><p>Tu histórico conserva todas tus rondas.</p><button type="button" onClick={() => { if (courseFilter || teeFilter) { setCourseFilter(""); setTeeFilter(""); } else onOpenHistory(); }}>{courseFilter || teeFilter ? "Limpiar filtros" : "Abrir histórico"}</button></div> : <>
+      {(category === "summary" || category === "scoring") && <>{tiles}{trend}</>}
+      {category === "summary" && <><div className="betaStatTiles golfStatsThree">{averagePutts !== undefined && <article><span>PUTTS</span><b>{decimal(averagePutts)}</b><small>{completePuttTotals.length} rondas completas</small></article>}{firAttempts > 0 && <article><span>FIR</span><b>{percentage(firHits,firAttempts)}</b><small>{firHits}/{firAttempts} capturas</small></article>}{girAttempts > 0 && <article><span>GIR</span><b>{percentage(girHits,girAttempts)}</b><small>{girHits}/{girAttempts} capturas</small></article>}</div>{recent}<details className="golfStatsPanel"><summary>Resultados personales del período</summary><p>{insights.betBalance === undefined ? "Sin liquidaciones verificables en el histórico." : `${money(insights.betBalance)} · ${insights.betRounds} rondas con resultado verificable.`}</p></details><details className="golfStatsPanel betaAiInsight"><summary>Explicación de mi juego</summary><p>Consulta los agregados con tu autorización existente de privacidad.</p><button type="button" className="secondary" disabled={aiBusy || insightInput.sampleRounds < 1} onClick={requestAiInsight}>{aiBusy ? "Analizando…" : "Explicar mi juego"}</button>{aiExplanation && <div><b>{aiExplanation.summary}</b><ul>{aiExplanation.observations.map(observation => <li key={observation}>{observation}</li>)}</ul><small>{aiExplanation.caveat}</small></div>}{aiMessage && <p role="status">{aiMessage}</p>}</details></>}
+      {category === "scoring" && <><section className="golfStatsPanel"><h2>Resultado por hoyo</h2><p>{totalScoringHoles} hoyos reales con score.</p><div className="golfStatsBars">{scoringRows.map(([label,result,count]) => <div key={result}><span><i className="golfStatsSymbol" data-result={result} aria-hidden="true"/>{label}</span><div aria-hidden="true"><i style={{width:`${totalScoringHoles ? count/totalScoringHoles*100 : 0}%`}}/></div><b>{count}<small>{percentage(count,totalScoringHoles)}</small></b></div>)}</div></section>{recent}</>}
+      {category === "putting" && <>{facts.puttHoles || averagePutts !== undefined ? <><section className="golfStatsPanel"><h2>Putting</h2><div className="betaStatTiles golfStatsThree">{averagePutts !== undefined && <article><span>Putts por ronda</span><b>{decimal(averagePutts)}</b><small>{completePuttTotals.length} tarjetas completas</small></article>}{facts.puttHoles > 0 && <article><span>Putts por hoyo</span><b>{decimal(facts.putts/facts.puttHoles)}</b><small>{facts.puttHoles}/{facts.holes} hoyos capturados</small></article>}{facts.firstPuttHoles > 0 && <article><span>Primer putt</span><b>{decimal(facts.firstPuttFeet/facts.firstPuttHoles)}</b><small>pies · {facts.firstPuttHoles} capturas</small></article>}</div>{facts.puttHoles > 0 && <div className="golfStatsBars">{facts.puttDistribution.map((count,index) => <div key={index}><span>{index === 4 ? "4+ putts" : `${index} ${index === 1 ? "putt" : "putts"}`}</span><div aria-hidden="true"><i style={{width:`${count/facts.puttHoles*100}%`}}/></div><b>{count}<small>{percentage(count,facts.puttHoles)}</small></b></div>)}</div>}</section>{facts.series.some(row => row.putts !== null) && <section className="golfStatsPanel"><h2>Tendencia de putting</h2><div className="golfStatsPuttTrend" role="img" aria-label={facts.series.filter(row=>row.putts!==null).map(row=>`${roundDate(row.date)}: ${row.putts} putts`).join("; ")}>{facts.series.filter(row=>row.putts!==null).slice(0,10).reverse().map(row=><div key={row.id}><b>{row.putts}</b><i style={{height:`${Math.max(2,(row.putts??0)/Math.max(1,...facts.series.map(point=>point.putts??0))*80)}px`}}/><small>{roundDate(row.date)}</small></div>)}</div><p>Sólo tarjetas con putts en todos sus hoyos.</p></section>}</> : emptyCapture("Putts registrados")}</>}
+      {category === "driving" && <>{firAttempts > 0 && <section className="golfStatsPanel golfStatsRate"><h2>Fairways</h2><div className="golfStatsRing" style={{background:`conic-gradient(var(--by-forest) ${firHits/firAttempts*100}%,var(--by-sage) 0)`}}><b>{percentage(firHits,firAttempts)}</b></div><p>{firHits} aciertos / {firAttempts} capturas · {facts.firEligible} hoyos aplicables</p><small>Par 3 excluido; ausencia no cuenta como fallo.</small></section>}{capture && capture.teeShotHoles > 0 && <section className="golfStatsPanel" aria-label="Dirección de Tee Shot capturada"><h2>Dirección de salida</h2><p>Dirección de {capture.teeShotHoles} salidas capturadas.</p><div className="golfStatsBars" aria-label="Distribución de dirección de Tee Shot">{([["far_left","Muy izquierda"],["left","Izquierda"],["center","Centro"],["right","Derecha"],["far_right","Muy derecha"]] as const).map(([direction,label])=><div key={direction}><span>{label}</span><div aria-hidden="true"><i style={{width:`${capture.teeShots[direction]/capture.teeShotHoles*100}%`}}/></div><b>{capture.teeShots[direction]}</b></div>)}</div></section>}{facts.clubs.size > 0 && <section className="golfStatsPanel"><h2>Distancia por bastón</h2><p>Salidas registradas · yardas</p>{[...facts.clubs].map(([club,row])=><p key={club}><b>{club}</b> {decimal(row.totalYards/row.count)} yd · {row.count} capturas</p>)}</section>}{!firAttempts && !capture?.teeShotHoles && !facts.clubs.size && emptyCapture("FIR y dirección de salida")}</>}
+      {category === "approach" && <>{girAttempts > 0 ? <section className="golfStatsPanel golfStatsRate"><h2>Greens en regulación</h2><div className="golfStatsRing" style={{background:`conic-gradient(var(--by-forest) ${girHits/girAttempts*100}%,var(--by-sage) 0)`}}><b>{percentage(girHits,girAttempts)}</b></div><p>{girHits} aciertos / {girAttempts} capturas explícitas</p><div className="betaStatTiles golfStatsThree">{[...facts.girByPar].sort(([a],[b])=>a-b).map(([par,row])=><article key={par}><span>Par {par}</span><b>{percentage(row.hits,row.attempts)}</b><small>{row.hits}/{row.attempts} capturas</small></article>)}</div></section> : emptyCapture("GIR capturado")}{(facts.penaltyHoles > 0 || capture && (capture.greenSideBunkerHoles+capture.fairwayBunkerHoles+capture.unclassifiedBunkerHoles+capture.outOfBoundsHoles)>0) && <section className="golfStatsPanel" aria-label="Bunkers y OB capturados"><h2>Bunkers y penalidades</h2><div className="betaStatTiles golfStatsThree">{facts.penaltyHoles>0&&<article><span>Penalidades</span><b>{facts.penalties}</b><small>{facts.penaltyHoles} hoyos capturados</small></article>}{capture?.greenSideBunkerHoles ? <article><span>Bunker de green</span><b>{capture.greenSideBunkers}</b><small>{capture.greenSideBunkerHoles} capturas</small></article>:null}{capture?.fairwayBunkerHoles ? <article><span>Bunker de fairway</span><b>{capture.fairwayBunkers}</b><small>{capture.fairwayBunkerHoles} capturas</small></article>:null}{capture?.unclassifiedBunkerHoles ? <article><span>Bunker sin clasificar</span><b>{capture.unclassifiedBunkers}</b><small>captura anterior · {capture.unclassifiedBunkerHoles} hoyos</small></article>:null}{capture?.outOfBoundsHoles ? <article><span>OB</span><b>{capture.outOfBounds}</b><small>{capture.outOfBoundsHoles} capturas</small></article>:null}</div><small>OB no se suma a penalidades. No se infieren eventos desde el score.</small></section>}</>}
+    </>}
+    <details className="golfStatsAudit"><summary>Cómo se calcula esta muestra</summary><p>{period} · {scopeLabel}. {selectedCohort?.rounds ?? 0} tarjetas completas atribuibles a tu jugador. Primero se separa el formato; después se aplica el período y los filtros.</p><p>Scoring: gross y diferencia con par por hoyo real. Putts por ronda: todos los hoyos capturados; distribución: sólo los capturados, incluido cero. FIR: aciertos/capturas en par 4 y 5. GIR: aciertos/capturas explícitas; esta serie no reconstruye GIR desde un total. Penalidades y OB: hechos registrados, sin doble conteo.</p><p>Putts: {facts.puttHoles}/{facts.holes} hoyos. FIR: {firAttempts}/{facts.firEligible} aplicables. GIR: {girAttempts}/{facts.holes}. Penalidades: {facts.penaltyHoles}/{facts.holes}. Bastones: yardas; primer putt: pies. Sin tracking o estadísticas GPS inferidas.</p></details>
   </section>;
 }
