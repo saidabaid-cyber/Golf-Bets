@@ -17,7 +17,7 @@
 .golfStats p { font-size:12px; line-height:1.5; margin:8px 0; }
 .golfStats .betaStatTiles { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
 .golfStats .betaStatTiles article { padding:10px 6px; background:var(--by-sage); border:0; border-radius:12px; min-width:0; display:grid; gap:4px; }
-.golfStats .betaStatTiles b { font:700 25px var(--by-editorial,Georgia,serif); color:var(--by-forest); line-height:1.1; }
+.backyardV3 .golfStats .betaStatTiles b { font:700 25px var(--by-editorial,Georgia,serif); color:var(--by-forest); line-height:1.1; white-space:nowrap; overflow-wrap:normal; }
 .golfStats .betaStatTiles span { font-size:12px; }
 .golfStats .betaStatTiles small { font-size:10px; overflow-wrap:anywhere; }
 .golfStats .golfStatsThree { grid-template-columns:repeat(auto-fit,minmax(90px,1fr)); }
