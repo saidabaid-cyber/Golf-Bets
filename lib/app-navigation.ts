@@ -41,14 +41,14 @@ export function historicalRoundIdFromSearch(search: string) {
   return params.get("screen") === "historyDetail" && id && ROUND_REFERENCE.test(id) ? id : null;
 }
 
-export function screenHref(tab: AppTab, search = "", roundId?: string | null, careerView?: CareerView) {
+export function screenHref(tab: AppTab, search = "", roundId?: string | null, careerView?: CareerView, options?: { preserveSocialChild?: boolean }) {
   const params = new URLSearchParams(search);
   const selectedRound = roundId === undefined ? historicalRoundIdFromSearch(search) : roundId;
   params.delete("screen");
   params.delete("round");
   params.delete("career");
   // Explicit global navigation leaves the social child stack.
-  params.delete('player');params.delete('playerTab');
+  if(tab!=="welcome"||!options?.preserveSocialChild){params.delete('player');params.delete('playerTab');}
   if(tab!=="career")params.delete("careerDetail");
   if(tab!=="welcome"&&tab!=="friends")params.delete("home");
   if (tab !== "notifications") { params.delete("notice"); params.delete("resource"); }

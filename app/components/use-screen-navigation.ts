@@ -26,7 +26,7 @@ export function useScreenNavigation() {
       showCareerView(selectedCareer.current);
       showCareerDetail(target === "career" ? careerDetailFromSearch(window.location.search) : null);
       selectHistoricalRound(target === "historyDetail" ? historicalRoundIdFromSearch(window.location.search) : null);
-      window.history.replaceState({ ...window.history.state, backyardTab: target }, "", screenHref(target, window.location.search));
+      window.history.replaceState({ ...window.history.state, backyardTab: target }, "", screenHref(target, window.location.search,undefined,undefined,{preserveSocialChild:true}));
       if (target === current.current) return;
       trail.current.pop();
       current.current = target;
@@ -39,7 +39,7 @@ export function useScreenNavigation() {
     selectHistoricalRound(initial === "historyDetail" ? historicalRoundIdFromSearch(window.location.search) : null);
     current.current = initial;
     showTab(initial);
-    window.history.replaceState({ ...window.history.state, backyardTab: initial }, "", screenHref(initial, window.location.search));
+    window.history.replaceState({ ...window.history.state, backyardTab: initial }, "", screenHref(initial, window.location.search,undefined,undefined,{preserveSocialChild:true}));
     window.addEventListener("popstate", pop);
     return () => window.removeEventListener("popstate", pop);
   }, []);

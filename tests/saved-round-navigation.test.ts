@@ -55,6 +55,15 @@ test("saved round URL survives reload without reconstructing an empty active rou
   assert.equal(render().tab, "historyDetail");
   assert.equal(render().historyDetailId, "qa-saved-round-9");
 });
+test('global history normalization preserves a social profile and its child card through reload and Back',()=>{
+  const child='?player=22222222-2222-4222-8222-222222222222&playerTab=rounds&card=social%3A44444444-4444-4444-8444-444444444444';
+  const browser=browserAt(child);let render=mount(browser);
+  assert.equal(new URLSearchParams(browser.location.search).get('playerTab'),'rounds');
+  render=mount(browser);assert.equal(new URLSearchParams(browser.location.search).get('player'),'22222222-2222-4222-8222-222222222222');
+  render().setTab('coach');assert.equal(new URLSearchParams(browser.location.search).has('player'),false);
+  browser.history.back();assert.equal(render().tab,'welcome');assert.equal(new URLSearchParams(browser.location.search).get('playerTab'),'rounds');assert.match(browser.location.search,/card=social/);
+  render().setTab('welcome');assert.equal(new URLSearchParams(browser.location.search).has('player'),false,'an explicit Inicio action leaves the profile');
+});
 test("all five Carrera tabs survive direct reload and browser Back within the same screen",()=>{
   const browser=browserAt("?screen=career&career=summary");let render=mount(browser);
   for(const tab of careerNavigation.CAREER_TABS){render().setCareerView(tab.id);assert.equal(render().careerView,tab.id);render=mount(browser);assert.equal(render().careerView,tab.id);}
