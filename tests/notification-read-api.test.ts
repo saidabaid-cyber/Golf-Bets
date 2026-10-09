@@ -10,7 +10,10 @@ function harness(){
   const rows=[{id,recipient_id:"owner",event_type:"group_invite",read_at:null as string|null},
     {id:'33333333-3333-4333-8333-333333333333',recipient_id:'owner',event_type:'attest_request',read_at:null as string|null},
     {id:otherId,recipient_id:"other",event_type:"friend_request",read_at:null as string|null},
-    {id:"critical",recipient_id:"owner",event_type:"security_alert",read_at:null as string|null}];
+    {id:"critical",recipient_id:"owner",event_type:"security_alert",read_at:null as string|null},
+    {id:'59235554-476a-74e4-662e-5ea731c998cf',recipient_id:'owner',event_type:'like',read_at:null as string|null},
+    {id:'2b3c84a9-3091-9a76-2102-b50075c61048',recipient_id:'owner',event_type:'comment',read_at:null as string|null},
+    {id:'ffffffff-ffff-ffff-ffff-ffffffffffff',recipient_id:'other',event_type:'comment',read_at:null as string|null}];
   const pages:Record<string,unknown>[]=[],tables:string[]=[];
   const client={from(table:string){tables.push(table);let update:Record<string,unknown>={};const checks:Array<(row:typeof rows[number])=>boolean>=[];
     const query={update:(patch:Record<string,unknown>)=>{update=patch;return query;},eq:(key:string,value:unknown)=>{checks.push(row=>row[key as keyof typeof row]===value);return query;},
@@ -18,11 +21,16 @@ function harness(){
       then:(resolve:(value:unknown)=>unknown)=>{const selected=rows.filter(row=>checks.every(check=>check(row)));selected.forEach(row=>Object.assign(row,update));return Promise.resolve({data:selected.map(row=>({id:row.id})),error:null}).then(resolve);}};return query;
   }};
   const exports:Record<string,(request:Request)=>Promise<Response>>={};
+  // Keep the real identifier validator: a permissive mock previously hid the
+  // mismatch between RFC-shaped social IDs and persisted MD5 notification IDs.
+  const http:Record<string,unknown>={};
+  runInNewContext(ts.transpileModule(readFileSync('lib/social-http.server.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText,
+    {exports:http,Response,require:()=>({})});
   const source=ts.transpileModule(readFileSync("app/api/social/notifications/route.ts","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
   runInNewContext(source,{exports,Response,URL,Date,AbortSignal,Object,require:(path:string)=>{
     if(path.endsWith("/domain"))return {NOTIFICATION_EVENT_TYPES};
     if(path.endsWith("/social-activity.server"))return {listNotifications:async(_ctx:unknown,options:Record<string,unknown>={})=>{pages.push(options);return {data:[],nextCursor:null};}};
-    if(path.endsWith("/social-http.server"))return {socialBody:(request:Request)=>request.json(),socialId:(value:string)=>{if(!/^[0-9a-f-]{36}$/i.test(value))throw Object.assign(new Error(),{status:400});return value;},socialHttp:async(request:Request,operation:(ctx:unknown)=>Promise<unknown>)=>{if(!request.headers.get("authorization"))return Response.json({error:"auth"},{status:401});try{return Response.json(await operation({userId:"owner",client}));}catch(error){return Response.json({error:"failed"},{status:(error as {status?:number}).status||503});}}};
+    if(path.endsWith("/social-http.server"))return {...http,socialBody:(request:Request)=>request.json(),socialHttp:async(request:Request,operation:(ctx:unknown)=>Promise<unknown>)=>{if(!request.headers.get("authorization"))return Response.json({error:"auth"},{status:401});try{return Response.json(await operation({userId:"owner",client}));}catch(error){return Response.json({error:"failed"},{status:(error as {status?:number}).status||503});}}};
     throw new Error(path);
   }});
   const request=(body?:unknown,search="",auth=true)=>new Request("https://dev.invalid/api/social/notifications"+search,{method:body?"PATCH":"GET",headers:{"content-type":"application/json",...(auth?{authorization:"Bearer QA"}:{})},...(body?{body:JSON.stringify(body)}:{})});
@@ -43,4 +51,20 @@ test("notification pagination preserves server scope and supports unread pages b
   const f=harness();assert.equal((await f.exports.GET(f.request(undefined,"?cursor=50&unreadOnly=true"))).status,200);
   assert.deepEqual(JSON.parse(JSON.stringify(f.pages)),[{offset:50,unreadOnly:true}]);
   for(const cursor of ["bad","-1","100001"]){assert.equal((await f.exports.GET(f.request(undefined,"?cursor="+cursor))).status,400);}
+});
+test('persisted MD5 social notification UUIDs can be read/unread without RFC version or variant bits',async()=>{
+  const f=harness(),ids=['59235554-476a-74e4-662e-5ea731c998cf','2b3c84a9-3091-9a76-2102-b50075c61048'];
+  for(const id of ids){
+    assert.equal((await f.exports.PATCH(f.request({id,read:true}))).status,200);
+    assert.ok(f.rows.find(row=>row.id===id)!.read_at);
+    assert.equal((await f.exports.PATCH(f.request({id,read:false}))).status,200);
+    assert.equal(f.rows.find(row=>row.id===id)!.read_at,null);
+  }
+  assert.equal(f.rows.length,7,'reading retains the persisted notification history');
+  const foreign='ffffffff-ffff-ffff-ffff-ffffffffffff';
+  assert.equal((await f.exports.PATCH(f.request({id:foreign,read:true}))).status,404);
+  assert.equal(f.rows.find(row=>row.id===foreign)!.read_at,null);
+  for(const id of ['not-a-uuid','59235554-476a-74e4-662e-5ea731c998cf-extra','59235554-476a-74e4-662e-5ea731c998cZ']){
+    assert.equal((await f.exports.PATCH(f.request({id,read:true}))).status,400);
+  }
 });
