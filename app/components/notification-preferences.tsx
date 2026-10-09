@@ -1,14 +1,15 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { NotificationEventType } from "../../features/notifications/domain";
+import type { NotificationPreferenceType } from "../../features/notifications/domain";
 import { notificationsChanged, type EventPreferencePage } from "../../features/notifications/client";
 import type { SocialActivityPreferences } from "../../lib/social-activity-contract";
 import { requestAccountNotificationPreferences, type AccountNotificationPreferenceResponse } from "../../lib/account-notification-preferences";
 import { socialRequest, socialErrorMessage } from "../../lib/social-activity-client";
 import styles from "./notification-center.module.css";
 
-const EVENT_GROUPS: Array<{title:string;items:Array<[NotificationEventType,string,string]>}> = [
+const EVENT_GROUPS: Array<{title:string;items:Array<[NotificationPreferenceType,string,string]>}> = [
   {title:"Amigos",items:[["friend_request","Solicitudes de amistad","Cuando alguien quiera ser tu amigo."],["friend_accepted","Solicitud aceptada","Cuando acepten tu solicitud de amistad."]]},
+  {title:"Atest",items:[["attest_request","Solicitudes de Atest","Cuando un compañero te solicite revisar una tarjeta."]]},
   {title:"Grupos",items:[["group_invite","Invitaciones a grupos","Cuando te inviten a jugar con un grupo."]]},
   {title:"Rondas",items:[["round_invite","Invitaciones a rondas","Cuando te inviten a una ronda."],["round_started","Rondas iniciadas","Cuando un compañero inicie una ronda contigo."],["round_finished","Resultados de ronda","Cuando estén disponibles los resultados."],["scorecard_ready","Tarjetas para confirmar","Cuando puedas revisar tu tarjeta."]]},
 ];
@@ -19,7 +20,7 @@ export function NotificationSwitch({label,copy,checked,disabled,onChange}:{label
 }
 export function NotificationPreferenceControls({events,social,delivery,busy,onMaster,onEvent,onSocial}:{
   events:EventPreferencePage|null;social:SocialActivityPreferences|null;delivery:AccountNotificationPreferenceResponse|null;busy:boolean;
-  onMaster:(value:boolean)=>void;onEvent:(type:NotificationEventType,value:boolean)=>void;onSocial:(key:typeof SOCIAL_ITEMS[number][0],value:boolean)=>void;
+  onMaster:(value:boolean)=>void;onEvent:(type:NotificationPreferenceType,value:boolean)=>void;onSocial:(key:typeof SOCIAL_ITEMS[number][0],value:boolean)=>void;
 }) {
   const disabled=busy || !events?.enabled;
   return <>
@@ -44,6 +45,7 @@ export function NotificationPreferences({accessToken,onBack,onMasterChange}:{acc
       requestAccountNotificationPreferences(accessToken,undefined,signal),
     ]);
     if (!live.current || signal?.aborted) return false;
+    if(result[0].status!=="fulfilled"||result[1].status!=="fulfilled"){setMessage("No pudimos confirmar tus preferencias. Puedes reintentar.");setLoading(false);return false;}
     if (result[0].status === "fulfilled") setEvents(result[0].value);
     if (result[1].status === "fulfilled") setSocial(result[1].value.data);
     if (result[2].status === "fulfilled") setDelivery(result[2].value);
@@ -58,11 +60,10 @@ export function NotificationPreferences({accessToken,onBack,onMasterChange}:{acc
     catch(error) {await reload();if(live.current)setMessage(socialErrorMessage(error));}
     finally {writing.current=false;if(live.current)setBusy(false);}
   }
-  async function eventChange(type:NotificationEventType,value:boolean) {
+  async function eventChange(type:NotificationPreferenceType,value:boolean) {
     if(!accessToken)return;
     await socialRequest<EventPreferencePage>("/api/social/notification-preferences",accessToken,{method:"PATCH",body:{type,inApp:value}});
-    // One visible control composes both existing friend-request gates; sharing flags are retained.
-    if(type === "friend_request" && social) await socialRequest("/api/social/preferences",accessToken,{method:"PUT",body:{...social,notifyFriendRequest:value}});
+
   }
   return <section className={styles.screen} aria-label="Preferencias de notificaciones">
     <header className={styles.heading}><button type="button" className={styles.iconButton} aria-label="Volver a Notificaciones" onClick={onBack}>‹</button><div><span className={styles.eyebrow}>TUS PREFERENCIAS</span><h1>Notificaciones</h1></div></header>
@@ -72,9 +73,9 @@ export function NotificationPreferences({accessToken,onBack,onMasterChange}:{acc
       <NotificationPreferenceControls events={events} social={social} delivery={delivery} busy={busy}
         onMaster={value=>void save(async()=>{if(!await onMasterChange(value))throw new Error("No se pudo guardar la preferencia.");})}
         onEvent={(type,value)=>void save(()=>eventChange(type,value))}
-        onSocial={(key,value)=>void save(async()=>{if(accessToken && social){await socialRequest("/api/social/preferences",accessToken,{method:"PUT",body:{...social,[key]:value}});await socialRequest('/api/social/notification-preferences',accessToken,{method:'PATCH',body:{type:SOCIAL_EVENT[key],inApp:value}});if(key==='notifyAttest')await socialRequest('/api/social/notification-preferences',accessToken,{method:'PATCH',body:{type:'attest_request',inApp:value}});}})}/>
+        onSocial={(key,value)=>void save(()=>socialRequest('/api/social/notification-preferences',accessToken!,{method:'PATCH',body:{type:SOCIAL_EVENT[key],inApp:value}}))}/>
     </>}
     {message && <p role="status" className={styles.notice}>{message}</p>}
-    {!loading && (!events || !social || !delivery) && accessToken && <button type="button" className={styles.secondary} onClick={()=>void reload()}>Reintentar</button>}
+    {!loading && ((message && message!=="Preferencias guardadas.") || !events || !social || !delivery) && accessToken && <button type="button" className={styles.secondary} onClick={()=>void reload()}>Reintentar</button>}
   </section>;
 }

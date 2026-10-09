@@ -11,11 +11,17 @@ function harness(auth=true){
   const rows:Row[]=[{user_id:"owner",event_type:"friend_request",in_app:true,push:true,updated_at:"2026-10-05T12:00:00Z"},{user_id:"other",event_type:"friend_request",in_app:true,push:true,updated_at:"2026-10-05T12:00:00Z"}];
   let enabled=true,fail=false;
   const filters:Array<[string,unknown]>=[],updates:Record<string,unknown>[]=[];
-  const client={from(table:string){
+  const client={rpc(name:string,value:{requested_type:string;requested_in_app:boolean|null;requested_push:boolean|null}){
+    assert.equal(name,'set_my_notification_event_preference_v1');
+    return {abortSignal:async()=>{if(fail)return{error:{code:'42501'}};let row=rows.find(r=>r.user_id==='owner'&&r.event_type===value.requested_type);
+      if(!row){row={user_id:'owner',event_type:value.requested_type,in_app:true,push:false,updated_at:'2026-10-08'};rows.push(row);}
+      const patch={...(value.requested_in_app===null?{}:{in_app:value.requested_in_app}),...(value.requested_push===null?{}:{push:value.requested_push})};updates.push(patch);Object.assign(row,patch);return{error:null};}};
+  },from(table:string){
     const where:Record<string,unknown>={};let patch:Record<string,unknown>|null=null,insert:Record<string,unknown>|null=null;
     const finish=()=>{
       if(fail)return {data:null,error:{code:"42501"}};
       if(table==="user_preferences")return {data:{notifications_enabled:enabled},error:null};
+      if(table==="social_activity_preferences_v3")return {data:null,error:null};
       assert.equal(table,"notification_preferences_v2");
       if(insert && !rows.some(row=>row.user_id===insert!.user_id && row.event_type===insert!.event_type))rows.push({...insert,updated_at:"2026-10-05T12:00:00Z"} as Row);
       const selected=rows.filter(row=>Object.entries(where).every(([key,value])=>row[key as keyof Row]===value));

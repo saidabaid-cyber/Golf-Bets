@@ -87,14 +87,14 @@ test("group row reuses accept and never fabricates unsupported reject",()=>{
   assert.match(html,/Unirme/);assert.match(html,/Ver invitación/);assert.doesNotMatch(html,/Rechazar|12 jugadores|apuestas habituales/);
 });
 test("all notification booleans are iOS switches, never visible checkboxes or QR category",()=>{
-  const html=controls();assert.equal((html.match(/role="switch"/g)||[]).length,15);
+  const html=controls();assert.equal((html.match(/role="switch"/g)||[]).length,16);
   assert.doesNotMatch(html,/<input|checkbox|Invitaciones por QR|notifyAttest/);
   for(const label of ["Solicitudes de amistad","Solicitud aceptada","Invitaciones a grupos","Invitaciones a rondas","Rondas iniciadas","Resultados de ronda","Tarjetas para confirmar","Likes","Comentarios","Confirmaciones de tarjeta","Logros de amigos","Actualizaciones de equipo"]){assert.ok(html.includes(label),label);}
 });
 test("master OFF disables configurable switches without destroying their individual checked values",()=>{
   const off=controls(false),on=controls(true);
   assert.equal((off.match(/aria-checked="true"/g)||[]).length,12);assert.equal((on.match(/aria-checked="true"/g)||[]).length,13);
-  assert.equal((off.match(/disabled=""/g)||[]).length,14);assert.equal((on.match(/disabled=""/g)||[]).length,2);
+  assert.equal((off.match(/disabled=""/g)||[]).length,15);assert.equal((on.match(/disabled=""/g)||[]).length,2);
 });
 test("unconfigured push and email are disabled and never claimed to deliver",()=>{
   const html=controls();assert.match(html,/Push todavía no está disponible en este entorno/);assert.match(html,/entrega por email todavía no está disponible/);
