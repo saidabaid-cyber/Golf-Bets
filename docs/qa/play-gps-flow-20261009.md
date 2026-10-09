@@ -9,6 +9,7 @@ No migrations, catalog writes, upstream GolfAPI requests, Mapbox resources, GHIN
 - New solo rounds clear previous participants, bets, template, start hole and duration. Selecting a complete card and tee permits starting directly; additional players/bets remain optional.
 - Continue preserves the current hole and other holes' pending edits. GPS navigation never confirms scores. Explicit **Guardar score** checkpoints the same hole without the old advance/summary timer.
 - The map stays mounted while the score sheet opens. Location/target updates do not change its camera. Only hole changes or explicit camera controls fit/recenter it.
+- Published browser QA exposed target pointer capture retained after dragging. The follow-up observes release in window capture, cancels unpressed mouse hover, and unlocks the map when the target is removed. All listeners are cleaned on removal. This is a fix found by interactive verification, not inferred from passing tests.
 - Save/exit retains pending edits. Finish delegates to the existing validation/history flow. Only unstarted, scoreless drafts are discarded; started rounds use existing recoverable cancellation.
 - The legacy pilot URL redirects to the canonical round GPS entry. Restricted GPS authorization and login infrastructure are preserved.
 - Server readers coalesce concurrent private saved-course reads for 60 seconds. Their source is the existing durable private DEV snapshot store, never the upstream provider. Authorization is checked before the reader.

@@ -88,6 +88,21 @@ test('Google adapter draws points/accuracy/lines, moves target and cleans overla
 });
 test('Google cancellation after SDK load does not create a hidden map', async () => { const b = mockBrowser(); b.runtime.google = { maps: b.sdk }; const controller = new AbortController(); controller.abort(); await assert.rejects(() => googleMapsFactory({ enabled: true, apiKey: 'SYNTHETIC' }, b.runtime)(new Element('div'), {}, controller.signal, { hole }), /MAP_CANCELED/); assert.equal(b.mapsCreated.length, 0); });
 
+test('target release outside the overlay and unpressed hover cannot keep moving a dragged target',async()=>{
+ const b=mockBrowser(),events={};b.runtime.google={maps:b.sdk};
+ b.runtime.addEventListener=(name,fn)=>events[name]=fn;b.runtime.removeEventListener=name=>delete events[name];
+ const element=new Element('div'),points=[];
+ const scene={holeKey:'synthetic',hole,target:[.5,0],unit:'yd',targetCenterLabel:'20'};
+ const surface=await googleMapsFactory({enabled:true,apiKey:'SYNTHETIC'},b.runtime)(element,{onTarget:p=>points.push(p)},undefined,scene);surface.update(scene);
+ const target=element.children.find(c=>c.attributes['aria-label']?.startsWith('Objetivo'));
+ const pointer={pointerId:1,pointerType:'mouse',buttons:1,clientX:0,clientY:0,preventDefault(){},stopPropagation(){}};
+ target.events.pointerdown(pointer);events.pointerup({pointerId:1});assert.equal(b.mapsCreated[0].options.draggable,true);
+ target.events.pointermove({...pointer,clientX:50,buttons:0});assert.equal(points.length,0);
+ target.events.pointerdown(pointer);target.events.pointermove({...pointer,clientX:70,buttons:0});assert.equal(points.length,0);assert.equal(b.mapsCreated[0].options.draggable,true);
+ target.events.pointerdown(pointer);surface.update({...scene,target:null});assert.equal(b.mapsCreated[0].options.draggable,true);assert.deepEqual(Object.keys(events),[]);
+ surface.destroy();assert.deepEqual(Object.keys(events),[]);
+});
+
 test('auth failure after SDK readiness prevents another map and another script', async () => {
   const b = mockBrowser(); const loaded = loadGoogleMaps({ enabled: true, apiKey: 'SYNTHETIC' }, b.runtime);
   b.runtime.google = { maps: b.sdk }; b.runtime.__backyardGpsGoogleReady(); await loaded;
