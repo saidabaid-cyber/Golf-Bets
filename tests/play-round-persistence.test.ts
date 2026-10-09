@@ -8,6 +8,7 @@ import { linkedRoundPlayers } from '../lib/shared-round-participants';
 import { mergeLocalAndCloud, type CloudDataBundle } from '../lib/cloud-sync';
 import { preserveUnfinishedRound, unfinishedRoundDraft } from '../lib/unfinished-round';
 import { initialBets } from '../lib/new-round-bets';
+import { cancellationMaterial } from '../lib/owner-round-cancel';
 import type { RoundSnapshot } from '../lib/types';
 
 // Isolated PostgreSQL, no user account, remote requests or notification delivery.
@@ -66,6 +67,7 @@ function adapter(db:PGlite,userId=owner) {
     if(name.endsWith('supabase/server'))return {getSupabaseForUser:()=>client};
     if(name.endsWith('auth-errors'))return {authUserFailure:()=>null};
     if(name.endsWith('shared-round-participants'))return {linkedRoundPlayers};
+    if(name.endsWith('owner-round-cancel'))return {cancellationMaterial};
     if(name.endsWith('shared-round-participants.server'))return {syncSharedRoundParticipants:async()=>({delivered:0})};
     if(name.endsWith('social-publication-policy'))return {hasCompletedRoundPublicationCandidate:()=>false};
     if(name.endsWith('social-publication.server'))return {scheduleSocialPublication:()=>assert.fail('No test notifications')};
@@ -104,4 +106,19 @@ test('save/exit and starting another round preserve the same card; scoreless set
   const draft=preserveUnfinishedRound({...live,startedAt:undefined,scores:{}},0,'live');assert.equal(draft.lifecycleState,'draft');
   assert.equal(unfinishedRoundDraft(draft)!.lifecycleState,'draft');
   assert.equal(parked.completedAt,undefined);assert.equal(parked.netResult,0);
+});
+
+test('uncertain cancel acknowledgement can retry matching draft cleanup without revising or replacing the closed card',async()=>{
+  const db=await database();try{
+    const closed=preserveUnfinishedRound(card(),2,'cancelled');
+    const first=await adapter(db).put(closed);assert.equal(first.status,200);
+    await db.query('update user_cloud_state set active_draft=$1',[JSON.stringify(unfinishedRoundDraft(card()))]);
+    const retry=adapter(db);const response=await retry.put(closed,5);
+    assert.equal(response.status,200);assert.equal(response.body.alreadyCancelled,true);
+    assert.deepEqual(retry.writes,['user_cloud_state']);
+    const saved=(await db.query<{snapshot:RoundSnapshot;version:number}>('select snapshot,version from rounds_cloud')).rows[0];
+    assert.equal(saved.version,5);assert.deepEqual(saved.snapshot.scores,card().scores);
+    assert.equal((await db.query<{active_draft:unknown}>('select active_draft from user_cloud_state')).rows[0].active_draft,null);
+    assert.equal((await adapter(db).put({...closed,scores:{1:{main:9}}},5)).status,409);
+  }finally{await db.close();}
 });

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cancelOwnerRound } from "../lib/owner-round-cancel";
+import { cancelOwnerRound, OwnerRoundCancellationConflict } from "../lib/owner-round-cancel";
+import { ownerRoundExclusive } from "../lib/owner-round-sync";
 import { preserveUnfinishedRound } from "../lib/unfinished-round";
 import type { RoundSnapshot } from "../lib/types";
 
@@ -59,7 +60,7 @@ test("server conflict is explicit and completed history can never be cancelled",
   assert.equal(completedCalls, 1);
 });
 
-test("retry after an uncertain acknowledgement is read-only and checks preserved scores", async () => {
+test("retry after an uncertain acknowledgement checks scores and retries only draft cleanup", async () => {
   const round = card();
   const reordered = JSON.parse(JSON.stringify(round));
   reordered.scores = { 2: { p2: 4, p1: 3 }, 1: { p2: 5, p1: 4 } };
@@ -67,9 +68,40 @@ test("retry after an uncertain acknowledgement is read-only and checks preserved
   let calls = 0;
   const request: typeof fetch = async () => { calls++; return response({ data: { id: "cloud-qa", version: 8, snapshot: reordered } }); };
   assert.equal((await cancelOwnerRound(round, userId, "qa-token", revision(7), request)).alreadyCancelled, true);
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
   reordered.scores[1].p1 = 6;
   await assert.rejects(cancelOwnerRound(round, userId, "qa-token", revision(7), request), /otra tarjeta/);
+});
+
+test('newer revision with exactly equal capture inputs can be cancelled without removing CAS',async()=>{
+  const round=card(),remote={...round,lifecycleState:'live' as const,pausedAt:'other',resumeHoleIndex:0,betResult:99};
+  for(const known of [undefined,2]){
+    let calls=0;const storage=revision(known);
+    const request:typeof fetch=async(_url,init)=>{
+      if(++calls===1)return response({data:{id:'cloud-qa',version:8,snapshot:remote}});
+      assert.equal(JSON.parse(String(init?.body)).expectedVersion,8);
+      return response({roundId:'cloud-qa',version:9});
+    };
+    await cancelOwnerRound(round,userId,'qa-token',storage,request);
+    assert.equal(calls,2);assert.equal(storage.getItem(`backyard-owner-round-revision:${userId}:qa-active`),'9');
+  }
+});
+test('changed canonical score is supplied for explicit review with no write or revision adoption',async()=>{
+  const storage=revision(2),remote={...card(),lifecycleState:'live' as const,scores:{1:{p1:9,p2:5}}};let calls=0;
+  await assert.rejects(cancelOwnerRound(card(),userId,'qa-token',storage,async()=>{calls++;return response({data:{id:'cloud',version:8,snapshot:remote}});}),error=>{
+    assert.ok(error instanceof OwnerRoundCancellationConflict);assert.equal(error.version,8);assert.equal(error.snapshot.scores![1].p1,9);return true;
+  });
+  assert.equal(calls,1);assert.equal(storage.getItem(`backyard-owner-round-revision:${userId}:qa-active`),'2');
+});
+test('cancel waits for this device owner write before reading canonical revision',async()=>{
+  const key=`backyard-owner-round-revision:${userId}:qa-active`;
+  let release=()=>{},reads=0;
+  const writing=ownerRoundExclusive(key,()=>new Promise<void>(resolve=>{release=resolve;}));
+  await Promise.resolve();
+  const cancelling=cancelOwnerRound(card(),userId,'qa-token',revision(7),async(_url,init)=>{
+    reads++;return init?.method==='PUT'?response({version:8}):response({data:{id:'cloud',version:7,snapshot:{...card(),lifecycleState:'live'}}});
+  });
+  await Promise.resolve();assert.equal(reads,0);release();await writing;await cancelling;assert.equal(reads,2);
 });
 
 test("unsynced organizer card is created once through the existing API, never deleted", async () => {

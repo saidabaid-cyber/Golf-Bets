@@ -40,7 +40,7 @@ export function RoundTeePicker({
     releaseTimer.current = window.setTimeout(() => setTransitioningId(null), 600);
   }
   return <section className={styles.panel} aria-labelledby="round-tee-title">
-    <button type="button" className={styles.back} onClick={onBack}>← Cambiar campo</button>
+    <button type="button" className={styles.back} onClick={onBack}>← Recorridos del campo</button>
     <span className={styles.eyebrow}>CAMPO SELECCIONADO</span>
     <h3 id="round-tee-title">{profiles.length > 1 ? "Configuración y tee" : "Tee de salida"}</h3>
     <p>{courseName}</p>

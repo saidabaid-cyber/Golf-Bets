@@ -154,10 +154,10 @@ test("real draft hydration restores selected course, layout, tee, roster, bets, 
 
 test("cancellation parks the snapshot before clearing state, without creating another draft", async () => {
   const events: string[] = [], busy = { current: false };
-  const cancel = execute("deleteActiveRound", { replacingRound: busy, setRoundLifecycleBusy() {}, parkActiveRound: async (state: string) => { events.push(state); }, applyDraft: (draft: unknown) => { assert.equal(draft,null);events.push("clear"); }, setRoundClosed() {}, setDraftAvailable() {}, setShowDeleteRoundConfirm() {}, setFeedback() {}, setTab: () => events.push("navigate"), setNewRoundBackupError: () => events.push("error") });
+  const cancel = execute("deleteActiveRound", { roundStartedAt:'2026-10-09T12:00:00Z',scores:{},scoreEdits:{},replacingRound: busy, setRoundLifecycleBusy() {}, parkActiveRound: async (state: string) => { events.push(state); }, applyDraft: (draft: unknown) => { assert.equal(draft,null);events.push("clear"); }, setRoundClosed() {}, setDraftAvailable() {}, setShowDeleteRoundConfirm() {}, setFeedback() {}, setTab: () => events.push("navigate"), setNewRoundBackupError: () => events.push("error") });
   await cancel(); assert.deepEqual(events, ["cancelled", "clear", "navigate"]); assert.equal(busy.current, false);
   const failed: string[] = [];
-  const reject = execute("deleteActiveRound", { replacingRound: busy, setRoundLifecycleBusy() {}, parkActiveRound: async () => { throw new Error("storage unavailable"); }, resetRound: () => failed.push("reset"), setTab: () => failed.push("navigate"), setNewRoundBackupError: () => failed.push("error") });
+  const reject = execute("deleteActiveRound", { OwnerRoundCancellationConflict:class extends Error{},roundStartedAt:'2026-10-09T12:00:00Z',scores:{},scoreEdits:{},replacingRound: busy, setRoundLifecycleBusy() {}, parkActiveRound: async () => { throw new Error("storage unavailable"); }, resetRound: () => failed.push("reset"), setTab: () => failed.push("navigate"), setNewRoundBackupError: () => failed.push("error") });
   await reject(); assert.deepEqual(failed, ["error"]);
   assert.match(page, /¿Cancelar esta ronda\?/); assert.doesNotMatch(declaration("deleteActiveRound").getText(ast), /deleteRound|deleteHistory|removeItem|DELETE/);
 });
@@ -182,4 +182,21 @@ test("online cancel closes canonical cloud before clearing the active draft; fai
   events.length = 0;
   await assert.rejects(execute("parkActiveRound", { ...dependencies, flushLocalState: { current: () => true }, cancelOwnerRound: async () => { throw new Error("stale cloud revision"); } })("cancelled"), /stale cloud/);
   assert.deepEqual(events, []);
+});
+
+test('reviewing a newer cancellation card first preserves local inputs and requires another confirmation',()=>{
+  const local={roundId:'qa-review',scores:{1:{self:4}}},remote={id:'qa-review',scores:{1:{self:5}}};
+  const events:string[]=[],ack:Record<string,string>={};
+  const deps={cancelReview:{conflict:{snapshot:remote,version:9},pending:false},roundLifecycleBusy:false,
+    identity:{userId:'qa'},localStorage:{setItem:(k:string,v:string)=>{ack[k]=v;}},ownsLocalWorkspace:()=>true,
+    roundId:'qa-review',flushLocalState:{current:()=>true},STORAGE_KEYS:{draft:'main-draft'},readStoredJson:()=>local,
+    preserveDraftConflict:(_s:unknown,value:unknown)=>{assert.equal(value,local);events.push('preserve');return true;},
+    unfinishedRoundDraft:()=>({roundId:remote.id,scores:remote.scores}),localPersistRevision:{current:0},
+    applyDraft:(value:any)=>{assert.equal(value.scores[1].self,5);events.push('load');},setCancelReview:()=>events.push('dismiss'),
+    setNewRoundBackupError:(message:string)=>assert.match(message,/confirma nuevamente/),
+    cancelOwnerRound:()=>assert.fail('review cannot cancel automatically')};
+  execute('reviewCurrentCancellation',deps)();
+  assert.deepEqual(events,['preserve','load','dismiss']);assert.equal(ack['backyard-owner-round-revision:qa:qa-review'],'9');
+  events.length=0;execute('reviewCurrentCancellation',{...deps,preserveDraftConflict:()=>false,setNewRoundBackupError:()=>events.push('preserve-failed')})();
+  assert.deepEqual(events,['preserve-failed']);
 });

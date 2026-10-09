@@ -44,6 +44,15 @@ export function ownerRoundCaptureMaterial(round: RoundSnapshot) {
 type StorageLike = Pick<Storage, "getItem" | "setItem">;
 const flights = new Map<string, Promise<unknown>>();
 const failed = new Map<string, string>();
+/** Lifecycle mutations share the same queue as live score writes. A cancel
+ * cannot race this device's own pending score acknowledgement. */
+export async function ownerRoundExclusive<T>(key: string, operation: () => Promise<T>): Promise<T> {
+  while (flights.has(key)) await flights.get(key)!.catch(() => {});
+  const promise = Promise.resolve().then(operation);
+  flights.set(key, promise);
+  try { return await promise; }
+  finally { if (flights.get(key) === promise) flights.delete(key); }
+}
 export function ownerRoundAcknowledged(storage: StorageLike, key: string, fingerprint: string) {
   return storage.getItem(`${key}:ack`) === `${fingerprint}:${storage.getItem(key) || ""}`;
 }

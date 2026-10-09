@@ -9,7 +9,7 @@ import type {GpsCourse} from '../../../lib/golf-gps/types';
 
 export function ScorecardQaGate(){
   const [fixture,setFixture]=useState<ScorecardQaFixture|null>(null),[message,setMessage]=useState('Comprobando acceso QA…');
-  const [gps,setGps]=useState<{token:string;courses:GpsCourse[];mapsEnabled:boolean}|null>(null);
+  const [gps,setGps]=useState<{token:string;courses:GpsCourse[];mapsEnabled:boolean;persistentUserId?:string}|null>(null);
   useEffect(()=>{
     const controller=new AbortController();
     const client=getSupabaseBrowser();
@@ -26,7 +26,7 @@ export function ScorecardQaGate(){
         if(controller.signal.aborted||current!==revision)return;
         if(!response.ok)throw new Error(result.error||'No pudimos comprobar tu acceso.');
         verifiedUser=session.data.session.user.id;
-        if(result.gps)setGps({token:session!.data.session!.access_token,courses:result.gps.courses,mapsEnabled:result.mapsEnabled});
+        if(result.gps)setGps({token:session!.data.session!.access_token,courses:result.gps.courses,mapsEnabled:result.mapsEnabled,...(new URLSearchParams(location.search).get('persist')==='1'?{persistentUserId:verifiedUser}:{} )});
         else setFixture(result.data);
       }catch(error){if(!controller.signal.aborted&&current===revision){verifiedUser=null;setGps(null);setFixture(null);setMessage(error instanceof Error?error.message:'No pudimos comprobar tu acceso.');}}
     }

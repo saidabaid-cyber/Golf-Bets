@@ -8,6 +8,7 @@ import { syncSharedRoundParticipants } from "../../../../lib/shared-round-partic
 import { linkedRoundPlayers } from "../../../../lib/shared-round-participants";
 import type { RoundSnapshot } from "../../../../lib/types";
 import { readPendingOwnerRounds } from "../../../../lib/pending-round-recovery";
+import { cancellationMaterial } from "../../../../lib/owner-round-cancel";
 
 async function account(request: NextRequest) {
   const token = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
@@ -88,9 +89,11 @@ export async function PUT(request: NextRequest) {
   const existing = await authenticated.supabase.from("rounds_cloud").select("id,version,snapshot").eq("owner_id", authenticated.userId).eq("local_id", round.id).maybeSingle();
   if (existing.error) return NextResponse.json({ error: "No pudimos consultar la ronda." }, { status: 503 });
   if (!existing.data) return NextResponse.json({ error: "Ronda no disponible." }, { status: 404 });
-  if (Number(existing.data.version) !== body?.expectedVersion || existing.data.snapshot?.lifecycleState !== "live")
+  const alreadyCancelled = round.lifecycleState === "cancelled" && existing.data.snapshot?.lifecycleState === "cancelled"
+    && cancellationMaterial(round) === cancellationMaterial(existing.data.snapshot);
+  if (Number(existing.data.version) !== body?.expectedVersion || (!alreadyCancelled && existing.data.snapshot?.lifecycleState !== "live"))
     return NextResponse.json({ code: "STALE_REVISION", error: "Otro dispositivo cambió o cerró la ronda. Conserva tu borrador y revisa la tarjeta de nube antes de continuar." }, { status: 409 });
-  const saved = await authenticated.supabase.from("rounds_cloud").update({ snapshot: round, updated_at: new Date().toISOString() })
+  const saved = alreadyCancelled ? { data: existing.data, error: null } : await authenticated.supabase.from("rounds_cloud").update({ snapshot: round, updated_at: new Date().toISOString() })
     .eq("id", existing.data.id).eq("owner_id", authenticated.userId).eq("version", body.expectedVersion).select("id,version").maybeSingle();
   if (saved.error) return NextResponse.json({ error: "Captura conservada localmente; nube pendiente." }, { status: 503 });
   if (!saved.data) return NextResponse.json({ code: "STALE_REVISION", error: "La ronda cambió durante la escritura. Revisa antes de reintentar." }, { status: 409 });
@@ -105,7 +108,7 @@ export async function PUT(request: NextRequest) {
   try { delivery = await syncSharedRoundParticipants(authenticated.supabase, authenticated.userId, [round.id]); }
   catch { return NextResponse.json({ version: Number(saved.data.version), error: "Scores guardados; la entrega a participantes sigue pendiente." }, { status: 503 }); }
   if (hasCompletedRoundPublicationCandidate([round])) scheduleSocialPublication(authenticated.userId, "round");
-  return NextResponse.json({ roundId: saved.data.id, version: Number(saved.data.version), delivery });
+  return NextResponse.json({ roundId: saved.data.id, version: Number(saved.data.version), delivery, ...(alreadyCancelled ? { alreadyCancelled: true } : {}) });
 }
 
 export async function DELETE(request: NextRequest) {
