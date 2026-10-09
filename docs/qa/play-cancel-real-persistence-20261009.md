@@ -75,7 +75,10 @@ A numbered temporary card or equivalent authorized operation record is the
 smallest source needed for score; its physical-hole mapping is separately needed
 for GPS. Legacy Par 69 has a known hole-6 par-3 vs confirmed par-4 conflict; fixing
 that number in a fixture does not validate the remaining card or create Par 70.
-Both variants remain visibly pending and are never replaced with Par 72.
+Both variants remain visibly pending and are never replaced with Par 72. The
+player catalog deliberately excludes unplayable tee cards; its zero eligible
+tees must not be described as zero registered tee aggregates. The incomplete
+card notice now separates gross-score, handicap and GPS requirements.
 
 ## Verification boundaries
 
@@ -84,9 +87,33 @@ selection, GPS cache, capture, restoration and QA isolation tests pass. The old
 cancellation VM harness lacked current capture dependencies; that was reproduced
 on the base and repaired without changing business behavior. Typecheck, lint and
 build results and deployed interactive evidence are recorded in the external
-run report. Real reload/continuation/cancellation must be verified there after
-deployment, not inferred from this document or green tests.
+run report. Post-deployment verification used the actual canonical DEV endpoint:
+
+- The controlled Carlos card reproduced revision 1 vs canonical revision 2.
+  The correction cancelled it at revision 3 with scores preserved; reload and
+  idempotent retry retained revision 3. Only the matching QA active slot cleared.
+  Hashes of the fixture's other history were unchanged.
+- The existing El Mongas browser session opened the restricted QA surface,
+  selected La Vista's current local card and White / Men directly, started solo,
+  explored 1 → 2 → 3 → 1 without saving, moved a measurement target and zoomed.
+  A score edit remained pending across hole changes; explicit save acknowledged
+  score 5, closed the sheet and returned to the same map.
+- Save/exit → reload → continue read the same card and score from the actual
+  server at revision 2. Cancellation → reload read revision 3, `cancelled`,
+  retained score 5 and offered New Round. The new configuration started empty.
+  This identified QA card has no completion timestamp or personal statistics.
+- Screenshots at 390×844 and 430×932 show the real Google satellite surface and
+  bottom score sheet. Its camera responds to pointer pan, zoom and target drag.
+  This is desktop pointer QA at phone dimensions, not physical iPhone gesture QA.
+- The desktop location request reached timeout, clearly displayed, and stopped
+  through Stop GPS. No phone/field accuracy is inferred. Real nearby results and
+  Said's own authenticated session remain pending interactive/device testing.
+- Synthetic cards were not completed in El Mongas's personal history; real
+  finalization persistence is not claimed by this QA run.
 
 GolfAPI/Mapbox requests remain zero. Google initializations are counted during
-interactive QA, ceiling 20. No terrain/tee/path geometry is fabricated. Physical
+interactive QA: **2 observed initializations**, ceiling 20. The saved-course
+reader coalesces private DB reads and has no upstream GolfAPI client. The
+cross-user coalescing check is automated; two entitled real user sessions were
+not available for an interactive comparison. No terrain/tee/path geometry is fabricated. Physical
 iPhone gestures and field target accuracy remain `PENDING_DEVICE_QA`.

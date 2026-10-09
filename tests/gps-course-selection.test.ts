@@ -35,7 +35,7 @@ test('same-color categories retain independent IDs and ratings through selection
 });
 
 test('an incomplete temporary configuration survives draft normalization and reports its actual card blocker',()=>{
-  const issue='Faltan las definiciones de los 18 hoyos (par y ventaja/SI).';
+  const issue='Falta la tarjeta numerada de los 18 hoyos: orden y par para llevar score. Las ventajas/SI son necesarias para handicap; la correspondencia de hoyos físicos, para GPS.';
   const original={name:'La Vista Temporary — Par 70',catalogClubId:'club-la-vista',catalogCourseId:'course-la-vista-temporary-par-70',candidateCourseIds:[],selectionIssue:issue};
   const restored=normalizeRoundSetupCourseIdentity(JSON.parse(JSON.stringify(original)));
   assert.deepEqual(restored,original);
