@@ -47,6 +47,28 @@ test("share copies only a permission-protected destination and reports success",
 });
 
 function commentsUI(fail=false){const calls:any[]=[];let refresh=0;const h=socialUI("app/components/social-feed-detail.tsx",{"social-feed-presentation":presentation,"social-feed-view":views,"social-activity-client":{socialRequest:async(path:string,_token:string,init:any)=>{calls.push({path,init});if(init?.method&&fail)throw Error("Error controlado");return{data:[own,other]};},socialErrorMessage:String}});const props={card,viewerId:"owner",accessToken:"isolated-test",onClose(){},onRefresh:async()=>{refresh++;}};return{h,calls,render:()=>h.render("SocialActivityComments",props),refresh:()=>refresh};}
+
+test('Atest distinguishes own confirmations, persisted pending requests and no remaining eligible companions without duplicate controls',()=>{
+  const h=socialUI('app/components/cloud-social-activity.tsx',{'social-feed-presentation':presentation});
+  const base={viewerId:'peer',accessToken:'isolated-test',onRefresh:async()=>{},onOpenScorecard(){}};
+  let tree=h.render('SocialRoundActivityCard',{...base,card:{...card,isAttestedByMe:false,attestCount:2,pendingAttestRequests:1,remainingAttestCompanions:0}});
+  assert.match(uiText(tree),/Atestada por 2 compañeros/);assert.doesNotMatch(uiText(tree),/Solicitar Atest|Solicitar a otro/);
+  const controls=uiNodes(tree).filter(n=>n.type==='button'&&n.props['aria-label']==='Qué significa Atest');assert.equal(controls.length,1);
+  controls[0].props.onClick();tree=h.render('SocialRoundActivityCard',{...base,card:{...card,isAttestedByMe:false,attestCount:2,pendingAttestRequests:1,remainingAttestCompanions:0}});
+  assert.match(uiText(tree),/2 compañeros confirmaron · Versión 3.*1 solicitudes pendientes.*Sin más compañeros disponibles/);
+  tree=h.render('SocialRoundActivityCard',{...base,card:{...card,isAttestedByMe:false,attestCount:0,pendingAttestRequests:1,remainingAttestCompanions:1}});
+  assert.match(uiText(tree),/Solicitud pendiente.*Solicitar a otro compañero/);assert.doesNotMatch(uiText(tree),/Atestada por/);
+  tree=h.render('SocialRoundActivityCard',{...base,viewerId:'another',card:{...card,isAttestedByMe:true,canAttest:true}});
+  assert.match(uiText(tree),/Atestada por ti/);assert.equal(uiNodes(tree).filter(n=>n.type==='button'&&uiText(n)==='Atestar').length,0);
+});
+
+test('results player name focuses that authorized player and Ver tarjetas opens the shared grid',()=>{
+  const opened:Array<string|undefined>=[];const h=socialUI('app/components/social-feed-detail.tsx',{'use-modal-dialog':{useModalDialog:()=>({current:null})}});
+  const tree=h.render('SocialRoundResults',{card,onClose(){},onOpenScorecard:(playerId?:string)=>opened.push(playerId)});
+  uiFind(tree,n=>n.type==='button'&&uiText(n)==='Otro jugador').props.onClick();
+  uiFind(tree,n=>n.type==='button'&&uiText(n)==='Ver tarjetas').props.onClick();
+  assert.deepEqual(opened,['other',undefined]);
+});
 test("dedicated comments load lazily, preserve authors and expose only own editing/deletion",async()=>{const s=commentsUI();s.render();await settleUI();const tree=s.render();assert.match(uiText(tree),/Comentario propio[\s\S]*Comentario de otro jugador/);assert.equal(uiNodes(tree).filter(n=>n.type==="button"&&uiText(n)==="Editar").length,1);assert.equal(uiNodes(tree).filter(n=>n.type==="button"&&uiText(n)==="Eliminar").length,1);assert.equal(uiFind(tree,n=>n.props["data-feed-view"]==="comments").type,"section");});
 test("comment create/edit/cancel/delete keep the existing hash, paths and single-card refresh",async()=>{
   const s=commentsUI();s.render();await settleUI();let tree=s.render();uiFind(tree,n=>n.type==="textarea").props.onChange({target:{value:"  Buena ronda  "}});tree=s.render();uiFind(tree,n=>n.type==="form").props.onSubmit({preventDefault(){}});await settleUI();assert.equal(s.refresh(),1);assert.deepEqual({...s.calls.find(c=>c.init?.method==="POST").init.body},{text:"Buena ronda",expectedHash:card.currentHash});
@@ -62,4 +84,4 @@ test("comments Back restores feed scroll, results → scorecard → Back restore
   h.render("SocialFeedViews",props);h.window.scrollY=540;open("comments",card);let tree=h.render("SocialFeedViews",props);assert.equal(h.window.scrollY,0);assert.ok(uiNodes(tree).some(n=>n.type==="div"&&n.props.hidden));uiFind(tree,n=>typeof n.type==="function"&&n.type.name==="SocialActivityComments").props.onClose();tree=h.render("SocialFeedViews",props);assert.equal(h.window.scrollY,540);assert.equal(views.socialFeedViewFromSearch(h.location.search),null);
   open("results",card);tree=h.render("SocialFeedViews",props);uiFind(tree,n=>typeof n.type==="function"&&n.type.name==="SocialRoundResults").props.onOpenScorecard();tree=h.render("SocialFeedViews",props);assert.ok(!uiNodes(tree).some(n=>typeof n.type==="function"&&n.type.name==="SocialRoundResults"));h.window.history.back();tree=h.render("SocialFeedViews",props);assert.equal(uiFind(tree,n=>typeof n.type==="function"&&n.type.name==="SocialRoundResults").props.card.id,card.id);uiFind(tree,n=>typeof n.type==="function"&&n.type.name==="SocialRoundResults").props.onClose();h.render("SocialFeedViews",props);assert.equal(h.window.scrollY,540);
 });
-test("results show only authorized participants, gross scores and existing achievements",()=>{const html=renderCareer("app/components/social-feed-detail.tsx","SocialRoundResults",{card,onClose(){},onOpenScorecard(){}});assert.match(html,/role="dialog"/);assert.match(html,/Jugador QA[\s\S]*Otro jugador/);assert.match(html,/Score bruto/);assert.doesNotMatch(html,/Neto|apuesta|balance|\$/i);assert.match(html,/Ver tarjeta completa/);const source=readFileSync("app/components/cloud-social-activity.tsx","utf8");assert.doesNotMatch(source,/styles\.leaderboard|showComments|roundDetails/);assert.match(source,/expectedVersion: card.sourceVersion, expectedHash: card.currentHash/);});
+test("results show only authorized participants, gross scores and existing achievements",()=>{const html=renderCareer("app/components/social-feed-detail.tsx","SocialRoundResults",{card,onClose(){},onOpenScorecard(){}});assert.match(html,/role="dialog"/);assert.match(html,/Jugador QA[\s\S]*Otro jugador/);assert.match(html,/Score bruto/);assert.doesNotMatch(html,/Neto|apuesta|balance|\$/i);assert.match(html,/Ver tarjetas/);const source=readFileSync("app/components/cloud-social-activity.tsx","utf8");assert.doesNotMatch(source,/styles\.leaderboard|showComments|roundDetails/);assert.match(source,/expectedVersion: card.sourceVersion, expectedHash: card.currentHash/);});
