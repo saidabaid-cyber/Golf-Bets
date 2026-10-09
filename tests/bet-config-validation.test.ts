@@ -721,10 +721,11 @@ test("the setup gate renders every issue before consent, HCP freezing or round n
   const setupGateRegion = page.indexOf("onStart={async () =>");
   const gate = page.indexOf("if (roundSetupPreflight.length) return false;", setupGateRegion);
   const consent = page.indexOf("await requestBettingConsent()", gate);
-  const start = page.indexOf("ensureRoundStarted();", gate);
-  const freeze = page.indexOf("freezeRoundHandicapBases(current, startedPlayers, roundHandicapBasis)", gate);
+  const freeze = page.indexOf("freezeRoundHandicapBases(bets, startedPlayers, roundHandicapBasis)", gate);
+  const checkpoint = page.indexOf("if (!persistCommittedHoleBeforeAdvance", freeze);
+  const start = page.indexOf("ensureRoundStarted(startedAt);", checkpoint);
   const navigation = page.indexOf('setTab("round")', gate);
-  assert.ok(gate > setupGateRegion && consent > gate && start > consent && freeze > start && navigation > freeze);
+  assert.ok(gate > setupGateRegion && consent > gate && freeze > consent && checkpoint > freeze && start > checkpoint && navigation > start);
   assert.match(wizard, /FALTA COMPLETAR/);
   assert.match(wizard, /blocking\.map\(\(issue\)/);
   assert.match(wizard, /document\.getElementById\(issue\.targetId\)/);

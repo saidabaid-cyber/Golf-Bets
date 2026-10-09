@@ -152,10 +152,10 @@ test("real draft hydration restores selected course, layout, tee, roster, bets, 
   assert.equal(captured.setBets.foursome.fixedValue, input.bets.foursome.fixedValue); assert.equal(captured.setCurrentIndex, undefined);
 });
 
-test("cancellation parks the snapshot as cancelled before resetting, and never hard-deletes history", async () => {
+test("cancellation parks the snapshot before clearing state, without creating another draft", async () => {
   const events: string[] = [], busy = { current: false };
-  const cancel = execute("deleteActiveRound", { replacingRound: busy, setRoundLifecycleBusy() {}, parkActiveRound: async (state: string) => { events.push(state); }, resetRound: () => events.push("reset"), setTab: () => events.push("navigate"), setNewRoundBackupError: () => events.push("error") });
-  await cancel(); assert.deepEqual(events, ["cancelled", "reset", "navigate"]); assert.equal(busy.current, false);
+  const cancel = execute("deleteActiveRound", { replacingRound: busy, setRoundLifecycleBusy() {}, parkActiveRound: async (state: string) => { events.push(state); }, applyDraft: (draft: unknown) => { assert.equal(draft,null);events.push("clear"); }, setRoundClosed() {}, setDraftAvailable() {}, setShowDeleteRoundConfirm() {}, setFeedback() {}, setTab: () => events.push("navigate"), setNewRoundBackupError: () => events.push("error") });
+  await cancel(); assert.deepEqual(events, ["cancelled", "clear", "navigate"]); assert.equal(busy.current, false);
   const failed: string[] = [];
   const reject = execute("deleteActiveRound", { replacingRound: busy, setRoundLifecycleBusy() {}, parkActiveRound: async () => { throw new Error("storage unavailable"); }, resetRound: () => failed.push("reset"), setTab: () => failed.push("navigate"), setNewRoundBackupError: () => failed.push("error") });
   await reject(); assert.deepEqual(failed, ["error"]);
@@ -175,7 +175,7 @@ test("online cancel closes canonical cloud before clearing the active draft; fai
     saveRoundHistoryLocalFirst: async () => { events.push("local-save"); return { history: [] }; },
     offlineDeviceId: { current: "qa-device" }, hadLocalPreferences: { current: false },
     setHistory() {}, normalizeHistorySnapshot: (value: unknown) => value, clearActiveRoundStorage: () => { events.push("clear-active"); },
-    trackLocalCloudEdits() {}, highContrast: false, notificationsEnabled: false, requestCloudSync: { current() {} },
+    localPersistRevision: { current: 0 }, trackLocalCloudCheckpoint() {}, highContrast: false, notificationsEnabled: false, requestCloudSync: { current() {} },
   };
   await execute("parkActiveRound", dependencies)("cancelled");
   assert.deepEqual(events, ["cloud-cancel", "local-save", "clear-active"]);

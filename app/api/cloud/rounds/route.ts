@@ -61,6 +61,11 @@ export async function POST(request: NextRequest) {
   if (existing) return NextResponse.json({ duplicate: true }, { status: 409 });
   const { data, error } = await supabase.from("rounds_cloud").insert({ owner_id: userId, local_round_id: body.round.id, local_id: body.round.id, snapshot: body.round }).select("id,version").single();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if ((body.round as RoundSnapshot).lifecycleState === "cancelled") {
+    const cleared = await supabase.from("user_cloud_state").update({ active_draft: null, updated_at: new Date().toISOString() })
+      .eq("user_id", userId).eq("active_draft->>roundId", body.round.id);
+    if (cleared.error) return NextResponse.json({ version: Number(data.version), error: "Tarjeta cancelada; la limpieza del borrador sigue pendiente." }, { status: 503 });
+  }
   let delivery;
   try { delivery = await syncSharedRoundParticipants(supabase, userId, [body.round.id]); }
   catch { return NextResponse.json({ roundId: data.id, error: "Ronda guardada; la entrega a participantes sigue pendiente." }, { status: 503 }); }
@@ -89,6 +94,13 @@ export async function PUT(request: NextRequest) {
     .eq("id", existing.data.id).eq("owner_id", authenticated.userId).eq("version", body.expectedVersion).select("id,version").maybeSingle();
   if (saved.error) return NextResponse.json({ error: "Captura conservada localmente; nube pendiente." }, { status: 503 });
   if (!saved.data) return NextResponse.json({ code: "STALE_REVISION", error: "La ronda cambió durante la escritura. Revisa antes de reintentar." }, { status: 409 });
+  if (round.lifecycleState === "cancelled") {
+    // Match the cancelled ID, never clear another round started meanwhile.
+    const cleared = await authenticated.supabase.from("user_cloud_state")
+      .update({ active_draft: null, updated_at: new Date().toISOString() })
+      .eq("user_id", authenticated.userId).eq("active_draft->>roundId", round.id);
+    if (cleared.error) return NextResponse.json({ version: Number(saved.data.version), error: "Tarjeta cancelada; la limpieza del borrador de nube sigue pendiente." }, { status: 503 });
+  }
   let delivery;
   try { delivery = await syncSharedRoundParticipants(authenticated.supabase, authenticated.userId, [round.id]); }
   catch { return NextResponse.json({ version: Number(saved.data.version), error: "Scores guardados; la entrega a participantes sigue pendiente." }, { status: 503 }); }

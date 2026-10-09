@@ -298,6 +298,10 @@ function mergeRoundHistory(local: RoundSnapshot[], cloud: RoundSnapshot[]) {
   return mergeCloudCollection(ownedLocal, cloud, round => round.id, round => round.updatedAt || round.completedAt || round.date)
     .map(round => {
       if (round.cloudReadOnly) return round;
+      // A late live-device checkpoint cannot reopen a soft-cancelled card.
+      const copies = [localById.get(round.id), cloudById.get(round.id)];
+      const cancelled = copies.find(copy => copy?.lifecycleState === "cancelled");
+      if (cancelled && copies.every(copy => !copy || ["draft", "live", "cancelled"].includes(copy.lifecycleState || ""))) return cancelled;
       const startedAt = earliestHistoricalStartedAt(localById.get(round.id), cloudById.get(round.id));
       return startedAt ? { ...round, startedAt } : round;
     });
@@ -490,6 +494,10 @@ export function mergeActiveDraftGranular(local: CloudDataBundle, cloud: CloudDat
   };
 }
 
+function cancelledDraft(draft: unknown, history: RoundSnapshot[]) {
+  return isRecord(draft) && typeof draft.roundId === "string" && history.some(round => round.id === draft.roundId && round.lifecycleState === "cancelled");
+}
+
 export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundle): CloudDataBundle {
   const tombstones = mergeCloudCollection(
     local.tombstones || [],
@@ -498,7 +506,11 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
     (item) => item.deletedAt,
   );
   const deleted = new Set(tombstones.map((item) => `${item.entityType}:${item.localId}`));
-  const draftMerge = mergeActiveDraftGranular(local, cloud);
+  const history = mergeRoundHistory(local.history, cloud.history).filter((round) => !deleted.has(`round:${round.id}`));
+  const draftMerge = mergeActiveDraftGranular(
+    { ...local, activeDraft: cancelledDraft(local.activeDraft, history) ? null : local.activeDraft },
+    { ...cloud, activeDraft: cancelledDraft(cloud.activeDraft, history) ? null : cloud.activeDraft },
+  );
   const cloudDraft = stripLocalRoundUi(cloud.activeDraft);
   // A device clock may be behind the server clock. When the three-way merge
   // proves that local fields changed on top of the cloud base, advance the
@@ -509,7 +521,7 @@ export function mergeLocalAndCloud(local: CloudDataBundle, cloud: CloudDataBundl
   return {
     version: CLOUD_SYNC_VERSION,
     deviceId: local.deviceId || cloud.deviceId,
-    history: mergeRoundHistory(local.history, cloud.history).filter((round) => !deleted.has(`round:${round.id}`)),
+    history,
     // Receipts are server-owned: never adopt acknowledgments supplied by an
     // uploading device in place of the current server read.
     acknowledgedLiveHistory: cloud.acknowledgedLiveHistory,
@@ -557,7 +569,7 @@ export function cloudDraftApplyPlan(localDraft: unknown, reconciledDraft: unknow
  * retained only as the next compare-and-swap base. */
 export function mergeLocalFirstActiveDraft(local: CloudDataBundle, cloud: CloudDataBundle): CloudDataBundle {
   const merged = mergeLocalAndCloud(local, cloud);
-  if (!hasRoundProgress(local.activeDraft)) return merged;
+  if (!hasRoundProgress(local.activeDraft) || cancelledDraft(local.activeDraft, merged.history)) return merged;
   const activeDraft = stripLocalRoundUi(local.activeDraft);
   const cloudDraft = stripLocalRoundUi(cloud.activeDraft);
   const draftNeedsWrite = !sameValue(activeDraft, cloudDraft);
@@ -590,12 +602,18 @@ export function findAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cloud
       const [localValue, cloudValue] = collection === "history"
         ? reconcileHistoricalStartedAt(item as RoundSnapshot, other as RoundSnapshot)
         : [item, other];
+      if (collection === "history" && [localValue, cloudValue].some(value => "lifecycleState" in value && value.lifecycleState === "cancelled")
+        && [localValue, cloudValue].every(value => "lifecycleState" in value && ["live", "draft", "cancelled"].includes(String(value.lifecycleState)))) continue;
       if (timestamp(localAt) > 0 && timestamp(localAt) === timestamp(cloudAt) && !sameValue(localValue, cloudValue)) {
         conflicts.push({ collection, localId: item.id, localValue, cloudValue, updatedAt: localAt, localDeviceId: local.deviceId, cloudDeviceId: cloud.deviceId });
       }
     }
   }
-  conflicts.push(...mergeActiveDraftGranular(local, cloud).conflicts);
+  const terminalHistory = mergeRoundHistory(local.history, cloud.history);
+  conflicts.push(...mergeActiveDraftGranular(
+    { ...local, activeDraft: cancelledDraft(local.activeDraft, terminalHistory) ? null : local.activeDraft },
+    { ...cloud, activeDraft: cancelledDraft(cloud.activeDraft, terminalHistory) ? null : cloud.activeDraft },
+  ).conflicts);
   if (timestamp(local.preferences.updatedAt) > 0 && timestamp(local.preferences.updatedAt) === timestamp(cloud.preferences.updatedAt) && local.preferences.hasLocalState && cloud.preferences.hasLocalState && !sameValue(cloudOwnedPreferenceValue(local.preferences), cloudOwnedPreferenceValue(cloud.preferences))) {
     conflicts.push({ collection: "preferences", localId: "preferences", localValue: local.preferences, cloudValue: cloud.preferences, updatedAt: local.preferences.updatedAt, localDeviceId: local.deviceId, cloudDeviceId: cloud.deviceId });
   }
@@ -606,6 +624,8 @@ export function findAmbiguousCloudConflicts(local: CloudDataBundle, cloud: Cloud
  * compatible account data can converge, but an installation actively
  * capturing a round never accepts a different draft from another device. */
 export function findActiveDraftOwnershipConflicts(local: CloudDataBundle, cloud: CloudDataBundle) {
+  const terminalHistory = mergeRoundHistory(local.history, cloud.history);
+  if (cancelledDraft(local.activeDraft, terminalHistory) || cancelledDraft(cloud.activeDraft, terminalHistory)) return [];
   const localDraftActive = hasRoundProgress(local.activeDraft);
   const differentInstallation = Boolean(local.deviceId && cloud.deviceId && local.deviceId !== cloud.deviceId);
   const cloudDraft = stripLocalRoundUi(cloud.activeDraft);

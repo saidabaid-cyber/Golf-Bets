@@ -4,8 +4,9 @@ import type { PendingRoundRecovery } from "../../lib/pending-round-recovery";
 import { CareerPanel } from "./career-shared";
 import styles from "./career-hub.module.css";
 
-export function PendingRoundRecoveryPanel({ userId, accessToken, activeRoundId, onResume }: {
+export function PendingRoundRecoveryPanel({ userId, accessToken, activeRoundId, onResume, onClose, excludedIds = [] }: {
   userId: string; accessToken?: string | null; activeRoundId?: string; onResume: (row: PendingRoundRecovery) => void;
+  onClose?: (row: PendingRoundRecovery) => void; excludedIds?: string[];
 }) {
   const [rows, setRows] = useState<PendingRoundRecovery[] | null>(null);
   const [nextOffset, setNextOffset] = useState<number | null>(0);
@@ -32,14 +33,14 @@ export function PendingRoundRecoveryPanel({ userId, accessToken, activeRoundId, 
     }
   }
   if (!userId || !accessToken) return null;
-  const pending = rows?.filter(row => row.snapshot.id !== activeRoundId);
+  const pending = rows?.filter(row => row.snapshot.id !== activeRoundId && !excludedIds.includes(row.snapshot.id));
   return <CareerPanel title="Rondas sin terminar">
     <p className={styles.caption}>Recupera una tarjeta guardada en la nube. La ronda actual se conserva antes de cambiar.</p>
-    {pending?.map(row => <button key={row.snapshot.id} type="button" className={styles.roundRow} onClick={() => onResume(row)}
+    {pending?.map(row => <div key={row.snapshot.id}><button type="button" className={styles.roundRow} onClick={() => onResume(row)}
       aria-label={`Reanudar ${row.snapshot.id}`}><span className={styles.rowMain}><strong>{row.snapshot.courseName}</strong>
       <small>{row.snapshot.date} · {row.snapshot.teeName} · {Object.keys(row.snapshot.scores || {}).length} hoyos capturados</small>
       <small>{row.snapshot.startedAt ? new Date(row.snapshot.startedAt).toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }) : "Sin iniciar"}</small>
-      </span><span>Reanudar ›</span></button>)}
+      </span><span>Reanudar ›</span></button>{onClose && <button type="button" className="textButton" onClick={() => onClose(row)}>Cerrar / cancelar tarjeta</button>}</div>)}
     {pending?.length === 0 && <p className={styles.caption}>No hay otras rondas pendientes en esta página.</p>}
     {error && <p role="alert">{error}</p>}
     {nextOffset !== null && <button type="button" className={styles.goldButton} disabled={busy} onClick={() => void load()}>

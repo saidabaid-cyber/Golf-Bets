@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import ts from "typescript";
 
 import { calculatePersonalBets } from "../lib/engine";
 import { emptyCounterBetKeepers } from "../lib/side-bets";
@@ -464,9 +465,13 @@ test("live digital capture derives Camellos and Peces but only gates required fa
   const commit = liveFlow.indexOf("commitHoleCapture");
   assert.ok(liveStart >= 0 && factGuard > 0 && validation > factGuard && commit > validation);
 
-  const captureStart = page.indexOf("<RoundCaptureV2");
-  const captureEnd = page.indexOf("/>", captureStart);
-  const captureWiring = page.slice(captureStart, captureEnd);
+  const source = ts.createSourceFile('page.tsx',page,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+  let captureWiring = '';
+  const visit = (node:ts.Node) => {
+    if(ts.isJsxSelfClosingElement(node)&&node.tagName.getText(source)==='RoundCaptureV2')captureWiring=node.getText(source);
+    ts.forEachChild(node,visit);
+  };
+  visit(source);assert.ok(captureWiring);
   assert.match(captureWiring, /counterCaptureQuantity\(counterBetEvents, "camels"/);
   assert.match(captureWiring, /counterCaptureQuantity\(counterBetEvents, "fish"/);
   assert.match(captureWiring, /onCounterChange=\{confirmCounterBetCapture\}/);

@@ -77,7 +77,9 @@ function round():RoundSnapshot {
 for(const state of ['live','cancelled'] as const) test(`${state} keeps scores, identity, tee, play mode; does not add sports stats or balances`,()=>{
   const original=round(), frozen=JSON.stringify(original), saved=preserveUnfinishedRound(original,2,state);
   assert.equal(JSON.stringify(original),frozen);assert.equal(saved.completedAt,undefined);assert.equal(saved.netResult,0);
-  const draft=unfinishedRoundDraft(JSON.parse(JSON.stringify(saved)))!;
+  const draft=unfinishedRoundDraft(JSON.parse(JSON.stringify(saved)));
+  if(state==='cancelled'){assert.equal(draft,null);assert.deepEqual(saved.scores,original.scores);assert.deepEqual(saved.players,original.players);return;}
+  assert.ok(draft);
   assert.deepEqual(draft.scores,original.scores);assert.deepEqual(draft.players,original.players);assert.deepEqual(draft.course,original.courseSnapshot);
   assert.equal(draft.roundId,original.id);assert.equal(draft.currentIndex,2);assert.equal(draft.startHole,10);assert.equal(draft.presentation?.playMode,'score_only');
   assert.equal(buildGolfInsights([saved]).betBalance,undefined); // No completed financial record, not a fabricated settlement.

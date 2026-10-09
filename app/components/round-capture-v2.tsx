@@ -30,6 +30,7 @@ type CounterQuantities = Record<CounterBetKind, Record<string, number | undefine
 
 export type RoundCaptureV2Props = {
   initialGpsOpen?: boolean;
+  gpsContent?: ReactNode;
   course: Pick<Course, "name" | "teeName" | "latitude" | "longitude" | "playerHoleCards">;
   hole: Hole;
   order: number[];
@@ -416,7 +417,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
 
     <section className={styles.gpsShell} id="capture-approach">
       <button type="button" className={styles.gpsToggle} aria-expanded={gpsOpen} aria-controls="round-hole-map" onClick={() => setGpsOpen((open) => !open)}><span aria-hidden="true">⌖</span><b>{gpsOpen ? "OCULTAR VISTA GPS" : "VER VISTA GPS"}</b><small>{gpsOpen ? "Cerrar mapa del hoyo" : "Explora el hoyo cuando haya datos reales"}</small><i aria-hidden="true">{gpsOpen ? "⌃" : "⌄"}</i></button>
-      {gpsOpen ? <div className={styles.holeMap} id="round-hole-map" aria-label="Vista GPS del hoyo">
+      {gpsOpen && props.gpsContent ? <div id="round-hole-map" aria-label="Vista GPS del hoyo">{props.gpsContent}</div> : gpsOpen ? <div className={styles.holeMap} id="round-hole-map" aria-label="Vista GPS del hoyo">
         <header><div><span>VISTA GPS</span><h2>Hole Map</h2></div>{hasVerifiedGreenGeometry && <button type="button" className={styles.gpsButtonLight} data-state={gpsState} disabled={gpsState === "loading"} onClick={requestGps}>{gpsState === "loading" ? "Ubicando…" : gpsState === "ready" ? "Actualizar GPS" : "Usar mi ubicación"}</button>}</header>
         {hasVerifiedGreenGeometry ? <p>{gpsMessage || "Activa GPS para calcular distancias cuando la ubicación del hoyo esté disponible."}</p> : <p>Este hoyo todavía no tiene mapa ni distancias disponibles.</p>}
       </div> : null}

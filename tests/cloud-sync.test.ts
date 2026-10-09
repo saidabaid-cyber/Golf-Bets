@@ -10,6 +10,8 @@ import {
   collectLocalCloudData,
   hasLocalCloudPreferenceState,
   mergeLocalAndCloud,
+  mergeLocalFirstActiveDraft,
+  findActiveDraftOwnershipConflicts,
   findAmbiguousCloudConflicts,
   resolveAmbiguousCloudConflicts,
   recordCloudDeletion,
@@ -40,6 +42,22 @@ function bundle(overrides: Partial<CloudDataBundle> = {}): CloudDataBundle {
     ...overrides,
   };
 }
+
+test("a cancelled card clears stale drafts across reloads and capture-first reconciliation", () => {
+  const round = {id:'cancelled-id',lifecycleState:'cancelled',scores:{1:{owner:4}},updatedAt:'2026-10-09T12:00:00Z'} as unknown as CloudDataBundle['history'][number];
+  const stale = bundle({deviceId:'old',activeDraft:{roundId:round.id,players:[{id:'owner',name:'Owner'}],scores:round.scores,startedAt:'2026-10-09T10:00:00Z'},activeDraftUpdatedAt:'2026-10-10T12:00:00Z',history:[{...round,lifecycleState:'live',updatedAt:'2026-10-10T12:00:00Z'}]});
+  const terminal = bundle({deviceId:'new',history:[round]});
+  assert.deepEqual(findAmbiguousCloudConflicts(stale,terminal),[]);
+  assert.deepEqual(findActiveDraftOwnershipConflicts(stale,terminal),[]);
+  for(const merged of [mergeLocalAndCloud(stale,terminal),mergeLocalAndCloud(terminal,stale),mergeLocalFirstActiveDraft(stale,terminal)]) {
+    assert.equal(merged.activeDraft,null);assert.equal(merged.history[0].lifecycleState,'cancelled');assert.deepEqual(merged.history[0].scores,round.scores);
+    assert.equal(mergeLocalAndCloud(merged,stale).activeDraft,null);
+  }
+  const other=bundle({...stale,activeDraft:{...(stale.activeDraft as object),roundId:'different-round'}});
+  assert.ok(mergeLocalAndCloud(other,terminal).activeDraft);
+  const historicalEdit=bundle({...stale,history:[{...round,lifecycleState:'completed'}]});
+  assert.ok(mergeLocalAndCloud(historicalEdit,bundle()).activeDraft);
+});
 
 test("fixture local conserva todas las colecciones y no modifica storage", () => {
   const storage = new MemoryStorage();

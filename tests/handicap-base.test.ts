@@ -118,5 +118,5 @@ test("UI controles visibles sin motores internos y ayuda independiente para amba
   assert.match(control, /Quien descansa no cuenta/);
   assert.doesNotMatch(control, /Daniel \(0\)|Tamayo \(9\)|Flavio \(14\)/);
   assert.match(control, /Ayuda de base del juego/);
-  assert.match(ui, /freezeRoundHandicapBases\(current, startedPlayers, roundHandicapBasis\)/);
+  assert.match(ui, /freezeRoundHandicapBases\(bets, startedPlayers, roundHandicapBasis\)/);
 });

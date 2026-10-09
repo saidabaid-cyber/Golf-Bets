@@ -1,10 +1,12 @@
 import type { RoundSnapshot } from './types';
 import { restoreRoundSnapshot } from './round-editing';
+import { deriveRoundLifecycleState } from './round-lifecycle';
 
 /** Same historical entity, never a completed score or settled balance. */
 export function preserveUnfinishedRound(snapshot: RoundSnapshot, currentIndex: number, state: 'live' | 'cancelled', previous?: RoundSnapshot): RoundSnapshot {
   if (snapshot.cloudReadOnly || (previous && (!previous.lifecycleState || previous.lifecycleState === 'completed'))) throw new Error('No se puede reemplazar una ronda histórica terminada con un borrador. Guarda sus correcciones primero.');
-  return structuredClone({ ...snapshot, lifecycleState: state, completedAt: undefined,
+  const lifecycleState = state === 'cancelled' ? state : deriveRoundLifecycleState({ ...snapshot, reviewPending: false, lifecycleState: undefined });
+  return structuredClone({ ...snapshot, lifecycleState, completedAt: undefined,
     pausedAt: new Date().toISOString(), resumeHoleIndex: currentIndex,
     betResult: 0, expenseTotal: 0, netResult: 0, categoryResults: {}, playerBalances: {}, categoryBalances: {},
     resultDetails: undefined, personalResults: [], personalOpponentResults: [], personalSlidingAdjustments: [],
@@ -14,12 +16,12 @@ export function preserveUnfinishedRound(snapshot: RoundSnapshot, currentIndex: n
 
 /** Reuse the app's existing draft hydrator, preserving the canonical ID/tees. */
 export function unfinishedRoundDraft(snapshot: RoundSnapshot) {
-  if (snapshot.lifecycleState !== 'live' && snapshot.lifecycleState !== 'cancelled') return null;
+  if (snapshot.lifecycleState !== 'live' && snapshot.lifecycleState !== 'draft') return null;
   const round = restoreRoundSnapshot(snapshot);
   if (!round) return null;
   return {
     version: 11, roundId: round.id, roundDate: round.date, startedAt: round.startedAt,
-    lifecycleState: 'live', course: round.courseSnapshot, courseSelected: round.resumeCourseSelected !== false,
+    lifecycleState: snapshot.lifecycleState, course: round.courseSnapshot, courseSelected: round.resumeCourseSelected !== false,
     players: round.players, ownerId: round.ownerId, playerTeeAssignments: round.playerTeeAssignments,
     startHole: round.startHole, roundHoles: round.roundHoles, handicapBasis: round.handicapBasis,
     presentation: round.presentation, bets: round.betConfig, segments: round.segments,

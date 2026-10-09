@@ -100,7 +100,9 @@ test("componente dispara APIs nativas sólo desde CTAs explícitos y ofrece sali
   assert.match(coursePicker, /readAccountDevicePermissionPreferences\(localStorage,permissionOwnerId\)\.locationEnabled/);
   assert.match(coursePicker, /readDevicePermissionPreferences\(localStorage,permissionOwnerId\)/);
   assert.match(coursePicker, /resolveAuthorizedNearbyLocation\(localStorage,permissionOwnerId/);
-  assert.doesNotMatch(coursePicker, /requestCourseLocation\(/);
+  assert.match(coursePicker, /if\(purpose==='round'\)\{\s*locateRound\(\);return;/);
+  assert.match(coursePicker, /if\(result.state==='granted'\)locateRound\(\)/);
+  assert.match(coursePicker, /navigator.permissions\?\.query\(\{name:'geolocation'\}\)/);
   assert.match(coursePicker, /Precisión informada por el dispositivo/);
   assert.doesNotMatch(coursePicker, /No la guardamos ni enviamos/);
 });

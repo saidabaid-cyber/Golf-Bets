@@ -1,5 +1,5 @@
 import { careerViewFromSearch, type CareerView } from "./career-navigation";
-export type AppTab = "welcome" | "career" | "friends" | "coach" | "play" | "totalScore" | "aiSetup" | "setup" | "round" | "scorecardScan" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "balances" | "stats" | "courseLibrary" | "courses" | "rules" | "pollaLive" | "account" | "profile" | "groups" | "social" | "notifications" | "notificationPreferences";
+export type AppTab = "welcome" | "career" | "friends" | "coach" | "play" | "gps" | "totalScore" | "aiSetup" | "setup" | "round" | "scorecardScan" | "standings" | "personals" | "personalDetail" | "historyDetail" | "results" | "history" | "balances" | "stats" | "courseLibrary" | "courses" | "rules" | "pollaLive" | "account" | "profile" | "groups" | "social" | "notifications" | "notificationPreferences";
 
 export const BOTTOM_NAV_TARGETS = {
   Inicio: "welcome",
@@ -13,7 +13,7 @@ export type PrimaryAppSection = keyof typeof BOTTOM_NAV_TARGETS;
 export type ActiveRoundStatus = "setup" | "live" | "review";
 
 const PLAY_TABS = new Set<AppTab>([
-  "play", "aiSetup", "setup", "round", "scorecardScan", "standings", "personals", "personalDetail",
+  "play", "gps", "aiSetup", "setup", "round", "scorecardScan", "standings", "personals", "personalDetail",
   "results", "balances", "courseLibrary", "courses", "pollaLive", "groups", "totalScore",
 ]);
 

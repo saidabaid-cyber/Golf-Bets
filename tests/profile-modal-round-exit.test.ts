@@ -20,8 +20,8 @@ test("profile completion uses the shared modal outside the profile identity grid
 
 test("capture offers exit and the same guarded new-round flow without requiring completion", () => {
   const capture = page.slice(page.indexOf('{tab === "round" && <ScorecardBoundary'), page.indexOf("<RoundCaptureV2"));
-  assert.match(capture, /Salir y continuar después/);
-  assert.match(capture, /flushLocalState\.current\?\.\(\); setTab\("welcome"\)/);
+  assert.match(capture, /Guardar y salir/);
+  assert.match(capture, /if \(flushLocalState\.current\?\.\(\)\) setTab\("play"\)/);
   assert.match(capture, /onClick=\{requestNewRound\}>Nueva ronda/);
   assert.doesNotMatch(capture, /resetRound|deleteActiveRound|saveRound/);
 });

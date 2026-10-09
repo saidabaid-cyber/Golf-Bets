@@ -162,6 +162,8 @@ import { ownerLiveTransportAllowed } from "../lib/owner-round-sync";
 import { RoundScorekeepingChoice } from "./components/round-scorekeeping-choice";
 import { RoundSavedConfirmation } from "./components/round-saved-confirmation";
 import { RoundCaptureV2 } from "./components/round-capture-v2";
+import { GolfGpsReader } from "./components/golf-gps/golf-gps-reader";
+import { PendingRoundRecoveryPanel } from "./components/pending-round-recovery";
 import { GolfLeaderboard } from "./components/golf-leaderboard";
 import { LiveRoundQuestion } from "./components/live-round-question";
 import { canEditSnapshot, restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
@@ -647,6 +649,7 @@ function GolfBetsApp() {
   const [privateBoardMode, setPrivateBoardMode] = useState<"gross" | "net">("net");
   const [undoCount, setUndoCount] = useState(0);
   const [showDeleteRoundConfirm, setShowDeleteRoundConfirm] = useState(false);
+  const [pendingRoundToClose, setPendingRoundToClose] = useState<RoundSnapshot | null>(null);
   const [showNewRoundConfirm, setShowNewRoundConfirm] = useState(false);
   const [showFirstRoundExperience, setShowFirstRoundExperience] = useState(false);
   const firstExperienceGroupReturn = useRef<{ tab: AppTab; origin: "home" | "round" } | null>(null);
@@ -739,11 +742,11 @@ function GolfBetsApp() {
       || manualBets.some((bet) => bet.enabled !== false)
       || Object.values(expenses).some((value) => value !== 0);
   }
-  function ensureRoundStarted() {
+  function ensureRoundStarted(requestedStart?: string) {
     if (roundStartedAt || roundReviewPending) return roundStartedAt;
     const hasConfirmedScore = Object.values(scores).some((row) => Object.values(row).some((score) => typeof score === "number"));
     if (hasConfirmedScore) return null;
-    const startedAt = new Date().toISOString();
+    const startedAt = requestedStart || new Date().toISOString();
     setRoundStartedAt(current => current ?? startedAt);
     void recordProductEvent({ eventId: `round-created-${roundId}`, eventName: "round_created", accessToken: identity.accessToken, occurredAt: startedAt, metadata: { source: "round", roundHoles, playerCount: players.length } });
     return startedAt;
@@ -1160,7 +1163,7 @@ function GolfBetsApp() {
       try {
         const draft = withDerivedRoundLifecycle({ version: 11, course, courseSelected, courseIdentity: courseSelected ? undefined : pendingCourseIdentity ?? undefined, playerTeeAssignments, startHole, roundHoles, handicapBasis: roundHandicapBasis, presentation: normalizeRoundPresentation(roundPresentation), players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scorecardPhotoIds, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending, templateOrigin: roundTemplateOrigin ?? undefined });
         const previousFingerprint = cloudSyncPayloadFingerprint(collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current));
-        const activeDraft = roundClosed ? null : cloudHydrationBoundary.current.projectDraft(draft);
+        const activeDraft = roundClosed || !hasRoundProgress(draft) ? null : cloudHydrationBoundary.current.projectDraft(draft);
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
         localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(cloudHydrationBoundary.current.projectHistory(history)));
@@ -2189,9 +2192,9 @@ function GolfBetsApp() {
     });
   }
 
-  function roundDraftPayload(overrides: { scores?: Record<number, HoleScore>; scoreEdits?: ScoreRows; bets?: BetConfig; currentIndex?: number; reviewPending?: boolean; startedAt?: string | null; scorecardPhotoIds?: string[]; putts?: PuttsByHole; advancedStats?: AdvancedStatsByHole; counterBetEvents?: CounterBetEvent[] } = {}) {
+  function roundDraftPayload(overrides: { course?: Course; players?: Player[]; scores?: Record<number, HoleScore>; scoreEdits?: ScoreRows; bets?: BetConfig; currentIndex?: number; reviewPending?: boolean; startedAt?: string | null; scorecardPhotoIds?: string[]; putts?: PuttsByHole; advancedStats?: AdvancedStatsByHole; counterBetEvents?: CounterBetEvent[] } = {}) {
     return withDerivedRoundLifecycle({
-      version: 11, course, courseSelected, courseIdentity: courseSelected ? undefined : pendingCourseIdentity ?? undefined, playerTeeAssignments, startHole, roundHoles, handicapBasis: roundHandicapBasis, presentation: normalizeRoundPresentation(roundPresentation), players, ownerId,
+      version: 11, course: overrides.course ?? course, courseSelected, courseIdentity: courseSelected ? undefined : pendingCourseIdentity ?? undefined, playerTeeAssignments, startHole, roundHoles, handicapBasis: roundHandicapBasis, presentation: normalizeRoundPresentation(roundPresentation), players: overrides.players ?? players, ownerId,
       bets: overrides.bets || bets, segments, personalBets, supplementalBets, manualBets,
       scores: overrides.scores || scores, scoreEdits: overrides.scoreEdits || scoreEdits, putts: overrides.putts ?? putts, scoreCaptureMode, advancedStats: overrides.advancedStats ?? advancedStats, shots, unitEvents, counterBetEvents: overrides.counterBetEvents ?? counterBetEvents,
       counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: normalizeRoundStartedAt(overrides.startedAt) ?? roundStartedAt ?? undefined,
@@ -2230,11 +2233,11 @@ function GolfBetsApp() {
     }
   }
 
-  function persistCommittedHoleBeforeAdvance(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null, savedPhotoIds?: string[], capture?: { putts: PuttsByHole; advancedStats: AdvancedStatsByHole; counterBetEvents: CounterBetEvent[]; reviewPending: boolean }) {
+  function persistCommittedHoleBeforeAdvance(savedScores: Record<number, HoleScore>, savedEdits: ScoreRows, savedBets: BetConfig, savedIndex: number, startedAt?: string | null, savedPhotoIds?: string[], capture?: { putts: PuttsByHole; advancedStats: AdvancedStatsByHole; counterBetEvents: CounterBetEvent[]; reviewPending: boolean }, configuration?: { course: Course; players: Player[] }) {
     try {
       if (localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return false;
       const previousDraft = readStoredJson<unknown>(window.localStorage, STORAGE_KEYS.draft, null);
-      const draft = cloudHydrationBoundary.current.projectDraft(roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false, startedAt, scorecardPhotoIds: savedPhotoIds, ...capture }));
+      const draft = cloudHydrationBoundary.current.projectDraft(roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false, startedAt, scorecardPhotoIds: savedPhotoIds, ...capture, ...configuration }));
       // localStorage is the synchronous durability boundary used by Safari/PWA.
       // Metadata and the offline outbox are created only after exact readback.
       persistRoundDraftCheckpoint(window.localStorage, draft);
@@ -2897,9 +2900,11 @@ function GolfBetsApp() {
     });
     if (!ownsLocalWorkspace(localStorage, identity.userId)) throw new Error('La sesión cambió.');
     setHistory(saved.history.map(normalizeHistorySnapshot));
-    flushLocalState.current = null;
+    const previousDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
+    localPersistRevision.current += 1;
+    flushLocalState.current = () => true;
     clearActiveRoundStorage(localStorage);
-    trackLocalCloudEdits(localStorage, null, { highContrast, language: 'es-MX', notificationsEnabled, defaultHandicap: identity.defaultHandicap });
+    trackLocalCloudCheckpoint(localStorage, null, { highContrast, language: 'es-MX', notificationsEnabled, defaultHandicap: identity.defaultHandicap }, previousDraft);
     requestCloudSync.current?.();
   }
   async function confirmNewRound() {
@@ -2922,10 +2927,35 @@ function GolfBetsApp() {
     replacingRound.current = true; setRoundLifecycleBusy(true);
     try {
       await parkActiveRound('cancelled');
-      resetRound('Ronda cerrada. Sus datos se conservan en Histórico.');
-      setTab('welcome');
+      applyDraft(null);
+      setRoundClosed(true);
+      setDraftAvailable(false);
+      setShowDeleteRoundConfirm(false);
+      setFeedback('Ronda cancelada. Su tarjeta se conserva en Histórico.');
+      setTab('play');
     } catch(error) { setNewRoundBackupError(error instanceof Error ? error.message : 'No pudimos cerrar la ronda. No se borró nada.'); }
     finally { replacingRound.current = false; setRoundLifecycleBusy(false); }
+  }
+
+  async function closePendingRound(snapshot: RoundSnapshot) {
+    if (roundLifecycleBusy || !ownsLocalWorkspace(localStorage, identity.userId)) return;
+    setRoundLifecycleBusy(true);
+    try {
+      const closed = preserveUnfinishedRound(snapshot, snapshot.resumeHoleIndex || 0, 'cancelled', snapshot);
+      if (snapshot.startedAt && identity.mode === 'authenticated' && cloudLinked && navigator.onLine) {
+        if (!identity.accessToken) throw new Error('Vuelve a iniciar sesión.');
+        await cancelOwnerRound(closed, identity.userId, identity.accessToken, localStorage);
+      }
+      const saved = await saveRoundHistoryLocalFirst({ storage: localStorage, ownerId: identity.userId, snapshot: closed,
+        deviceId: offlineDeviceId.current, defaultHandicap: identity.defaultHandicap, hasLocalPreferenceState: hadLocalPreferences.current,
+        queueForCloud: identity.mode === 'authenticated' && cloudLinked });
+      if (!ownsLocalWorkspace(localStorage, identity.userId)) return;
+      setHistory(saved.history.map(normalizeHistorySnapshot));
+      requestCloudSync.current?.();
+      setPendingRoundToClose(null);
+      setFeedback('Tarjeta cerrada sin finalizar. Sus scores se conservan y no se considera una ronda completa.');
+    } catch (error) { setFeedback(error instanceof Error ? error.message : 'No se pudo cerrar. La tarjeta se conserva pendiente.'); }
+    finally { setRoundLifecycleBusy(false); }
   }
 
   function openCourseEditor(nextCourse: Course, selectOnSave: boolean) {
@@ -3879,7 +3909,7 @@ function GolfBetsApp() {
   );
   const activeRoundSummary = useMemo<ActiveRoundSummary | null>(() => {
     if (!draftAvailable || roundClosed) return null;
-    const scoreStarted = Boolean(roundStartedAt) || currentIndex > 0 || Object.values(scores).some((row) => Object.values(row).some((value) => typeof value === "number"));
+    const scoreStarted = Boolean(roundStartedAt) || Object.values(scores).some((row) => Object.values(row).some((value) => typeof value === "number"));
     const status: ActiveRoundSummary["status"] = resolveActiveRoundStatus({ reviewPending: roundReviewPending, courseSelected, playerCount: players.length, scoreStarted });
     const ownerScore = order.reduce((summary, candidateHole) => {
       const value = scores[candidateHole]?.[ownerId];
@@ -3971,7 +4001,7 @@ function GolfBetsApp() {
   ].filter((item) => item.visible);
 
   const renderHistoricalCard = (r: RoundSnapshot) => {
-          if ((r.lifecycleState === 'live' || r.lifecycleState === 'cancelled') && !r.cloudReadOnly) return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{r.courseName}</b><span>{r.date} · {r.lifecycleState === 'cancelled' ? 'Cerrada sin finalizar' : 'Pendiente'} · {r.players?.length || 0} jugadores</span></div></div><div className="historyActions"><button className="primary" onClick={() => r.id === roundId && !roundClosed ? continueActiveRound() : requestNewRoundIntent({ kind: 'resume', snapshot: r })}>Reanudar ronda</button></div></div>;
+          if ((r.lifecycleState === 'draft' || r.lifecycleState === 'live' || r.lifecycleState === 'cancelled') && !r.cloudReadOnly) return <div className="historyRound" key={r.id}><div className="historyRow"><div><b>{r.courseName}</b><span>{r.date} · {r.lifecycleState === 'cancelled' ? 'Cerrada sin finalizar' : 'Pendiente'} · {r.players?.length || 0} jugadores</span></div></div><div className="historyActions"><button className="primary" onClick={() => r.lifecycleState === 'cancelled' ? openHistoricalRound(r.id) : r.id === roundId && !roundClosed ? continueActiveRound() : requestNewRoundIntent({ kind: 'resume', snapshot: r })}>{r.lifecycleState === 'cancelled' ? 'Ver tarjeta' : r.lifecycleState === 'draft' ? 'Completar configuración' : 'Reanudar ronda'}</button></div></div>;
           const recap = buildHistoricalRoundRecap(r);
           const financials = recap.financials;
           const holeLabel = recap.meta.holeCount ? `${recap.meta.holeCount} hoyos` : "hoyos no registrados";
@@ -4017,8 +4047,18 @@ function GolfBetsApp() {
     {tab === "coach" && <MyCoach insights={betaGolfInsights} ready={statisticsReady} onBallFit={() => openCoachFitting(false)} onLaunchMonitor={() => openCoachFitting(true)} onProgress={() => setTab("stats")} onEquipment={() => { setLaunchMonitorEntry(false); setProfileCompletionTarget("equipment"); setProfileFocus("equipment"); setTab("profile"); }} />}
 
     {tab === "play" && <PlayHub
+      pendingRounds={<>
+        {history.filter(row => row.lifecycleState === 'live' && row.id !== roundId && !row.cloudReadOnly).map(row => <section className="card" key={row.id}><h3>{row.courseName}</h3><p>{row.date} · {Object.keys(row.scores || {}).length}/{row.order?.length || row.roundHoles || 18} hoyos capturados · Pendiente</p><button type="button" className="secondary" onClick={() => requestNewRoundIntent({ kind: 'resume', snapshot: row })}>Continuar</button><button type="button" className="textButton" onClick={() => openHistoricalRound(row.id)}>Ver tarjeta</button><button type="button" className="textButton" onClick={() => setPendingRoundToClose(row)}>Cerrar / cancelar</button></section>)}
+        <PendingRoundRecoveryPanel userId={identity.userId} accessToken={identity.accessToken} activeRoundId={roundClosed ? undefined : roundId} excludedIds={history.filter(row => row.lifecycleState === 'cancelled').map(row => row.id)} onClose={row => {
+          localStorage.setItem(`backyard-owner-round-revision:${identity.userId}:${row.snapshot.id}`, String(row.version));
+          setPendingRoundToClose(row.snapshot);
+        }} onResume={row => {
+          localStorage.setItem(`backyard-owner-round-revision:${identity.userId}:${row.snapshot.id}`, String(row.version));
+          requestNewRoundIntent({ kind: 'resume', snapshot: row.snapshot });
+        }} />
+      </>}
       clubhouseConfig={identity.homeClubId ? { clubId: identity.homeClubId, label: identity.homeClub || "", enabled: [] } : null}
-      onOpenGps={() => { setRoundGpsIntent(true); continueActiveRound(); }}
+      onOpenGps={() => { if (activeRoundSummary?.status === 'live') { setRoundGpsIntent(true); continueActiveRound(); } else setTab('gps'); }}
       onCancelRound={() => { setNewRoundBackupError(""); setShowDeleteRoundConfirm(true); }}
       activeRound={activeRoundSummary}
       onContinueRound={continueActiveRound}
@@ -4038,6 +4078,8 @@ function GolfBetsApp() {
       onOpenStandings={() => setTab("standings")}
       onOpenResults={() => setTab("results")}
     />}
+
+    {tab === 'gps' && <><button type="button" className="secondary" onClick={() => setTab('play')}>← Volver a Play</button><GolfGpsReader key={identity.userId} token={identity.accessToken ?? null} /></>}
 
     {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} player={principal} accessToken={identity.accessToken} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
 
@@ -4113,7 +4155,8 @@ function GolfBetsApp() {
     {copyFallback && <section className="card"><label>Resumen para copiar<textarea readOnly value={copyFallback} onFocus={event => event.currentTarget.select()} /></label><button onClick={() => setCopyFallback("")}>← Regresar</button></section>}
     {showFirstRoundExperience && <div className="modalBackdrop"><section className="confirmDialog firstRoundExperience" role="dialog" aria-modal="true" aria-labelledby="first-round-title" aria-describedby="first-round-description"><ModalCloseButton onClose={() => { try { markFirstRoundExperienceSeen(localStorage, identity.userId); } catch {} setShowFirstRoundExperience(false); }} /><span className="eyebrow">TU PRIMERA RONDA</span><h2 id="first-round-title">Prepara tu ronda</h2><p id="first-round-description">Puedes empezar por el campo o ir directo a lo que quieres configurar. Nada es obligatorio.</p><div className="firstRoundActions"><button className="secondary" onClick={() => completeFirstRoundExperience("players")}>Agregar jugadores</button><button className="secondary" onClick={() => completeFirstRoundExperience("groups")}>Usar un grupo</button><button className="secondary" onClick={() => completeFirstRoundExperience("bets")}>Configurar apuestas</button><button className="primary" onClick={() => completeFirstRoundExperience("continue")}>Continuar sin configurar</button></div></section></div>}
     <ModalShell open={discardGroupChanges} onClose={() => setDiscardGroupChanges(false)} className="confirmDialog" labelledBy="discard-group-title"><h2 id="discard-group-title">¿Descartar los cambios?</h2><p>El grupo no se guardará con estos cambios.</p><div className="dialogActions"><button type="button" className="secondary" onClick={() => setDiscardGroupChanges(false)}>Seguir editando</button><button type="button" className="dangerButton" onClick={() => void closeFirstExperienceGroupEditor()}>Descartar cambios</button></div></ModalShell>
-    <ModalShell className="confirmDialog roundLifecycleDialog" open={showNewRoundConfirm} onClose={() => { if (roundLifecycleBusy) return; setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }} closeDisabled={roundLifecycleBusy} labelledBy="new-round-title"><h2 id="new-round-title">Tienes una ronda activa</h2><p>La ronda anterior no se borrará. Quedará guardada con sus jugadores y scores para que puedas reanudarla.</p>{newRoundBackupError && <p role="alert">{newRoundBackupError}</p>}<div className="dialogActions"><button autoFocus className="primary" disabled={roundLifecycleBusy} onClick={() => { setShowNewRoundConfirm(false); setPendingNewRoundIntent(null); continueActiveRound(); }}>Continuar ronda actual</button><button className="secondary" disabled={roundLifecycleBusy} onPointerDown={commitFocusedNumericCapture} onClick={() => void confirmNewRound()}>{roundLifecycleBusy ? 'Guardando…' : 'Iniciar nueva ronda'}</button><button className="textButton" disabled={roundLifecycleBusy} onClick={() => { setShowNewRoundConfirm(false); setPendingNewRoundIntent(null); }}>Cancelar</button></div></ModalShell>
+    <ModalShell className="confirmDialog roundLifecycleDialog" open={showNewRoundConfirm} onClose={() => { if (roundLifecycleBusy) return; setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); }} closeDisabled={roundLifecycleBusy} labelledBy="new-round-title"><h2 id="new-round-title">{activeRoundSummary?.status === 'setup' ? 'Tienes una configuración guardada' : 'Tienes una ronda activa'}</h2><p>La ronda anterior no se borrará. Quedará guardada con sus jugadores y scores para que puedas reanudarla.</p>{newRoundBackupError && <p role="alert">{newRoundBackupError}</p>}<div className="dialogActions"><button autoFocus className="primary" disabled={roundLifecycleBusy} onClick={() => { setShowNewRoundConfirm(false); setPendingNewRoundIntent(null); continueActiveRound(); }}>{activeRoundSummary?.status === 'setup' ? 'Completar configuración' : 'Continuar ronda actual'}</button><button className="secondary" disabled={roundLifecycleBusy} onPointerDown={commitFocusedNumericCapture} onClick={() => void confirmNewRound()}>{roundLifecycleBusy ? 'Guardando…' : 'Iniciar nueva ronda'}</button><button className="textButton" disabled={roundLifecycleBusy} onClick={() => { setShowNewRoundConfirm(false); setPendingNewRoundIntent(null); }}>Cancelar</button></div></ModalShell>
+    <ModalShell className="confirmDialog roundLifecycleDialog" open={Boolean(pendingRoundToClose)} closeDisabled={roundLifecycleBusy} onClose={() => { if (!roundLifecycleBusy) setPendingRoundToClose(null); }} labelledBy="pending-close-title"><h2 id="pending-close-title">¿Cerrar esta tarjeta sin completar?</h2><p>{pendingRoundToClose?.courseName}. Conservaremos los scores capturados. No se marcará como una ronda completa ni se inventarán resultados.</p><div className="dialogActions"><button type="button" className="secondary" disabled={roundLifecycleBusy} onClick={() => setPendingRoundToClose(null)}>Conservar pendiente</button><button type="button" className="dangerButton" disabled={roundLifecycleBusy} onClick={() => pendingRoundToClose && void closePendingRound(pendingRoundToClose)}>{roundLifecycleBusy ? 'Guardando…' : 'Cerrar tarjeta'}</button></div></ModalShell>
     {pendingRoundAction && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-change-title"><ModalCloseButton onClose={() => setPendingRoundAction(null)} /><h2 id="round-change-title">Confirmar cambios</h2><p>{pendingRoundAction.message}</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setPendingRoundAction(null)}>Cancelar</button><button className="primary" onClick={() => { const action = pendingRoundAction; setPendingRoundAction(null); action.run(); }}>Confirmar</button></div></section></div>}
     {showRoundFinishedNotice && <div className="modalBackdrop"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="round-finished-title"><ModalCloseButton onClose={() => setShowRoundFinishedNotice(false)} /><h2 id="round-finished-title">Ronda terminada</h2><p>{ROUND_REVIEW_NOTICE}</p><div className="dialogActions"><button autoFocus className="primary" onClick={() => { setShowRoundFinishedNotice(false); setTab("results"); }}>Revisar resultados</button></div></section></div>}
     {pendingCloudConflict && (() => { const conflict = pendingCloudConflict.conflicts[0]; if (!conflict) return null; const display = describeCloudConflict(conflict, playerName); return <div className="modalBackdrop"><section className="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="cloud-conflict-title"><ModalCloseButton onClose={() => setPendingCloudConflict(null)} /><h2 id="cloud-conflict-title">Cambio en dos dispositivos</h2><p>Elige únicamente el dato en conflicto. Los demás cambios compatibles ya se combinaron.</p><div className="cloudConflictField"><b>{display.label}</b><span>Nube: {display.cloudValue}</span><span>Este dispositivo: {display.localValue}</span></div>{pendingCloudConflict.conflicts.length > 1 && <small>Quedan {pendingCloudConflict.conflicts.length} conflictos por revisar.</small>}<div className="dialogActions"><button className="secondary" onClick={() => resolveCloudConflict("cloud")}>Usar nube para este dato</button><button className="primary" onClick={() => resolveCloudConflict("local")}>Usar este dispositivo</button></div></section></div>; })()}
@@ -4133,14 +4176,14 @@ function GolfBetsApp() {
         if (hasActiveBettingConfiguration() && !hasPersistedBettingConsent() && !await requestBettingConsent()) return false;
         setShowBetSetupErrors(false);
         const startedPlayers = playersForRoundStart();
-        setPlayers(startedPlayers);
-        const startedAt = ensureRoundStarted();
-        if (!roundStartedAt && startedAt && !course.operationsSnapshot) {
-          const resolvedCourse = await loadCourseOperations(course, startedAt, null, identity.accessToken).catch(() => course);
-          setCourse(resolvedCourse);
-        }
-        setBets(current => freezeRoundHandicapBases(current, startedPlayers, roundHandicapBasis));
-        if (!editingRound) setCurrentIndex(0);
+        const startedAt = roundStartedAt || new Date().toISOString();
+        const resolvedCourse = !roundStartedAt && !course.operationsSnapshot
+          ? await loadCourseOperations(course, startedAt, null, identity.accessToken).catch(() => course) : course;
+        const savedBets = freezeRoundHandicapBases(bets, startedPlayers, roundHandicapBasis);
+        const savedIndex = editingRound ? currentIndex : 0;
+        if (!persistCommittedHoleBeforeAdvance(scores, scoreEdits, savedBets, savedIndex, startedAt, undefined, undefined, { course: resolvedCourse, players: startedPlayers })) return false;
+        ensureRoundStarted(startedAt);
+        setPlayers(startedPlayers); setCourse(resolvedCourse); setBets(savedBets); setCurrentIndex(savedIndex);
         setEditingRound(false);
         setTab("round");
         return true;
@@ -4165,10 +4208,10 @@ function GolfBetsApp() {
 
       <RoundSetupStep step={1}>
       <section className="card" id="round-course">
-        <div className="sectionTitle"><div><h2>1. Campo → Layout → Tee</h2><p>{courseSetupStage === "course" ? "Busca el club y selecciona su layout físico." : courseSetupStage === "tee" ? "Elige la tarjeta/configuración y la salida antes de configurar la ronda." : "Revisa la configuración elegida: rating, slope, par, yardaje y el hoyo donde comienza el grupo."}</p></div>{courseSetupStage === "course" && <div className="courseSetupActions"><button className="textButton" onClick={() => setTab("courseLibrary")}>Ver campos</button><button className="textButton" onClick={startNewCourse}>+ Campo</button></div>}</div>
+        <div className="sectionTitle"><div><h2>1. Campo → Layout → Tee</h2><p>{courseSetupStage === "course" ? "Selecciona un club de la lista o busca por nombre y ciudad." : courseSetupStage === "tee" ? "Elige la tarjeta/configuración y la salida antes de configurar la ronda." : "Revisa la configuración elegida: rating, slope, par, yardaje y el hoyo donde comienza el grupo."}</p></div></div>
         {courseSetupStage === "course" && <>
           {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
-          <CatalogCoursePicker key={`round-catalog-${identity.userId}`} showHeading={false} token={identity.accessToken} permissionOwnerId={identity.userId} selectedName="" onRequest={(searchedName) => requestFeedback("COURSE", searchedName ? { name: searchedName } : undefined)} onSelect={(next, cards) => selectRoundCourse(next, false, cards)} />
+          <CatalogCoursePicker key={`round-catalog-${identity.userId}`} recentCourses={recentCourseIds.flatMap(id=>courseOptions.filter(card=>card.id===id))} favoriteCourses={favoriteCourseIds.flatMap(id=>courseOptions.filter(card=>card.id===id))} showHeading={false} token={identity.accessToken} permissionOwnerId={identity.userId} selectedName="" onRequest={(searchedName) => requestFeedback("COURSE", searchedName ? { name: searchedName } : undefined)} onSelect={(next, cards) => selectRoundCourse(next, false, cards)} />
           <details><summary>Mis campos guardados</summary><RoundCoursePicker key={`round-saved-${identity.userId}`} permissionOwnerId={identity.userId} savedCourses={courseNameOptions} selectedName="" selectedId="" accessToken={identity.accessToken} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
             const matchingCourse = courseNameOptions.find((candidate) => candidate.catalogCourseId === selection.courseId)
               ?? courseNameOptions.find((candidate) => candidate.id === selection.id)
@@ -4434,11 +4477,13 @@ function GolfBetsApp() {
       clubs={ownerClubChoices.map(club => club.label)} access={scorecardEditAccess()} onSaveHole={saveScorecardHole}
       navigation={<AppBottomNav activeTab={tab} onNavigate={navigateFromBottomBar} onResumeRound={globalRoundAvailable ? resumeActiveRound : undefined} />}>{openScorecard => <>
       <nav className="roundSessionActions" aria-label="Administrar ronda en curso">
-        <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={() => { flushLocalState.current?.(); setTab("welcome"); }}>Salir y continuar después</button>
+        <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={() => { if (flushLocalState.current?.()) setTab("play"); }}>Guardar y salir</button>
         <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={requestNewRound}>Nueva ronda</button>
+        <button type="button" className="textButton" onClick={() => { setNewRoundBackupError(''); setShowDeleteRoundConfirm(true); }}>Cerrar sin completar / cancelar</button>
       </nav>
       {roundStartedAt && !roundClosed && !editingRound && ownerLiveTransportAllowed(roundId, history) && (() => { const snapshot = currentSnapshot(); return snapshot && <OwnerRoundSync key={`${identity.userId}:${roundId}`} userId={identity.userId} accessToken={identity.accessToken || undefined} snapshot={snapshot} pausedBase={history.find(round => round.id === roundId && round.lifecycleState === 'live')} />; })()}
       <RoundCaptureV2
+        gpsContent={<GolfGpsReader token={identity.accessToken ?? null} initialCourseId={course.catalogCourseId || course.id} initialPosition={holeNumber} />}
         initialGpsOpen={roundGpsIntent}
         captureContext={captureContext}
         onCaptureContextChange={(context) => {

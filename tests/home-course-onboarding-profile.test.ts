@@ -218,6 +218,7 @@ async function selectCourseThroughPicker(
       return { readAccountDevicePermissionPreferences: () => ({ locationEnabled: false }), requestAccountDevicePermissionPreferences: async () => ({ location: null, notifications: null }), cacheAccountDevicePermissionPreferences: () => ({ locationEnabled: false, locationPreference: "disabled" }) };
     }
     if (id.endsWith("/round-course-selection")) return roundCourseSelection;
+    if (id.endsWith('/browser-course-location')) return {requestCourseLocation:()=>assert.fail('Home Club must not invoke round location flow')};
     if (id === "./anchored-search") return { AnchoredSearch: "anchored-search", AnchoredSearchOption: "anchored-search-option" };
     if (id.endsWith(".css")) return { __esModule: true, default: new Proxy({}, { get: (_target, key) => String(key) }) };
     throw new Error(`Unexpected picker dependency: ${id}`);
