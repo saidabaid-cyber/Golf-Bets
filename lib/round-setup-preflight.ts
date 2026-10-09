@@ -11,12 +11,13 @@ export type RoundSetupPreflightIssue = {
 
 export function collectRoundSetupPreflightIssues(input: {
   courseSelected: boolean;
+  pendingCourse?: { name: string; selectionIssue?: string; catalogCourseId?: string; catalogClubId?: string } | null;
   players: readonly { id: string; name: string }[];
   betIssues: readonly BetConfigurationIssue[];
 }): RoundSetupPreflightIssue[] {
   const issues: RoundSetupPreflightIssue[] = [];
   if (!input.courseSelected) {
-    issues.push({ id: "course", label: "Campo", detail: "Selecciona el campo donde jugarán.", targetId: "round-course", kind: "course" });
+    issues.push({ id: "course", label: input.pendingCourse?.selectionIssue ? "Tarjeta de la configuración" : input.pendingCourse?.catalogCourseId ? "Tee de salida" : input.pendingCourse?.catalogClubId ? "Configuración del club" : "Campo", detail: input.pendingCourse?.selectionIssue || (input.pendingCourse ? `${input.pendingCourse.name}: selecciona su configuración y tee para continuar.` : "Selecciona el campo donde jugarán."), targetId: "round-course", kind: "course" });
   }
   if (!input.players.length) {
     issues.push({ id: "players", label: "Jugadores", detail: "Agrega al menos un jugador.", targetId: "round-players", kind: "players" });

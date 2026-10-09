@@ -418,6 +418,7 @@ export function golfCourseSelectionToLegacyCourse(
     catalogCourseId: golfCourse.id,
     catalogTeeId: tee.id,
     roundTeeSelectionId: selectionId,
+    ...(profileTee?.ratingGender || tee.gender ? { scorecardRatingGender: profileTee?.ratingGender || tee.gender } : {}),
     ...(indexRatingEvidence ? { indexRatingEvidence } : {}),
     ...(profile ? {
       scorecardProfileId: profile.id,

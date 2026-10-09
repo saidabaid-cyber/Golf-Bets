@@ -12,11 +12,12 @@ const INITIAL_LOCATION: LocationState = { status: 'STOPPED', permission: 'unknow
 const GPS_LABELS: Record<string, string> = { STOPPED: 'GPS detenido', WAITING: 'Buscando ubicación…', LIVE_REPORTED: 'Ubicación recibida', DENIED: 'Permiso de ubicación denegado', UNAVAILABLE: 'Ubicación no disponible', TIMEOUT: 'Se agotó el tiempo; esperando señal', STALE: 'Ubicación antigua; distancias pausadas', LOW_ACCURACY: 'Poca precisión; distancias pausadas', INVALID_TIME: 'Hora de ubicación inválida', SUSPENDED: 'GPS pausado mientras la pantalla está oculta', HTTPS_REQUIRED: 'GPS requiere HTTPS' };
 const MAP_LABELS: Record<string, string> = { LOADING: 'Cargando mapa…', MAP_DISABLED: 'Mapa desactivado. GPS y distancias siguen disponibles.', MAP_ORIGIN_NOT_ALLOWED: 'Google Maps se probará únicamente en DEV tras la integración.', MAP_KEY_MISSING: 'Falta configurar NEXT_PUBLIC_GOOGLE_MAPS_API_KEY.', MAP_OFFLINE: 'Sin conexión para cargar el mapa.', MAP_AUTH_OR_QUOTA_ERROR: 'Google rechazó el acceso o la cuota. No se reintentará automáticamente.', MAP_LOAD_TIMEOUT: 'La carga del mapa tardó demasiado. No se reintentará automáticamente.', MAP_NETWORK_ERROR: 'No se pudo cargar el mapa. No se reintentará automáticamente.', MAP_ERROR: 'Mapa no disponible; las distancias siguen funcionando.' };
 
-export type GolfGpsViewProps = { courses: GpsCourse[]; mapsEnabled: boolean; initialCourseId?: string; initialPosition?: number; mapFactory?: MapFactory; locationAdapter?: LocationAdapter; simulation?: boolean; onBack?: () => void };
+export type GpsRoundContext = { roundId: string; name: string; teeName: string; holes: { number: number; par: number; yards?: number }[]; onScore: (position: number) => void };
+export type GolfGpsViewProps = { courses: GpsCourse[]; mapsEnabled: boolean; initialCourseId?: string; initialPosition?: number; mapFactory?: MapFactory; locationAdapter?: LocationAdapter; simulation?: boolean; onBack?: () => void; active?: boolean; roundContext?: GpsRoundContext };
 
 /** Isolated GPS surface. No shared navigation, rounds, score or bet imports.
  * Overrides are passed ONLY by the local QA client, never by a query parameter. */
-export function GolfGpsView({ courses, mapsEnabled, initialCourseId, initialPosition = 1, mapFactory, locationAdapter, simulation = false, onBack }: GolfGpsViewProps) {
+export function GolfGpsView({ courses, mapsEnabled, initialCourseId, initialPosition = 1, mapFactory, locationAdapter, simulation = false, onBack, active = true, roundContext }: GolfGpsViewProps) {
   const [courseId, setCourseId] = useState(initialCourseId ?? courses[0]?.id ?? '');
   const [position, setPosition] = useState(initialPosition);
   const [unit, setUnit] = useState<'m' | 'yd'>('yd');
@@ -24,6 +25,7 @@ export function GolfGpsView({ courses, mapsEnabled, initialCourseId, initialPosi
   const [targetState, setTarget] = useState<{ holeKey: string; coordinate: GpsCoordinate } | null>(null);
   const [mapStatus, setMapStatus] = useState('LOADING');
   const [online, setOnline] = useState(true);
+  const [infoOpen, setInfoOpen] = useState(false);
   const mapElement = useRef<HTMLDivElement>(null), mapSession = useRef<GpsMapSession | null>(null), gpsSession = useRef<GpsLocationSession | null>(null);
   const course = courses.find(row => row.id === courseId) ?? courses[0];
   const hole = course?.holes.find(row => row.position === position) ?? course?.holes[0];
@@ -45,6 +47,16 @@ export function GolfGpsView({ courses, mapsEnabled, initialCourseId, initialPosi
     return () => { session.dispose(); gpsSession.current = null; };
   }, [locationAdapter]);
   useEffect(() => {
+    if (!active) { gpsSession.current?.stop(); return; }
+    const previous = document.body.style.overflow; document.body.style.overflow = 'hidden';
+    mapSession.current?.resize(); return () => { document.body.style.overflow = previous; };
+  }, [active]);
+  useEffect(() => {
+    if (!mapElement.current) return;
+    const observer = new ResizeObserver(() => mapSession.current?.resize());
+    observer.observe(mapElement.current); return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
     const update = () => setOnline(navigator.onLine); update();
     window.addEventListener('online', update); window.addEventListener('offline', update);
     return () => { window.removeEventListener('online', update); window.removeEventListener('offline', update); };
@@ -61,26 +73,31 @@ export function GolfGpsView({ courses, mapsEnabled, initialCourseId, initialPosi
 
   if (!course || !hole) return <section className={styles.root}><h1>GPS de campo</h1><p>No hay datos guardados disponibles para esta prueba.</p></section>;
   const index = course.holes.indexOf(hole);
-  return <main className={styles.root}>
-    <header className={styles.header}>{onBack ? <button type="button" onClick={onBack}>← Volver</button> : <span>THE BACKYARD · GPS</span>}<h1>{course.name} · Hoyo {hole.position}</h1></header>
-    {simulation ? <p className={styles.simulation}>SIMULACIÓN LOCAL: mapa sin satélite y posición simulada. No es una prueba física ni una carga de Google Maps.</p> : null}
-    <p className={styles.warning}>Referencias GolfAPI; precisión y fecha de captura desconocidas. Centro ≠ bandera del día.</p>
-    <div className={styles.selectors}><label>Campo<select value={course.id} onChange={event => { setCourseId(event.target.value); setPosition(1); }} aria-label="Campo GPS">{courses.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>
-      <label>Hoyo<select value={hole.position} onChange={event => setPosition(Number(event.target.value))} aria-label="Hoyo GPS">{course.holes.map(row => <option key={row.position} value={row.position}>{row.position}{course.physicalHoleCount === 9 && course.cardPositionCount === 18 ? ` · vuelta ${row.lap} · físico ${row.physicalNumber}` : ''}</option>)}</select></label></div>
-    <div className={styles.holeBar}><button type="button" disabled={index === 0} onClick={() => setPosition(course.holes[index - 1].position)}>← Anterior</button><span>{course.physicalHoleCount === 9 ? `Vuelta ${hole.lap} · físico ${hole.physicalNumber}` : `${hole.position} de ${course.cardPositionCount}`}</span><button type="button" disabled={index === course.holes.length - 1} onClick={() => setPosition(course.holes[index + 1].position)}>Siguiente →</button></div>
+  const cardHole = roundContext?.holes.find(row => row.number === hole.position);
+  const hasTee = hole.references.some(reference => reference.kind.endsWith('TEE'));
+  return <main className={styles.root} aria-label="GPS dedicado" data-round-id={roundContext?.roundId}>
+    <header className={styles.header}>
+      {onBack ? <button type="button" onClick={onBack} aria-label="Volver al score">←</button> : <span>GPS</span>}
+      <div><h1>{roundContext?.name ?? course.name}</h1><small>{roundContext ? roundContext.teeName : 'Explorar campo'}{cardHole ? ` · Par ${cardHole.par}${cardHole.yards ? ` · ${cardHole.yards} yd de tarjeta` : ''}` : ''}</small></div>
+      <button type="button" onClick={() => setInfoOpen(true)} aria-label="Información del mapa">ⓘ</button>
+    </header>
+    {simulation && <p className={styles.simulation}>SIMULACIÓN LOCAL · Sin satélite ni GPS físico</p>}
+    {!roundContext && <label className={styles.courseSelect}>Campo<select value={course.id} onChange={event => { setCourseId(event.target.value); setPosition(1); }} aria-label="Campo GPS">{courses.map(row => <option key={row.id} value={row.id}>{row.name}</option>)}</select></label>}
+    <nav className={styles.holeBar} aria-label="Explorar hoyos GPS">
+      <button type="button" disabled={index === 0} onClick={() => setPosition(course.holes[index - 1].position)} aria-label="Ver hoyo anterior">‹</button>
+      <label>Hoyo<select value={hole.position} onChange={event => setPosition(Number(event.target.value))} aria-label="Hoyo GPS">{course.holes.map(row => <option key={row.position} value={row.position}>{row.position}{course.physicalHoleCount === 9 ? ` · vuelta ${row.lap}` : ''}</option>)}</select></label>
+      <span>{course.physicalHoleCount === 9 ? `Físico ${hole.physicalNumber}` : `de ${course.cardPositionCount}`}</span>
+      <button type="button" disabled={index === course.holes.length - 1} onClick={() => setPosition(course.holes[index + 1].position)} aria-label="Ver siguiente hoyo">›</button>
+    </nav>
+    <section className={styles.distances} aria-label="Distancias del jugador al green">{(['front', 'center', 'back'] as const).map(role => <div key={role}><span>{{ front: 'Frente', center: 'Centro del green', back: 'Fondo' }[role]}</span><strong>{displayDistance(distances[role], unit)}</strong><small>{unit}</small></div>)}</section>
     <section className={styles.mapArea} aria-label="Mapa y objetivo del hoyo"><div ref={mapElement} className={styles.map} data-testid="gps-map" />
-      {mapStatus !== 'READY' ? <div className={styles.mapMessage} role="status">{MAP_LABELS[mapStatus] ?? MAP_LABELS.MAP_ERROR}</div> : null}
-      {!online ? <div className={styles.offline} role="status">Sin conexión. GPS y cálculos locales pueden seguir disponibles; el mapa remoto puede faltar.</div> : null}</section>
-    <div className={styles.mapControls}><button type="button" disabled={mapStatus !== 'READY'} onClick={() => mapSession.current?.fitHole()}>Ver hoyo</button><button type="button" disabled={!player || mapStatus !== 'READY'} onClick={() => mapSession.current?.centerPlayer()}>Centrar en mí</button></div>
-    {!hole.references.some(row => row.kind.endsWith('TEE')) ? <p className={styles.note}>Encuadre de referencias del green. No hay coordenadas de tees para este hoyo.</p> : null}
-    <div className={styles.distanceHeader}><span>Distancia directa desde tu ubicación</span><div aria-label="Unidad de distancia"><button type="button" aria-pressed={unit === 'yd'} onClick={() => setUnit('yd')}>Yardas</button><button type="button" aria-pressed={unit === 'm'} onClick={() => setUnit('m')}>Metros</button></div></div>
-    <div className={styles.distances}>{(['front', 'center', 'back'] as const).map(role => <div key={role}><span>{{ front: 'Frente', center: 'Centro', back: 'Fondo' }[role]}</span><strong>{displayDistance(distances[role], unit)}</strong><small>{unit}</small></div>)}</div>
-    <p className={styles.gpsState} role="status">{GPS_LABELS[location.status] ?? 'Ubicación no disponible'}{location.simulated ? ' · SIMULADA' : ''}<br /><small>Permiso: {location.permission === 'granted' ? 'concedido' : location.permission === 'denied' ? 'denegado' : 'sin resolver'}{location.reading ? ` · ±${Math.round(location.reading.accuracyMeters)} m · hace ${Math.round(location.ageSeconds ?? 0)} s` : ''}</small></p>
-    <div className={styles.gpsControls}><button type="button" className={styles.primary} disabled={location.active} onClick={() => gpsSession.current?.start()}>Usar mi ubicación</button><button type="button" disabled={!location.active && location.status !== 'SUSPENDED'} onClick={() => gpsSession.current?.stop()}>Detener GPS</button></div>
-    <section className={styles.target}><div><h2>Objetivo movible</h2><button type="button" disabled={!target} onClick={() => setTarget(null)}>Quitar objetivo</button></div><p>Toca el mapa y arrastra el objetivo. No representa la bandera.</p><dl><div><dt>Tú → objetivo</dt><dd>{displayDistance(distances.playerTarget, unit)} {unit}</dd></div><div><dt>Objetivo → centro</dt><dd>{displayDistance(distances.targetCenter, unit)} {unit}</dd></div></dl></section>
-    <details className={styles.details}><summary>Fuente y límites</summary><p>GolfAPI, registro actualizado {course.source.recordUpdatedAt?.slice(0, 10) ?? 'sin fecha conocida'}. Esta fecha no indica cuándo se midieron las coordenadas. Los puntos no están comprobados en campo. Frente y fondo son referencias fijas del proveedor.</p>
-      <p>No hay ajustes por elevación, viento, rutas ni “plays like”. La posición no se guarda ni se envía a nuestra base. Señal válida: antigüedad máxima 15 s, precisión reportada hasta 30 m. Al ocultar esta pantalla se detiene el seguimiento y al volver se pide una lectura nueva.</p>
-      {course.physicalHoleCount === 9 && course.cardPositionCount === 18 ? <p>Nueve hoyos físicos, dos vueltas. Conservamos las coordenadas de ambas posiciones sin promediarlas. Diferencias entre vueltas: {Object.entries(hole.pairingDifferencesMeters ?? {}).map(([key, value]) => `${key}: ${value === null ? 'sin dato' : value.toFixed(2) + ' m'}`).join(' · ')}. Revisión física pendiente.</p> : null}
-      <p>Google conserva sus atribuciones en el mapa. Fecha de imagen satelital no comprobada. Esta vista no inicia ni modifica rondas.</p></details>
+      {mapStatus !== 'READY' && <div className={styles.mapMessage} role="status">{MAP_LABELS[mapStatus] ?? MAP_LABELS.MAP_ERROR}</div>}
+      {!online && <div className={styles.offline} role="status">Sin conexión para mapa remoto. GPS y cálculos locales disponibles.</div>}
+      <div className={styles.mapControls}><button type="button" disabled={mapStatus !== 'READY' || !player} onClick={() => mapSession.current?.centerPlayer()}>Centrar en mí</button><button type="button" disabled={mapStatus !== 'READY'} onClick={() => mapSession.current?.fitHole()}>{hasTee ? 'Ver hoyo' : 'Ver green'}</button><button type="button" onClick={() => setUnit(unit === 'yd' ? 'm' : 'yd')} aria-label="Cambiar unidades">{unit === 'yd' ? 'Yardas' : 'Metros'} ⇄</button></div>
+    </section>
+    <div className={styles.target} aria-label="Distancias del objetivo">{target ? <><span>Tú → objetivo <b>{displayDistance(distances.playerTarget, unit)} {unit}</b> · Objetivo → centro <b>{displayDistance(distances.targetCenter, unit)} {unit}</b></span><button type="button" onClick={() => setTarget(null)} aria-label="Quitar objetivo">×</button></> : <span>Toca para colocar un objetivo; arrástralo para moverlo.{!hasTee ? ' Tee sin coordenadas: encuadre del green.' : ''}</span>}</div>
+    <div className={styles.gpsState} role="status"><b>{GPS_LABELS[location.status] ?? 'Ubicación no disponible'}{location.simulated ? ' · SIMULADA' : ''}</b><small>{location.reading ? `±${Math.round(location.reading.accuracyMeters)} m · hace ${Math.round(location.ageSeconds ?? 0)} s` : 'Activa ubicación para medir desde tu teléfono.'}</small></div>
+    <footer className={styles.gpsControls}><button type="button" className={styles.primary} disabled={location.active} onClick={() => gpsSession.current?.start()}>Usar mi ubicación</button><button type="button" disabled={!location.active && location.status !== 'SUSPENDED'} onClick={() => gpsSession.current?.stop()}>Detener GPS</button>{roundContext && <button type="button" disabled={!cardHole} onClick={() => roundContext.onScore(hole.position)}>Anotar score · {hole.position}</button>}</footer>
+    {infoOpen && <section className={styles.infoBackdrop} role="dialog" aria-modal="true" aria-label="Información del mapa"><div className={styles.info}><button type="button" onClick={() => setInfoOpen(false)}>Cerrar información</button><h2>Información del mapa</h2><p>Referencias GolfAPI; precisión y fecha de captura desconocidas. Centro del green ≠ bandera del día. Validación en campo pendiente.</p><p>Registro actualizado {course.source.recordUpdatedAt?.slice(0, 10) ?? 'sin fecha conocida'}. Esta fecha no es la de medición ni la de imagen satelital.</p><p>Frente y fondo son referencias fijas del proveedor. No hay ajustes por viento, elevación ni “plays like”. Tu posición no se guarda ni se envía a nuestra base. Señal útil: máximo 15 s de antigüedad y precisión reportada hasta 30 m.</p><p>Al cerrar el GPS se detiene el seguimiento; actívalo de nuevo al volver. No hay captura en segundo plano. Puedes mover el objetivo con las flechas del teclado cuando tiene foco.</p>{course.physicalHoleCount === 9 && <p>Nueve hoyos físicos, dos vueltas. Diferencias de observación: {Object.entries(hole.pairingDifferencesMeters ?? {}).map(([key, value]) => `${key}: ${value === null ? 'sin dato' : value.toFixed(2) + ' m'}`).join(' · ')}. Revisión física pendiente.</p>}<p>Google conserva sus atribuciones. Explorar hoyos no guarda scores ni cambia la configuración de la ronda.</p></div></section>}
   </main>;
 }

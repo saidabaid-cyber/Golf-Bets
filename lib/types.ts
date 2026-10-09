@@ -129,6 +129,8 @@ export type Course = {
   roundTeeSelectionId?: string;
   /** Scorecard/playing profile selected for this round. */
   scorecardProfileId?: string;
+  /** Category supplied by the selected rating record; never inferred from its value. */
+  scorecardRatingGender?: string;
   scorecardProfileName?: string;
   scorecardProfileProvenance?: import('./course-scorecard-profiles').ScorecardProfileProvenance;
   scorecardProfileDefaultForPlay?: boolean;
@@ -368,6 +370,8 @@ export type PlayerTeeAssignmentSnapshot = {
   teeId: string;
   teeName: string;
   scorecardProfileId?: string;
+  /** Category supplied by the selected rating record; never inferred from its value. */
+  scorecardRatingGender?: string;
   scorecardProfileName?: string;
   scorecardProfileProvenance?: import('./course-scorecard-profiles').ScorecardProfileProvenance;
   rating?: number;

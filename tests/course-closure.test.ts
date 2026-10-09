@@ -95,7 +95,7 @@ test("configuration naming is generic and prioritizes provenance without club br
     clubName: "La Vista Country Club",
     totalPar: 72,
     profile: { name: "GHIN / Oficial", provenance: "GHIN_OFFICIAL" },
-  }), "Par 72 — GHIN / Oficial");
+  }), "LA VISTA COUNTRY CLUB · Par 72 — GHIN / Oficial");
   assert.equal(courseConfigurationLabel({
     courseName: "Temporal Par 70",
     clubName: "La Vista Country Club",

@@ -13,8 +13,10 @@ type PickerLocationState=NearbyLocationResolution|{status:'idle'|'loading'};
 function SavedRoundCourses({title,courses,disabled,onSelect}:{title:string;courses:Course[];disabled:boolean;onSelect:(course:Course)=>void}) {
   return <div><h4>{title}</h4>{courses.length?courses.slice(0,5).map(card=><button type="button" className={styles.club} disabled={disabled} key={card.id} onClick={()=>onSelect(card)}><b>{card.name}</b><span>{card.scorecardProfileName||card.teeName}</span></button>):<small>Aún no tienes campos {title.toLowerCase()}.</small>}</div>;
 }
-export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectClub,onSelectHomeCourse,selectedName='',selectedClubId='',selectedCourseId='',onRequest,showHeading=true,purpose='round',onSelectionReadyChange,onboardingLocation=false,recentCourses=[],favoriteCourses=[]}:{token?:string|null;permissionOwnerId:string;onSelect?:(course:Course,cards:Course[])=>void;onSelectClub?:(club:{clubId:string;clubName:string})=>void;onSelectHomeCourse?:(selection:{clubId:string;clubName:string;courseId:string;courseName:string})=>void|Promise<void>;selectedName?:string;selectedClubId?:string;selectedCourseId?:string;onRequest?:(searchedName?:string)=>void;showHeading?:boolean;purpose?:'round'|'home-club';onSelectionReadyChange?:(ready:boolean)=>void;onboardingLocation?:boolean;recentCourses?:Course[];favoriteCourses?:Course[]}) {
+export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectClub,onConfigurationPending,onSelectHomeCourse,selectedName='',selectedClubId='',selectedCourseId='',onRequest,showHeading=true,purpose='round',onSelectionReadyChange,onboardingLocation=false,recentCourses=[],favoriteCourses=[],requestCatalog=fetch}:{token?:string|null;permissionOwnerId:string;onSelect?:(course:Course,cards:Course[])=>void;onSelectClub?:(club:{clubId:string;clubName:string})=>void;onConfigurationPending?:(course:{id:string;clubId:string;name:string},issue?:string)=>void;onSelectHomeCourse?:(selection:{clubId:string;clubName:string;courseId:string;courseName:string})=>void|Promise<void>;selectedName?:string;selectedClubId?:string;selectedCourseId?:string;onRequest?:(searchedName?:string)=>void;showHeading?:boolean;purpose?:'round'|'home-club';onSelectionReadyChange?:(ready:boolean)=>void;onboardingLocation?:boolean;recentCourses?:Course[];favoriteCourses?:Course[];requestCatalog?:(url:string,init:RequestInit)=>Promise<Response>}) {
   const [entries,setEntries]=useState<Entry[]>([]),[query,setQuery]=useState(''),[error,setError]=useState(''),[loading,setLoading]=useState(false);
+  const [catalogError,setCatalogError]=useState('');
+  const [incompleteTees,setIncompleteTees]=useState<{id:string;name:string;gender:string|null;rating:number|null;slope:number|null;totalYards:number|null}[]>([]);
   const [location,setLocation]=useState<PickerLocationState>({status:'idle'});
   const [homeLocationEnabled,setHomeLocationEnabled]=useState(false);
   const locationController=useRef<AbortController|null>(null);
@@ -30,17 +32,18 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
     if(purpose!=='home-club'||!selectedClubId||!selectedCourseId)return;
     setClub(selectedClubId);setChosen(selectedCourseId);setChoosingHomeCourse(false);
   },[purpose,selectedClubId,selectedCourseId]);
-  useEffect(()=>{const controller=new AbortController(); if(!token) return; setLoading(true);setError('');
-    const timer=window.setTimeout(()=>{controller.abort();setLoading(false);setError('Se agotó la espera del catálogo. Puedes reintentar.');},15000);
-    fetch(`/api/courses/catalog${retry?'?fresh=1':''}`,{headers:{Authorization:`Bearer ${token}`},signal:controller.signal,cache:'no-store'})
+  useEffect(()=>{if(purpose==='round'&&selectedCourseId&&entries.length){setChosen(selectedCourseId);setClub(selectedClubId||entries.find(row=>row.id===selectedCourseId)?.clubId||null);}},[purpose,selectedClubId,selectedCourseId,entries]);
+  useEffect(()=>{const controller=new AbortController(); if(!token) return; setLoading(true);setCatalogError('');
+    const timer=window.setTimeout(()=>{controller.abort();setLoading(false);setCatalogError('Se agotó la espera del catálogo. Puedes reintentar.');},15000);
+    requestCatalog(`/api/courses/catalog${retry?'?fresh=1':''}`,{headers:{Authorization:`Bearer ${token}`},signal:controller.signal,cache:'no-store'})
       .then(async r=>{const data=await r.json();if(!r.ok)throw Error(data.error);return data;})
       .then(data=>{if(!controller.signal.aborted)setEntries(data.courses??[]);})
-      .catch(e=>{if(!controller.signal.aborted){setRetryCourseId(null);setError(e.message||'No pudimos cargar los campos.');}})
+      .catch(e=>{if(!controller.signal.aborted){setCatalogError(e.message||'No pudimos cargar los campos.');}})
       .finally(()=>{window.clearTimeout(timer);if(!controller.signal.aborted)setLoading(false);});
     // These refs are request counters, not DOM nodes; invalidate late callbacks on cleanup.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     return()=>{window.clearTimeout(timer);controller.abort();++loadSequence.current;};
-  },[token,retry]);
+  },[token,retry,requestCatalog]);
   const matches=purpose==='round'||query.trim()?searchReviewedCourses(entries,query):[];
   const clubs=[...new Map(matches.map(c=>[c.clubId,c])).values()];
   const [providerLookup,setProviderLookup]=useState('');
@@ -63,7 +66,9 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
   const selectionLabel=selectedEntry?courseSelectionLabel(homeCourseSelection(selectedEntry)):selectedName;
   async function selectCourse(id:string) {
     if(!id)return;
-    const previousChosen=chosen;
+    const selectedEntry=entries.find(row=>row.id===id);
+    setIncompleteTees([]);
+    if(purpose==='round'&&selectedEntry)onConfigurationPending?.(selectedEntry);
     const sequence=++loadSequence.current;setSelectingCourseId(id);setError('');setRetryCourseId(null);setChosen(id);
     if(purpose==='home-club')onSelectionReadyChange?.(false);
     try {
@@ -74,18 +79,18 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
         if(sequence===loadSequence.current){onSelectionReadyChange?.(true);setChoosingHomeCourse(false);}
         return;
       }
-      const response=await fetch(`/api/courses/catalog?courseId=${encodeURIComponent(id)}`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000),cache:'no-store'});
+      const response=await requestCatalog(`/api/courses/catalog?courseId=${encodeURIComponent(id)}`,{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(15000),cache:'no-store'});
       const data=await response.json();if(!response.ok)throw Error(data.error);
       if(sequence===loadSequence.current){
         const transition=beginRoundCourseSelection(data.cards??[]);
-        if(!transition.ok)throw Error('Este recorrido todavía no tiene una tarjeta utilizable de 9 o 18 hoyos. Puedes solicitar su revisión.');
+        if(!transition.ok){setIncompleteTees(data.availableTees??[]);if(selectedEntry)onConfigurationPending?.(selectedEntry,data.cardIssue);throw Error(data.cardIssue||'Falta la tarjeta por hoyo de esta configuración. Solicita su revisión.');}
         setChosen(id);
         onSelect?.(transition.course,transition.teeOptions);
       }
-    } catch(e){if(sequence===loadSequence.current){setChosen(previousChosen);if(purpose==='home-club'){setRetryCourseId(id);onSelectionReadyChange?.(false);}setError(e instanceof Error?e.message:purpose==='home-club'?'No pudimos guardar este Home Club. Reintenta.':'No pudimos cargar la tarjeta.');}}
+    } catch(e){if(sequence===loadSequence.current){setRetryCourseId(id);if(purpose==='home-club'){setRetryCourseId(id);onSelectionReadyChange?.(false);}setError(e instanceof Error?e.message:purpose==='home-club'?'No pudimos guardar este Home Club. Reintenta.':'No pudimos cargar la tarjeta.');}}
     finally {if(sequence===loadSequence.current)setSelectingCourseId(null);}
   }
-  function selectClub(entry:Entry) {++loadSequence.current;setError('');setClub(entry.clubId);setQuery('');setChosen('');setRetryCourseId(null);if(purpose==='home-club')onSelectionReadyChange?.(false);onSelectClub?.(entry);const course=singleReviewedCourseLayout(entries,entry.clubId);if(course)void selectCourse(course.id);}
+  function selectClub(entry:Entry) {++loadSequence.current;setError('');setIncompleteTees([]);setClub(entry.clubId);setQuery('');setChosen('');setRetryCourseId(null);if(purpose==='home-club')onSelectionReadyChange?.(false);onSelectClub?.(entry);const course=singleReviewedCourseLayout(entries,entry.clubId);if(course)void selectCourse(course.id);}
   function selectSavedCourse(card:Course) {
     if(card.catalogCourseId) void selectCourse(card.catalogCourseId);
     else onSelect?.(card,[card]);
@@ -160,10 +165,11 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
   </section>;
   return <section className={styles.picker} aria-label="Catálogo de campos">
     {showHeading&&<h3>Campo</h3>}
+    {club&&purpose==='round'&&<section className={styles.configurations} aria-label="Configuraciones del club"><h4>{selectedClubCourses[0]?.clubName||selectedName}</h4><label>Configuración<select aria-label="Layout / configuración" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona configuración</option>{selectedClubCourses.map(c=><option key={c.id} value={c.id}>{c.configurationLabel??c.name} · {c.holes} hoyos{c.isProvisional?' · Provisional':''}</option>)}</select></label>{chosen&&!selectingCourseId&&<button type="button" className="textButton" onClick={()=>void selectCourse(chosen)}>Ver tees de esta configuración</button>}{selectingCourseId&&<p role="status">Leyendo los tees de esta configuración…</p>}{error&&<div role="alert"><p>{error}</p><button type="button" className="textButton" onClick={()=>retryCourseId&&void selectCourse(retryCourseId)}>Reintentar configuración</button></div>}{incompleteTees.length>0&&<div aria-label="Tees con tarjeta pendiente"><b>Tees registrados · tarjeta por hoyo pendiente</b>{incompleteTees.map(tee=><p key={tee.id}>{tee.name}{tee.gender==='MEN'?' · Hombres':tee.gender==='WOMEN'?' · Mujeres':''}{tee.totalYards!==null?` · ${tee.totalYards} yd`:''}{tee.rating!==null?` · Rating ${tee.rating}`:''}{tee.slope!==null?` · Slope ${tee.slope}`:''}</p>)}</div>}{onRequest&&<button type="button" className={styles.request} onClick={()=>onRequest(selectedEntry?.name||selectedClubCourses[0]?.clubName)}>Solicitar o reportar configuración del campo ↗</button>}</section>}
     {(purpose==='round'||location.status!=='idle'||(onboardingLocation&&purpose==='home-club'&&homeLocationEnabled))&&<button type="button" className={styles.locate} disabled={locating||!token} onClick={()=>void retryHomeLocation()}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M12 21s7-6 7-12A7 7 0 0 0 5 9c0 6 7 12 7 12ZM15 9a3 3 0 1 1-6 0 3 3 0 0 1 6 0"/></svg>{locating?'Buscando ubicación…':'Usar mi ubicación'}</button>}
     {locating&&<><p role="status">Buscando tu ubicación autorizada…</p><button type="button" className="textButton" onClick={()=>{locationController.current?.abort();setLocation({status:'idle'});}}>Cancelar búsqueda</button></>}
     {locationError&&<div role="status"><p>{onboardingLocation?'No pudimos usar tu ubicación. Puedes buscar tu campo manualmente.':locationError}</p>{(!onboardingLocation||homeLocationEnabled)&&<button type="button" className="secondary" onClick={()=>void retryHomeLocation()}>{onboardingLocation?'REINTENTAR UBICACIÓN':'Reintentar'}</button>}</div>}
-    {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':error?'Ubicación obtenida. Reintenta cargar el catálogo.':`${reviewedClubsLocationSummary(nearby)}${location.point.accuracyMeters===undefined?'':` Precisión informada por el dispositivo: ±${location.point.accuracyMeters} m.`}`}</p>}
+    {location.status==='located'&&<p role="status">{loading?'Ubicación obtenida. Cargando clubes…':catalogError&&!entries.length?'Ubicación obtenida. Reintenta cargar el catálogo.':`${reviewedClubsLocationSummary(nearby)}${location.point.accuracyMeters===undefined?'':` Precisión informada por el dispositivo: ±${location.point.accuracyMeters} m.`}`}</p>}
     {visibleNearby.map(c=><button type="button" className={`${styles.club} ${club===c.clubId?styles.clubSelected:''}`} aria-pressed={club===c.clubId} disabled={selectingCourseId!==null} key={c.clubId} onClick={()=>selectClub(c)}><b>{c.clubName}</b><span>{[c.city,c.stateRegion].filter(Boolean).join(', ')} · {c.distanceKm.toFixed(1)} km</span>{club===c.clubId&&<em>✓ {selectingCourseId?'Guardando…':'Seleccionado'}</em>}</button>)}
     {nearby.length>visibleNearby.length&&<button type="button" className="textButton" onClick={()=>setNearbyLimit(limit=>Math.min(limit+9,nearby.length))}>Ver más campos cercanos</button>}
     {nearby.length>0&&<details className={styles.notes}><summary>Sobre las distancias</summary><small>Distancia geográfica aproximada, no de manejo, entre clubes con ubicación disponible. Algunas ubicaciones: <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">© OpenStreetMap contributors (ODbL)</a>.</small></details>}
@@ -173,9 +179,11 @@ export function CatalogCoursePicker({token,permissionOwnerId,onSelect,onSelectCl
       {clubs.length>30&&<p>Refina el nombre para ver más coincidencias.</p>}
     </AnchoredSearch>
     {providerLookup&&<p role="status">{providerLookup}</p>}
-    {error&&<p role="alert">{error} <button type="button" className="textButton" onClick={()=>retryCourseId?void selectCourse(retryCourseId):setRetry(n=>n+1)}>Reintentar</button></p>}
+    {purpose!=='round'&&error&&<p role="alert">{error} <button type="button" className="textButton" onClick={()=>retryCourseId?void selectCourse(retryCourseId):setRetry(n=>n+1)}>Reintentar</button></p>}
+    {catalogError&&<p role="alert">{catalogError} <button type="button" className="textButton" onClick={()=>setRetry(n=>n+1)}>Reintentar catálogo</button></p>}
     {!token&&<p>Inicia sesión para buscar campos.</p>}
-    {club&&selectedClubCourses.length>1&&<label>Layout / configuración<select aria-label="Layout / configuración" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona configuración</option>{selectedClubCourses.map(c=><option key={c.id} value={c.id}>{c.configurationLabel??c.name}{c.isProvisional?' · Provisional · No disponible para publicación GHIN':''}{c.completeCards===0?' · tarjeta pendiente':''}</option>)}</select></label>}
+
+    {purpose==='home-club'&&club&&selectedClubCourses.length>1&&<label>Layout / configuración<select aria-label="Layout / configuración" value={chosen} onChange={e=>void selectCourse(e.target.value)}><option value="">Selecciona configuración</option>{selectedClubCourses.map(c=><option key={c.id} value={c.id}>{c.configurationLabel??c.name}{c.isProvisional?' · Provisional · No disponible para publicación GHIN':''}{c.completeCards===0?' · tarjeta pendiente':''}</option>)}</select></label>}
     {purpose==='home-club'&&selectionLabel&&<p role="status">✓ Seleccionado: {selectionLabel}</p>}
     {onRequest&&<button type="button" className={styles.request} onClick={()=>onRequest(query.trim()||undefined)}>{query.trim()&&!loading&&!clubs.length?'Solicitar este campo':'¿No encuentras tu campo? Solicitar este campo'} ↗</button>}
   </section>;

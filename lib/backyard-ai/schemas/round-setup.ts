@@ -26,6 +26,8 @@ export type RoundSetupCourseIdentity = {
   name: string;
   catalogCourseId?: string;
   candidateCourseIds: string[];
+  catalogClubId?: string;
+  selectionIssue?: string;
 };
 
 export type RoundSetupPresentation = RoundPresentation;

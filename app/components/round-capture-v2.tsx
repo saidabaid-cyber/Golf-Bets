@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type {
   AdvancedHoleStat,
   BetConfig,
@@ -30,7 +30,7 @@ type CounterQuantities = Record<CounterBetKind, Record<string, number | undefine
 
 export type RoundCaptureV2Props = {
   initialGpsOpen?: boolean;
-  gpsContent?: ReactNode;
+  gpsContent?: (controls: { active: boolean; onBack: () => void; onScore: (position: number) => void }) => ReactNode;
   course: Pick<Course, "name" | "teeName" | "latitude" | "longitude" | "playerHoleCards">;
   hole: Hole;
   order: number[];
@@ -151,6 +151,9 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   const [gpsState, setGpsState] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [gpsMessage, setGpsMessage] = useState("");
   const [gpsOpen, setGpsOpen] = useState(Boolean(props.initialGpsOpen));
+  const [gpsVisited, setGpsVisited] = useState(Boolean(props.initialGpsOpen));
+  const [gpsScoreOpen, setGpsScoreOpen] = useState(false);
+  useEffect(() => { if (gpsOpen) setGpsVisited(true); }, [gpsOpen]);
   const [shotBusy, setShotBusy] = useState(false);
   const [shotMessage, setShotMessage] = useState("");
   const [shotClub, setShotClub] = useState("");
@@ -325,6 +328,9 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   }
 
   return <div className={styles.screen} data-game-screen="approved-compact-v1">
+    {gpsVisited && props.gpsContent && <div hidden={!gpsOpen} inert={gpsScoreOpen || !gpsOpen} aria-hidden={gpsScoreOpen || !gpsOpen} id="round-hole-map" aria-label="Vista GPS del hoyo">{props.gpsContent({ active: gpsOpen && !gpsScoreOpen, onBack: () => { setGpsOpen(false); setGpsScoreOpen(false); }, onScore: position => { const index = order.indexOf(position); if (index >= 0) { props.onNavigateHole(index); setGpsScoreOpen(true); } } })}</div>}
+    {gpsOpen && gpsScoreOpen && <section className={styles.gpsScoreBackdrop} role="dialog" aria-modal="true" aria-label={`Anotar score · Hoyo ${hole.number}`}><div className={styles.gpsScorePanel}><h2>Anotar score · Hoyo {hole.number}</h2><p>Captura pendiente de esta misma ronda. Navegar en GPS no guarda scores.</p>{players.map(player => <div className={styles.gpsScoreRow} key={player.id}><b>{player.name}</b><CompactStepper label={`Score ${player.name} hoyo ${hole.number}`} value={scores[player.id]} fallback={hole.par} min={1} onChange={value => props.onScoreChange(player.id, value)} /></div>)}<button type="button" className="primary" onClick={() => setGpsScoreOpen(false)}>Volver al mapa</button><button type="button" className="secondary" disabled={props.saveDisabled} onClick={() => { props.onSaveAndAdvance(); setGpsScoreOpen(false); }}>Guardar score y avanzar</button></div></section>}
+    <div className={styles.captureBody} hidden={gpsOpen && Boolean(props.gpsContent)}>
     <section className={styles.hero}>
       <div className={styles.gameBrand}><b>The<br />Backyard</b><span>⛳</span><small>GOLF · FRIENDS · MORE</small></div>
       <div className={styles.holeHeading}><b>Hoyo {hole.number}</b><span>Par {hole.par}{hole.yards ? ` · ${hole.yards} yd` : ""} · SI {hole.strokeIndex}</span></div>
@@ -417,7 +423,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
 
     <section className={styles.gpsShell} id="capture-approach">
       <button type="button" className={styles.gpsToggle} aria-expanded={gpsOpen} aria-controls="round-hole-map" onClick={() => setGpsOpen((open) => !open)}><span aria-hidden="true">⌖</span><b>{gpsOpen ? "OCULTAR VISTA GPS" : "VER VISTA GPS"}</b><small>{gpsOpen ? "Cerrar mapa del hoyo" : "Explora el hoyo cuando haya datos reales"}</small><i aria-hidden="true">{gpsOpen ? "⌃" : "⌄"}</i></button>
-      {gpsOpen && props.gpsContent ? <div id="round-hole-map" aria-label="Vista GPS del hoyo">{props.gpsContent}</div> : gpsOpen ? <div className={styles.holeMap} id="round-hole-map" aria-label="Vista GPS del hoyo">
+      {gpsOpen && !props.gpsContent ? <div className={styles.holeMap} id="round-hole-map" aria-label="Vista GPS del hoyo">
         <header><div><span>VISTA GPS</span><h2>Hole Map</h2></div>{hasVerifiedGreenGeometry && <button type="button" className={styles.gpsButtonLight} data-state={gpsState} disabled={gpsState === "loading"} onClick={requestGps}>{gpsState === "loading" ? "Ubicando…" : gpsState === "ready" ? "Actualizar GPS" : "Usar mi ubicación"}</button>}</header>
         {hasVerifiedGreenGeometry ? <p>{gpsMessage || "Activa GPS para calcular distancias cuando la ubicación del hoyo esté disponible."}</p> : <p>Este hoyo todavía no tiene mapa ni distancias disponibles.</p>}
       </div> : null}
@@ -432,5 +438,5 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
       <button type="button" className={styles.previousAction} disabled={currentIndex === 0 || props.saveDisabled} onClick={() => props.onNavigateHole(currentIndex - 1)}>‹ <span>Anterior</span></button>
       <button type="button" className={styles.saveAction} disabled={props.saveDisabled} onClick={props.onSaveAndAdvance}>{props.saveLabel}<span aria-hidden="true">›</span></button>
     </div>
-  </div>;
+  </div></div>;
 }

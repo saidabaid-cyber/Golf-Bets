@@ -177,7 +177,7 @@ import { monkeyHoleSummary, personalHoleSummary } from "../lib/personal-summary"
 import { downloadRoundCsv, downloadRoundImage, downloadRoundPdf, shareRound } from "../lib/round-export";
 import { adoptScorecardPhotos, deleteScorecardPhoto, deleteScorecardPhotoCloud, markScorecardPhotosCommitted, readScorecardPhoto, readScorecardPhotoCloud, resolveScorecardPhotoCommit, saveScorecardPhoto, uploadScorecardPhotoCloud } from "../lib/scorecard-photo";
 import { createRoundSetupDraft, type RoundSetupCourseIdentity, type RoundSetupDraft } from "../lib/backyard-ai/schemas/round-setup";
-import { coursesForPendingIdentity, normalizeRoundSetupCourseIdentity, resolveManualRoundCourseState } from "../lib/backyard-ai/runtime/manual-course-focus";
+import { normalizeRoundSetupCourseIdentity, resolveManualRoundCourseState } from "../lib/backyard-ai/runtime/manual-course-focus";
 import type { ScorecardValidationOverrides, ScorecardValidationResult } from "../lib/backyard-ai/schemas/scorecard";
 import { buildDeterministicRoundRecap } from "../lib/backyard-ai/recap/round-recap";
 import { recordRoundCompletionMetric, recordRoundSetupMetrics, recordScorecardMetrics, recordScorecardOutcomeMetrics, updateBackyardAiMetrics } from "../lib/backyard-ai/observability/metrics";
@@ -282,7 +282,7 @@ import {
 import { hasDuplicateGroupPlayers } from "../lib/group-generator";
 import { createEmptyGroupGameTemplate, createGroupGameTemplate, createRoundGroupSnapshot, frequentGroupTemplateSummary, groupTemplatePlayers, instantiateGroupGameTemplate, normalizeGroupGameTemplate, normalizeRoundTemplateOrigin, templateWithoutPlayerAssignments, updateGroupTemplateFromRound, withStableGroupMemberIds, type RoundTemplateOrigin } from "../lib/group-game-template";
 import { assignTeeToEveryPlayer, reconcilePlayerTeeAssignments, scorecardOptionsForLayout, teeOptionsForCourse, updatePlayerTeeAssignment } from "../lib/player-tee-assignments";
-import { roundTeeSelectionId, scorecardProfileLabel } from "../lib/course-scorecard-profiles";
+import { roundTeeSelectionId, teeCategoryLabel, scorecardProfileLabel } from "../lib/course-scorecard-profiles";
 import { defaultMaxBaseAppearances, generateAutomaticFoursomes, markFoursomeSegmentEdited } from "../lib/foursome-generator";
 import { advantageFieldsFromSigned, configureCurrentIndexPersonal, configureSlidingPersonal, frequentPersonalSuggestions, slidingAdjustment } from "../lib/personal-modes";
 import { loadEquipmentProfile } from "../lib/golf-equipment";
@@ -915,10 +915,6 @@ function GolfBetsApp() {
     : courseSelected ? teeOptionsForCourse(course, courseOptions) : [], [course, courseOptions, courseSelected, courseSetupStage]);
   const suggestedRoundTee = useMemo(() => preferredTeeForCourse(teeOptions, { homeCourseId: identity.homeCourseId, preferredTee: identity.preferredTee }), [identity.homeCourseId, identity.preferredTee, teeOptions]);
   const selectedRoundTeeId = courseSelected ? roundTeeSelectionId(course) : suggestedRoundTee ? roundTeeSelectionId(suggestedRoundTee) : "";
-  const pendingCourseCandidates = useMemo(
-    () => coursesForPendingIdentity(courseOptions, pendingCourseIdentity),
-    [courseOptions, pendingCourseIdentity],
-  );
   const privateBoard = useMemo(() => privateLeaderboard(course, players, scores, order), [course, players, scores, order]);
   const completedHoles = useMemo(() => new Set(order.filter(number => players.length > 0 && players.every(player => typeof scores[number]?.[player.id] === "number"))), [order, players, scores]);
   const scoreDraft = useMemo(() => holeCapture(scores, scoreEdits, hole, players), [scores, scoreEdits, hole, players]);
@@ -942,9 +938,10 @@ function GolfBetsApp() {
   }), [roundPresentation.playMode, setupPlayers, ownerId, bets, segments, personalBets, supplementalBets, manualBets, roundHoles, startHole, roundHandicapBasis]);
   const roundSetupPreflight = useMemo(() => collectRoundSetupPreflightIssues({
     courseSelected,
+    pendingCourse: pendingCourseIdentity,
     players: setupPlayers,
     betIssues: betConfigurationIssues,
-  }), [courseSelected, setupPlayers, betConfigurationIssues]);
+  }), [courseSelected, pendingCourseIdentity, setupPlayers, betConfigurationIssues]);
   const wizardBets = useMemo(() => buildWizardBetCatalog({ bets, personalBets, supplementalBets, manualBets, players, ownerId }), [bets, personalBets, supplementalBets, manualBets, players, ownerId]);
   useEffect(() => {
     if (!courseSelected) { setPlayerTeeAssignments([]); return; }
@@ -4079,7 +4076,7 @@ function GolfBetsApp() {
       onOpenResults={() => setTab("results")}
     />}
 
-    {tab === 'gps' && <><button type="button" className="secondary" onClick={() => setTab('play')}>← Volver a Play</button><GolfGpsReader key={identity.userId} token={identity.accessToken ?? null} /></>}
+    {tab === 'gps' && <><button type="button" className="secondary" onClick={() => setTab('play')}>← Volver a Play</button><GolfGpsReader key={identity.userId} token={identity.accessToken ?? null} onBack={() => setTab("play")} /></>}
 
     {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} player={principal} accessToken={identity.accessToken} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
 
@@ -4210,8 +4207,8 @@ function GolfBetsApp() {
       <section className="card" id="round-course">
         <div className="sectionTitle"><div><h2>1. Campo → Layout → Tee</h2><p>{courseSetupStage === "course" ? "Selecciona un club de la lista o busca por nombre y ciudad." : courseSetupStage === "tee" ? "Elige la tarjeta/configuración y la salida antes de configurar la ronda." : "Revisa la configuración elegida: rating, slope, par, yardaje y el hoyo donde comienza el grupo."}</p></div></div>
         {courseSetupStage === "course" && <>
-          {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseCandidates.length ? "Selecciona el campo para continuar." : "No encontré ese campo exacto en el catálogo actual. Selecciona otro o crea uno manual."}</div>}
-          <CatalogCoursePicker key={`round-catalog-${identity.userId}`} recentCourses={recentCourseIds.flatMap(id=>courseOptions.filter(card=>card.id===id))} favoriteCourses={favoriteCourseIds.flatMap(id=>courseOptions.filter(card=>card.id===id))} showHeading={false} token={identity.accessToken} permissionOwnerId={identity.userId} selectedName="" onRequest={(searchedName) => requestFeedback("COURSE", searchedName ? { name: searchedName } : undefined)} onSelect={(next, cards) => selectRoundCourse(next, false, cards)} />
+          {!courseSelected && pendingCourseIdentity && <div className="notice" id="round-course-ai-focus" role="status"><b>Campo reconocido: {pendingCourseIdentity.name}</b><br />{pendingCourseIdentity.selectionIssue || "Selecciona la configuración y su tee para continuar."}</div>}
+          <CatalogCoursePicker key={`round-catalog-${identity.userId}`} recentCourses={recentCourseIds.flatMap(id=>courseOptions.filter(card=>card.id===id))} favoriteCourses={favoriteCourseIds.flatMap(id=>courseOptions.filter(card=>card.id===id))} showHeading={false} token={identity.accessToken} permissionOwnerId={identity.userId} selectedName={pendingCourseIdentity?.name||""} selectedClubId={pendingCourseIdentity?.catalogClubId||(courseSelected?course.catalogClubId:"")||""} selectedCourseId={pendingCourseIdentity?.catalogCourseId||""} onSelectClub={entry=>{if(!courseSelected)setPendingCourseIdentity({name:entry.clubName,catalogClubId:entry.clubId,candidateCourseIds:[]});}} onConfigurationPending={(entry,issue)=>{if(!courseSelected)setPendingCourseIdentity({name:entry.name,catalogClubId:entry.clubId,catalogCourseId:entry.id,candidateCourseIds:[],selectionIssue:issue||"Leyendo la tarjeta y los tees de esta configuración."});}} onRequest={(searchedName) => requestFeedback("COURSE", searchedName ? { name: searchedName } : undefined)} onSelect={(next, cards) => selectRoundCourse(next, false, cards)} />
           <details><summary>Mis campos guardados</summary><RoundCoursePicker key={`round-saved-${identity.userId}`} permissionOwnerId={identity.userId} savedCourses={courseNameOptions} selectedName="" selectedId="" accessToken={identity.accessToken} pendingName={pendingCourseIdentity?.name} invalid={courseSelectionError} describedBy={[!courseSelected && pendingCourseIdentity ? "round-course-ai-focus" : "", courseSelectionError ? "round-course-error" : ""].filter(Boolean).join(" ") || undefined} onSelect={(selection) => {
             const matchingCourse = courseNameOptions.find((candidate) => candidate.catalogCourseId === selection.courseId)
               ?? courseNameOptions.find((candidate) => candidate.id === selection.id)
@@ -4229,7 +4226,7 @@ function GolfBetsApp() {
           onMissingTee={() => requestFeedback("TEE", { name: course.name })}
         />}
         {courseSelected && courseSetupStage === "details" && <>
-          <div className="roundCourseSelectionSummary" role="status"><div><span>CAMPO · LAYOUT · CONFIGURACIÓN · TEE</span><b>{course.clubName ? `${course.clubName} → ${course.name}` : course.name}</b><small>{course.scorecardProfileId ? `${scorecardProfileLabel({ name: course.scorecardProfileName || "Tarjeta disponible", provenance: course.scorecardProfileProvenance || "ADMIN_VERIFIED" })} · ` : ""}{course.teeName}{typeof course.rating === "number" ? ` · Rating ${course.rating}` : ""}{typeof course.slope === "number" ? ` · Slope ${course.slope}` : ""}{typeof course.totalYards === "number" ? ` · ${course.totalYards.toLocaleString("es-MX")} yd` : ""} · Par {course.holes.reduce((sum, hole) => sum + hole.par, 0)}</small></div><button type="button" className="textButton" onClick={() => setCourseSetupStage("tee")}>Cambiar configuración / tee</button></div>
+          <div className="roundCourseSelectionSummary" role="status"><div><span>CAMPO · LAYOUT · CONFIGURACIÓN · TEE</span><b>{course.clubName ? `${course.clubName} → ${course.name}` : course.name}</b><small>{course.scorecardProfileId ? `${scorecardProfileLabel({ name: course.scorecardProfileName || "Tarjeta disponible", provenance: course.scorecardProfileProvenance || "ADMIN_VERIFIED" })} · ` : ""}{course.teeName} · {teeCategoryLabel(course)}{typeof course.rating === "number" ? ` · Rating ${course.rating}` : ""}{typeof course.slope === "number" ? ` · Slope ${course.slope}` : ""}{typeof course.totalYards === "number" ? ` · ${course.totalYards.toLocaleString("es-MX")} yd` : ""} · Par {course.holes.reduce((sum, hole) => sum + hole.par, 0)}</small></div><button type="button" className="textButton" onClick={() => setCourseSetupStage("tee")}>Cambiar configuración / tee</button></div>
           <CourseReviewNotice course={course} roundHoles={roundHoles} startHole={startHole} />
           <div className="roundCourseDetails">
             <div><label htmlFor="wizard-round-date">Fecha de la ronda</label><input id="wizard-round-date" aria-label="Fecha de la ronda" type="date" value={roundDate} onChange={(event) => setRoundDate(event.target.value)} /></div>
@@ -4253,7 +4250,7 @@ function GolfBetsApp() {
             return <div key={player.id}><label><span>{player.name || "Jugador"}</span><select aria-label={`Tee de ${player.name || "jugador"}`} value={selectedTee.id} onChange={(event) => {
               const nextTee = teeOptions.find((option) => option.id === event.target.value);
               if (nextTee) confirmRoundChange("Cambiar tee recalcula el HCP de juego de este jugador.", () => applyRoundTeeAssignments(updatePlayerTeeAssignment(playerTeeAssignments, player.id, nextTee, new Date().toISOString())));
-            }}>{teeOptions.map((option) => <option key={option.id} value={option.id}>{option.teeName}{option.catalogReview?' · Catálogo en revisión':''}{typeof option.rating === "number" ? ` · ${option.rating}/${option.slope ?? "—"}` : ""}</option>)}</select></label>{assignment&&<ManualTeeRating key={assignment.teeId} assignment={assignment} onSave={value=>confirmRoundChange("Cambiar Rating/Slope recalcula el HCP de juego de este jugador.", () => applyRoundTeeAssignments(playerTeeAssignments.map(item=>item.playerId===player.id?value:item)))}/>}</div>;
+            }}>{teeOptions.map((option) => <option key={option.id} value={option.id}>{option.teeName} · {teeCategoryLabel(option)}{option.catalogReview?' · Catálogo en revisión':''}{typeof option.rating === "number" ? ` · ${option.rating}/${option.slope ?? "—"}` : ""}</option>)}</select></label>{assignment&&<ManualTeeRating key={assignment.teeId} assignment={assignment} onSave={value=>confirmRoundChange("Cambiar Rating/Slope recalcula el HCP de juego de este jugador.", () => applyRoundTeeAssignments(playerTeeAssignments.map(item=>item.playerId===player.id?value:item)))}/>}</div>;
           })}</div>
           <p className="hint">EDITAR POR JUGADOR está siempre disponible. Para una cuenta con Index, el tee calcula y congela su HCP de juego; un invitado conserva captura manual.</p>
           </div>
@@ -4456,7 +4453,7 @@ function GolfBetsApp() {
       </RoundSetupStep>
 
       <RoundSetupStep step={5}>
-        <WizardReviewBlock step={1} title="Campo"><p><b>{courseSelected ? course.name : "Falta seleccionar campo"}</b></p><p>{roundHoles} hoyos · salida H{startHole} · {roundDate}</p>{courseSelected && <p>{course.teeName}</p>}</WizardReviewBlock>
+        <WizardReviewBlock step={1} title="Campo"><p><b>{courseSelected ? course.name : "Falta seleccionar campo"}</b></p><p>{roundHoles} hoyos · salida H{startHole} · {roundDate}</p>{courseSelected && <p>{course.teeName} · {teeCategoryLabel(course)}</p>}</WizardReviewBlock>
         <WizardReviewBlock step={2} title={`${players.length} jugadores`}><ul>{players.map(player => <li key={player.id}>{player.name || "Sin nombre"}<small>{roundPresentation.playMode !== 'score_only' && <>HCP {player.handicap ?? "—"} · </>}{player.id === ownerId ? "Principal" : ""}</small></li>)}</ul>{roundPresentation.playMode !== 'score_only' && <p className="hint">{HANDICAP_BASIS_LABELS[roundHandicapBasis]}</p>}</WizardReviewBlock>
         {roundPresentation.playMode !== "score_only" && <><WizardReviewBlock step={3} title="Apuestas grupales">{wizardBets.group.some(entry => entry.enabled) ? <ul>{wizardBets.group.filter(entry => entry.enabled).map(entry => <li key={entry.id}><b>{entry.label}</b><small>{entry.summary}</small></li>)}</ul> : <p>Sin apuestas grupales</p>}</WizardReviewBlock>
         <WizardReviewBlock step={4} title="Personales y manuales">{wizardBets.personal.some(entry => entry.enabled) ? <ul>{wizardBets.personal.filter(entry => entry.enabled).map(entry => <li key={entry.id}><b>{entry.label}</b><small>{entry.summary}</small></li>)}</ul> : <p>Sin apuestas personales ni manuales</p>}</WizardReviewBlock></>}
@@ -4483,7 +4480,7 @@ function GolfBetsApp() {
       </nav>
       {roundStartedAt && !roundClosed && !editingRound && ownerLiveTransportAllowed(roundId, history) && (() => { const snapshot = currentSnapshot(); return snapshot && <OwnerRoundSync key={`${identity.userId}:${roundId}`} userId={identity.userId} accessToken={identity.accessToken || undefined} snapshot={snapshot} pausedBase={history.find(round => round.id === roundId && round.lifecycleState === 'live')} />; })()}
       <RoundCaptureV2
-        gpsContent={<GolfGpsReader token={identity.accessToken ?? null} initialCourseId={course.catalogCourseId || course.id} initialPosition={holeNumber} />}
+        gpsContent={({ active, onBack, onScore }) => <GolfGpsReader token={identity.accessToken ?? null} initialCourseId={course.catalogCourseId || course.id} initialPosition={holeNumber} active={active} onBack={onBack} mappingUnavailable={course.isProvisional === true || Boolean(course.operationsSnapshot?.configurationIds.length)} roundContext={{ roundId, name: course.name, teeName: course.teeName, holes: course.holes.filter(row => order.includes(row.number)), onScore }} />}
         initialGpsOpen={roundGpsIntent}
         captureContext={captureContext}
         onCaptureContextChange={(context) => {

@@ -14,6 +14,11 @@ export function roundTeeSelectionId(course: Course): string {
   return course.roundTeeSelectionId || course.catalogTeeId || course.id;
 }
 
+export function teeCategoryLabel(course: Pick<Course, "scorecardRatingGender" | "indexRatingEvidence" | "catalogReview">) {
+  const category = course.scorecardRatingGender || course.indexRatingEvidence?.ratingGender || course.catalogReview?.ratingCategory;
+  return category === "MEN" ? "Hombres" : category === "WOMEN" ? "Mujeres" : category && category !== "UNSPECIFIED" ? category : "Categoría no informada";
+}
+
 export function scorecardProfileLabel(profile: Pick<ScorecardProfileOption, "name" | "provenance">): string {
   const source = profile.provenance === "GHIN_OFFICIAL" ? "GHIN / Oficial"
     : profile.provenance === "USGA_OFFICIAL" ? "USGA / Oficial"
@@ -42,7 +47,7 @@ export function courseConfigurationLabel(input: {
 }) {
   if (normalizedLabel(input.courseName) !== normalizedLabel(input.clubName) || !input.profile) return input.courseName;
   const prefix = input.totalPar === null ? "Configuración" : `Par ${input.totalPar}`;
-  return `${prefix} — ${scorecardProfileLabel(input.profile)}`;
+  return `${input.courseName} · ${prefix} — ${scorecardProfileLabel(input.profile)}`;
 }
 
 export function scorecardProvenancePlayPriority(provenance: ScorecardProfileProvenance | undefined) {
@@ -86,6 +91,7 @@ export function freezeScorecardProfileSelection(course: Course) {
     defaultForPlay: course.scorecardProfileDefaultForPlay === true,
     effectiveFrom: course.scorecardProfileEffectiveFrom || null, effectiveTo: course.scorecardProfileEffectiveTo || null,
     verifiedAt: course.scorecardProfileVerifiedAt || null, teeId: course.catalogTeeId || course.id, teeName: course.teeName,
+    ratingGender: course.scorecardRatingGender || course.indexRatingEvidence?.ratingGender || null,
     rating: typeof course.rating === "number" ? course.rating : null,
     slope: typeof course.slope === "number" ? course.slope : null,
     par: course.holes.reduce((sum, hole) => sum + hole.par, 0),

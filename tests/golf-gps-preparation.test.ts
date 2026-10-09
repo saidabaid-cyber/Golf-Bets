@@ -57,12 +57,15 @@ test('real reader reads privately once per token; course/hole changes keep real 
     if (id === 'react/jsx-runtime') return { Fragment: 'fragment', jsx: (type: unknown, props: object) => ({ type, props }), jsxs: (type: unknown, props: object) => ({ type, props }) };
     if (id === 'react') return { useState(initial: unknown) { const i = cursor++; if (!(i in states)) states[i] = initial; return [states[i], (next: any) => { states[i] = typeof next === 'function' ? next(states[i]) : next; }]; }, useEffect(fn: () => any, deps: any[]) { const i = cursor++; const old = effects[i]; if (old && deps.every((d, n) => d === old.deps[n])) return; old?.cleanup?.(); effects[i] = { deps, cleanup: fn() }; } };
     if (id === './golf-gps-view') return { GolfGpsView: view };
+    if (id === './golf-gps.module.css') return { root: 'gps-root' };
     throw Error('Unexpected real reader dependency');
   } });
   function render(props: any) { cursor = 0; return exports.GolfGpsReader(props); }
   render({ token: 'SYNTHETIC_TOKEN' }); for (let i = 0; i < 5; i++) await Promise.resolve();
   const result = render({ token: 'SYNTHETIC_TOKEN', initialCourseId: 'stored', initialPosition: 10 });
-  const renderedView = result.props.children[1]; assert.equal(renderedView.type, view); assert.equal(renderedView.props.initialPosition, 10);
+  const renderedView = result; assert.equal(renderedView.type, view); assert.equal(renderedView.props.initialPosition, 10);
   assert.equal(reads, 1); assert.equal(renderedView.props.simulation, undefined); assert.equal(renderedView.props.mapFactory, undefined); assert.equal(renderedView.props.locationAdapter, undefined);
+  const unmapped = render({ token: 'SYNTHETIC_TOKEN', mappingUnavailable: true });
+  assert.equal(unmapped.type, 'section'); assert.equal(reads, 1);
   assert.equal(render({ token: null }).type, 'section'); assert.equal(reads, 1);
 });

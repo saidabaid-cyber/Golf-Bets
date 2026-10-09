@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Course } from "../../lib/types";
-import { roundTeeSelectionId, scorecardProfileLabel, scorecardProfilesForCards } from "../../lib/course-scorecard-profiles";
+import { roundTeeSelectionId, teeCategoryLabel, scorecardProfileLabel, scorecardProfilesForCards } from "../../lib/course-scorecard-profiles";
 import styles from "./round-tee-picker.module.css";
 
 function fact(value: number | undefined, suffix = "") {
@@ -61,7 +61,7 @@ export function RoundTeePicker({
           fact(tee.slope) ? `Slope ${fact(tee.slope)}` : null,
         ].filter(Boolean);
         return <button type="button" disabled={transitioningId !== null} className={selected ? styles.selected : ""} aria-pressed={selected} key={id} onClick={() => selectOnce(tee)}>
-          <span>{tee.teeName || "Tee"}</span>
+          <span>{tee.teeName || "Tee"} · {teeCategoryLabel(tee)}</span>
           <b>{facts.length ? facts.join(" · ") : "Datos de salida no publicados"}</b>
           {tee.ghinPostEligible === false && <small>No disponible para publicación GHIN</small>}
           <strong>{transitioningId === id ? "Abriendo…" : selected ? "Seleccionado ✓" : "Elegir"}</strong>

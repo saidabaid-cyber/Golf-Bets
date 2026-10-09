@@ -29,7 +29,12 @@ export async function GET(request:NextRequest) {
       const cards=profiles.length
         ? profiles.flatMap(profile=>profile.tees.map(profileTee=>golfCourseSelectionToLegacyCourse(catalog,profileTee.teeId,profile.id,profileTee.ratingGender,profileSourceUrl.href)).filter(Boolean))
         : catalog.tees.filter(tee=>tee.active&&tee.courseId===id).map(tee=>golfCourseSelectionToLegacyCourse(catalog,tee.id)).filter(Boolean);
-      return NextResponse.json({course,cards},{headers});
+      const availableTees=catalog.tees.filter(tee=>tee.active&&tee.courseId===id).map(tee=>({id:tee.id,name:tee.name,gender:tee.gender??null,rating:tee.rating??null,slope:tee.slope??null,totalYards:tee.totalYards??null}));
+      const holeCount=catalog.holes.filter(hole=>hole.courseId===id).length;
+      const cardIssue=cards.length ? null : holeCount!==course.holes
+        ? `Faltan las definiciones de los ${course.holes} hoyos (par y ventaja/SI). ${availableTees.length} tees disponibles con datos agregados; esos totales no sustituyen una tarjeta por hoyo.`
+        : 'Falta completar una tarjeta utilizable de 9 o 18 hoyos para los tees de esta configuración.';
+      return NextResponse.json({course,cards,availableTees,cardIssue},{headers});
     }
     const q=(request.nextUrl.searchParams.get('q')??'').slice(0,160);
     // Only verified club coordinates go to the browser; user's position never leaves it.

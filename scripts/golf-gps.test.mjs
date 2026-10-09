@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { gpsMeasurements, measuredDistance, displayDistance } from '../lib/golf-gps/model.mjs';
 import { GpsLocationSession } from '../lib/golf-gps/location.mjs';
 import { GpsMapSession } from '../lib/golf-gps/map-session.mjs';
+import { MapTapGuard } from '../lib/golf-gps/touch.mjs';
 import { googleMapGate, loadGoogleMaps, googleMapsFactory } from '../lib/golf-gps/google-maps.mjs';
 
 const hole = { position: 1, green: { front: [0, 0], center: [1, 0], back: [2, 0] }, references: [] }; // Synthetic mathematical fixture, not Puebla.
@@ -52,6 +53,7 @@ class Element {
   remove() { if (this.parent) this.parent.children = this.parent.children.filter(c => c !== this); }
   replaceChildren() { this.children = []; }
   addEventListener(name, callback) { this.events[name] = callback; }
+  removeEventListener(name) { delete this.events[name]; }
   setAttribute(name, value) { this.attributes[name] = value; }
   setPointerCapture() {}
 }
@@ -81,7 +83,7 @@ test('Google adapter draws points/accuracy/lines, moves target and cleans overla
   surface.update(scene); surface.fitHole(scene); assert.equal(b.mapsCreated.length, 1); assert.deepEqual(b.mapsCreated[0].options.center, { lat: 0, lng: 1 }); assert.equal(b.mapsCreated[0].options.mapTypeId, 'satellite');
   b.mapsCreated[0].events.click({ latLng: { lng: () => .3, lat: () => .4 } }); assert.deepEqual(targets[0], [.3, .4]);
   const target = element.children.find(c => c.attributes['aria-label']?.startsWith('Objetivo'));
-  target.events.pointerdown({ clientX: 0, clientY: 0, pointerId: 1, preventDefault() {}, stopPropagation() {} }); target.events.pointermove({ clientX: 10, clientY: 20, preventDefault() {}, stopPropagation() {} }); target.events.pointerup({ stopPropagation() {} }); assert.deepEqual(targets.at(-1), [1.5, -2]); assert.equal(b.mapsCreated[0].options.draggable, true);
+  target.events.pointerdown({ clientX: 0, clientY: 0, pointerId: 1, preventDefault() {}, stopPropagation() {} }); target.events.pointermove({ pointerId: 1, clientX: 10, clientY: 20, preventDefault() {}, stopPropagation() {} }); target.events.pointerup({ pointerId: 1, stopPropagation() {} }); assert.deepEqual(targets.at(-1), [1.5, -2]); assert.equal(b.mapsCreated[0].options.draggable, true);
   for (let i = 0; i < 50; i++) surface.update({ ...scene, unit: 'm' }); assert.equal(b.mapsCreated.length, 1); assert.equal(b.scripts.length, 0); surface.destroy(); assert.equal(element.children.length, 0); assert.equal(Object.keys(b.mapsCreated[0].events).length, 0); assert.equal(errors.length, 0);
 });
 test('Google cancellation after SDK load does not create a hidden map', async () => { const b = mockBrowser(); b.runtime.google = { maps: b.sdk }; const controller = new AbortController(); controller.abort(); await assert.rejects(() => googleMapsFactory({ enabled: true, apiKey: 'SYNTHETIC' }, b.runtime)(new Element('div'), {}, controller.signal, { hole }), /MAP_CANCELED/); assert.equal(b.mapsCreated.length, 0); });
@@ -92,4 +94,24 @@ test('auth failure after SDK readiness prevents another map and another script',
   b.runtime.gm_authFailure();
   await assert.rejects(() => googleMapsFactory({ enabled: true, apiKey: 'SYNTHETIC' }, b.runtime)(new Element('div'), {}, undefined, { hole }), /MAP_AUTH_OR_QUOTA_ERROR/);
   assert.equal(b.scripts.length, 1); assert.equal(b.mapsCreated.length, 0);
+});
+
+
+test('touch tap can target; pan, pinch, cancel and marker drag cannot target', () => {
+  let time = 1000; const guard = new MapTapGuard(() => time);
+  const pointer = (id, x = 0, y = 0) => ({ pointerId: id, clientX: x, clientY: y });
+  guard.down(pointer(1)); guard.up(pointer(1)); assert.equal(guard.allow(), true);
+  guard.down(pointer(1)); guard.move(pointer(1, 50)); guard.up(pointer(1, 50)); assert.equal(guard.allow(), false);
+  time += 800; guard.down(pointer(1)); guard.down(pointer(2)); guard.up(pointer(1)); guard.up(pointer(2)); assert.equal(guard.allow(), false);
+  time += 800; guard.down(pointer(1), true); guard.up(pointer(1)); assert.equal(guard.allow(), false);
+  time += 800; guard.down(pointer(1)); guard.up(pointer(1), true); assert.equal(guard.allow(), false);
+  time += 800; guard.down(pointer(1)); guard.up(pointer(1)); assert.equal(guard.allow(), true);
+});
+test('resizing/reopening a retained map never creates a second factory or recenters exploration', async () => {
+  let factories=0, fits=0, resizes=0, destroyed=0;
+  const session=new GpsMapSession(async()=>{factories++;return {update(){},fitHole(){fits++;},centerPlayer(){},resize(){resizes++;},destroy(){destroyed++;}};},()=>{});
+  session.update({holeKey:'one',hole}); await session.open({},{}); const initialFits=fits;
+  session.resize(); await session.open({},{}); session.update({holeKey:'one',hole,unit:'m'});
+  assert.equal(factories,1);assert.equal(fits,initialFits);assert.equal(resizes,1);
+  session.dispose();assert.equal(destroyed,1);
 });

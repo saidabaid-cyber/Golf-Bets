@@ -54,6 +54,7 @@ export function teeAssignmentSnapshot(
     ...(course.catalogCourseId ? { layoutId: course.catalogCourseId } : {}),
     teeId: course.catalogTeeId || course.id,
     teeName: course.teeName,
+    ...(course.scorecardRatingGender ? { scorecardRatingGender: course.scorecardRatingGender } : {}),
     ...(course.scorecardProfileId ? { scorecardProfileId: course.scorecardProfileId } : {}),
     ...(course.scorecardProfileName ? { scorecardProfileName: course.scorecardProfileName } : {}),
     ...(course.scorecardProfileProvenance ? { scorecardProfileProvenance: course.scorecardProfileProvenance } : {}),

@@ -16,7 +16,10 @@ export function normalizeRoundSetupCourseIdentity(value: unknown): RoundSetupCou
   const catalogCourseId = typeof source.catalogCourseId === "string" && source.catalogCourseId.trim()
     ? source.catalogCourseId.trim()
     : undefined;
-  return { name, ...(catalogCourseId ? { catalogCourseId } : {}), candidateCourseIds };
+  return { name, ...(catalogCourseId ? { catalogCourseId } : {}), candidateCourseIds,
+    ...(typeof source.catalogClubId === 'string' ? { catalogClubId: source.catalogClubId } : {}),
+    ...(typeof source.selectionIssue === 'string' ? { selectionIssue: source.selectionIssue } : {}),
+  };
 }
 
 /** Returns only real tee records from the current local course catalog. Explicit
@@ -29,8 +32,9 @@ export function coursesForPendingIdentity(courses: readonly Course[], value: unk
   const explicit = courses.filter((course) => candidateIds.has(course.id));
   if (explicit.length) return explicit;
   if (identity.catalogCourseId) {
-    const sameCatalogCourse = courses.filter((course) => course.catalogCourseId === identity.catalogCourseId);
-    if (sameCatalogCourse.length) return sameCatalogCourse;
+    // An explicit layout may be incomplete. Never replace it with a sibling
+    // merely because that sibling has the same facility/name.
+    return courses.filter((course) => course.catalogCourseId === identity.catalogCourseId);
   }
   const name = normalizedName(identity.name);
   return courses.filter((course) => normalizedName(course.name) === name || normalizedName(course.clubName || "") === name);
@@ -59,7 +63,7 @@ export function resolveManualRoundCourseState(input: {
   }
   const pendingIdentity = normalizeRoundSetupCourseIdentity(input.courseIdentity);
   const candidates = coursesForPendingIdentity(input.availableCourses, pendingIdentity);
-  if (candidates.length === 1) {
+  if (candidates.length === 1 && !pendingIdentity?.catalogClubId) {
     return { course: candidates[0], courseSelected: true, pendingIdentity: null, candidates };
   }
   return {

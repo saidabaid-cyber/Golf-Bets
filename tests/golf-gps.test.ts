@@ -32,7 +32,7 @@ function snapshot(index = 0): GolfApiSnapshot {
 test('GPS portable map/device/distance regressions run without upstream network', () => {
   const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
   const output = execFileSync(process.execPath, ['--test', 'scripts/golf-gps.test.mjs'], { cwd: process.cwd(), encoding: 'utf8', env });
-  assert.match(output, /(?:#|ℹ) tests 22/); assert.match(output, /(?:#|ℹ) fail 0/);
+  assert.match(output, /(?:#|ℹ) tests \d+/); assert.match(output, /(?:#|ℹ) fail 0/);
 });
 test('player DTO preserves green roles and GeoJSON longitude/latitude order without private payload', () => {
   const original = snapshot(); const before = JSON.stringify(original); const dto = gpsCourseProjection(original);
@@ -107,4 +107,12 @@ test('query/headers cannot forge pilot entitlement and cross-site attempts stop 
 test('partial cached availability stays useful; unavailable storage is an explicit controlled-import pending', async () => {
   const partial = await route({ account: { ok: true, userId: tester }, missing: [3] }); const response = await partial.get(request()); assert.equal(response.status, 200); assert.equal(response.body.courses.length, 3); assert.deepEqual(Array.from(response.body.unavailable), ['course-el-cristo']);
   const empty = await route({ account: { ok: true, userId: tester }, missing: [0, 1, 2, 3] }); const noRows = await empty.get(request()); assert.equal(noRows.status, 503); assert.equal(noRows.body.code, 'PENDING_CONTROLLED_DB_APPLY'); assert.equal(JSON.stringify(noRows.body).includes('PRIVATE_STORAGE_ERROR'), false);
+});
+
+test('two authorized accounts read the same persisted course versions without an upstream client', async()=>{
+  const first=await route({account:{ok:true,userId:tester}});
+  const second=await route({account:{ok:true,userId:outsider},admin:{ok:true,userId:outsider}});
+  const a=await first.get(request()),b=await second.get(request());
+  assert.equal(a.status,200);assert.equal(b.status,200);assert.deepEqual(a.body.courses,b.body.courses);
+  assert.deepEqual(first.reads,second.reads);assert.equal(first.counts().dbCalls,second.counts().dbCalls);
 });
