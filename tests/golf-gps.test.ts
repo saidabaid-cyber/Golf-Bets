@@ -6,7 +6,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { GPS_SAVED_COURSES, gpsCourseProjection } from '../lib/golf-gps/projection';
+import { GPS_SAVED_COURSES, gpsCourseProjection, reviewedClubCardGps } from '../lib/golf-gps/projection';
 import type { GolfApiSnapshot } from '../lib/golfapi/normalize.mjs';
 import { isGpsPilotTester } from '../lib/gps-pilot-la-vista-1/access';
 import { isCrossSiteRequest } from '../lib/backyard-ai/server/http-security';
@@ -56,15 +56,34 @@ test('unreviewed identity/provider/schema cannot be served as another saved cour
   assert.equal(GPS_SAVED_COURSES.length, 4); assert.equal(GPS_SAVED_COURSES.some(c => c.name.includes('Cola')), false);
 });
 
+const reviewedAlias = { id:'course-la-vista-club-current',club_id:'club-la-vista',holes:18,is_provisional:false,
+ catalog_metadata:{dataVersion:'la-vista-club-current-2026-09-28',ghin_provider_alias_v1:{status:'CONFIRMED',provider:'GHIN',club_id:'club-la-vista',canonical_course_id:'course-la-vista',provider_course_id:'23233',provider_facility_id:'19886',source_data_version:'la-vista-club-current-2026-09-28',evidence:'OWNED_SESSION_LIVE_COURSE_AND_GOLD_18_HOLE_GEOMETRY'}}};
+test('current club card reuses only persisted reviewed physical identity, never temporary or mismatched cards',()=>{
+ const original=gpsCourseProjection(snapshot()),before=JSON.stringify(original);
+ const alias=reviewedClubCardGps([original],reviewedAlias)!;
+ assert.equal(alias.id,'course-la-vista-club-current');assert.equal(alias.holes,original.holes);assert.equal(JSON.stringify(original),before);
+ for(const patch of [{id:'course-la-vista-temporary-par-70'},{id:'course-la-vista-temporary-par-69'},{is_provisional:true},{holes:9},{club_id:'other'}, {catalog_metadata:{...reviewedAlias.catalog_metadata,dataVersion:'changed'}},{catalog_metadata:{...reviewedAlias.catalog_metadata,ghin_provider_alias_v1:{...reviewedAlias.catalog_metadata.ghin_provider_alias_v1,status:'PENDING'}}}]) assert.equal(reviewedClubCardGps([original],{...reviewedAlias,...patch}),null);
+ assert.equal(reviewedClubCardGps([],reviewedAlias),null);
+});
+
 const nativeImport = new Function('specifier', 'return import(specifier)') as (specifier: string) => Promise<object>;
 const pilot = nativeImport(pathToFileURL(resolve('lib/gps-pilot-la-vista-1/pilot.mjs')).href);
 const routeSource = readFileSync('app/api/golf-gps/courses/route.ts', 'utf8');
 const routeJs = ts.transpileModule(routeSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+const savedSourceJs = ts.transpileModule(readFileSync('lib/golf-gps/saved-courses.server.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
 const tester = '11111111-1111-4111-8111-111111111111', outsider = '22222222-2222-4222-8222-222222222222';
 type Access = { ok: boolean; userId?: string; status?: number; error?: string; code?: string };
 async function route(options: { account?: Access; admin?: Access; env?: Record<string, string>; missing?: number[]; database?: boolean } = {}) {
   let authCalls = 0, adminCalls = 0, dbCalls = 0; const reads: string[] = [];
   const exports: any = {}, modules = await pilot;
+  const savedExports: any = {};
+  runInNewContext(savedSourceJs,{exports:savedExports,Date,Promise,require(specifier:string){
+    if(specifier==='server-only')return {};
+    if(specifier.endsWith('/projection'))return {GPS_SAVED_COURSES,gpsCourseProjection,reviewedClubCardGps};
+    if(specifier.endsWith('source.server'))return {devGolfApiSnapshotStore:()=>({readNormalized:async(id:string)=>{reads.push(id);const index=GPS_SAVED_COURSES.findIndex(c=>c.externalId===id);if(options.missing?.includes(index))throw Error('PRIVATE_STORAGE_ERROR');return snapshot(index);}})};
+    throw Error('Unexpected storage dependency');
+  }});
+
   runInNewContext(routeJs, { exports, Promise, process: { env: { GOLF_GPS_ENABLED: 'true', GOLF_GPS_MAPS_ENABLED: 'false', GPS_LA_VISTA_1_PILOT_USER_IDS: tester, VERCEL_GIT_COMMIT_REF: 'integration/backyard-current', VERCEL_ENV: 'preview', ...options.env } }, require(specifier: string) {
     if (specifier === 'next/server') return { NextResponse: { json: (body: unknown, config: object) => ({ body, ...config }) } };
     if (specifier.endsWith('server-auth')) return { authenticatedRequest: async () => { authCalls++; return options.account ?? { ok: true, userId: outsider }; } };
@@ -73,7 +92,7 @@ async function route(options: { account?: Access; admin?: Access; env?: Record<s
     if (specifier.endsWith('http-security')) return { isCrossSiteRequest };
     if (specifier.endsWith('/access')) return { isGpsPilotTester };
     if (specifier.endsWith('pilot.mjs')) return modules;
-    if (specifier.endsWith('/projection')) return { GPS_SAVED_COURSES, gpsCourseProjection };
+    if (specifier.endsWith('saved-courses.server')) return savedExports;
     if (specifier.endsWith('source.server')) return { devGolfApiSnapshotStore: () => ({ readNormalized: async (id: string) => { reads.push(id); const index = GPS_SAVED_COURSES.findIndex(c => c.externalId === id); if (options.missing?.includes(index)) throw Error('PRIVATE_STORAGE_ERROR'); return snapshot(index); } }) };
     throw Error('Unexpected dependency; no upstream client allowed');
   } });
@@ -115,4 +134,21 @@ test('two authorized accounts read the same persisted course versions without an
   const a=await first.get(request()),b=await second.get(request());
   assert.equal(a.status,200);assert.equal(b.status,200);assert.deepEqual(a.body.courses,b.body.courses);
   assert.deepEqual(first.reads,second.reads);assert.equal(first.counts().dbCalls,second.counts().dbCalls);
+});
+
+
+test('concurrent authorized readers coalesce the same private stored version; no upstream requests',async()=>{
+ const reads:string[]=[],exports:any={};let aliasReads=0;
+ let release!:()=>void;const hold=new Promise<void>(resolve=>release=resolve);
+ runInNewContext(savedSourceJs,{exports,Date,Promise,require(name:string){
+  if(name==='server-only')return {};
+  if(name.endsWith('/projection'))return {GPS_SAVED_COURSES,gpsCourseProjection,reviewedClubCardGps};
+  if(name.endsWith('source.server'))return {devGolfApiSnapshotStore:()=>({readNormalized:async(id:string)=>{reads.push(id);await hold;return snapshot(GPS_SAVED_COURSES.findIndex(c=>c.externalId===id));}})};
+  throw Error('No provider client may be imported');
+ }});
+ const database={from(table:string){assert.equal(table,'golf_courses');return{select(){return{eq(_key:string,id:string){assert.equal(id,'course-la-vista-club-current');return{async maybeSingle(){aliasReads++;return{data:reviewedAlias,error:null};}};}};}};}};
+ const a=exports.readSavedGpsCourses(database),b=exports.readSavedGpsCourses(database);
+ assert.equal(a,b);assert.equal(reads.length,4);release();
+ const first=await a,second=await b;assert.equal(first,second);assert.equal(first.courses.length,5);assert.equal(aliasReads,1);
+ assert.equal(await exports.readSavedGpsCourses(database),first);assert.equal(reads.length,4);assert.equal(aliasReads,1);
 });

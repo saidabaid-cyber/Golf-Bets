@@ -76,6 +76,8 @@ export type RoundCaptureV2Props = {
   onUndo: () => void;
   undoDisabled: boolean;
   onSaveAndAdvance: () => void;
+  onSaveHole?: () => boolean;
+  captureErrors?: readonly string[];
   saveDisabled: boolean;
   saveLabel: string;
 };
@@ -154,6 +156,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   const [gpsVisited, setGpsVisited] = useState(Boolean(props.initialGpsOpen));
   const [gpsScoreOpen, setGpsScoreOpen] = useState(false);
   useEffect(() => { if (gpsOpen) setGpsVisited(true); }, [gpsOpen]);
+  useEffect(() => { setGpsOpen(Boolean(props.initialGpsOpen)); }, [props.initialGpsOpen]);
   const [shotBusy, setShotBusy] = useState(false);
   const [shotMessage, setShotMessage] = useState("");
   const [shotClub, setShotClub] = useState("");
@@ -328,8 +331,8 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   }
 
   return <div className={styles.screen} data-game-screen="approved-compact-v1">
-    {gpsVisited && props.gpsContent && <div hidden={!gpsOpen} inert={gpsScoreOpen || !gpsOpen} aria-hidden={gpsScoreOpen || !gpsOpen} id="round-hole-map" aria-label="Vista GPS del hoyo">{props.gpsContent({ active: gpsOpen && !gpsScoreOpen, onBack: () => { setGpsOpen(false); setGpsScoreOpen(false); }, onScore: position => { const index = order.indexOf(position); if (index >= 0) { props.onNavigateHole(index); setGpsScoreOpen(true); } } })}</div>}
-    {gpsOpen && gpsScoreOpen && <section className={styles.gpsScoreBackdrop} role="dialog" aria-modal="true" aria-label={`Anotar score · Hoyo ${hole.number}`}><div className={styles.gpsScorePanel}><h2>Anotar score · Hoyo {hole.number}</h2><p>Captura pendiente de esta misma ronda. Navegar en GPS no guarda scores.</p>{players.map(player => <div className={styles.gpsScoreRow} key={player.id}><b>{player.name}</b><CompactStepper label={`Score ${player.name} hoyo ${hole.number}`} value={scores[player.id]} fallback={hole.par} min={1} onChange={value => props.onScoreChange(player.id, value)} /></div>)}<button type="button" className="primary" onClick={() => setGpsScoreOpen(false)}>Volver al mapa</button><button type="button" className="secondary" disabled={props.saveDisabled} onClick={() => { props.onSaveAndAdvance(); setGpsScoreOpen(false); }}>Guardar score y avanzar</button></div></section>}
+    {gpsVisited && props.gpsContent && <div hidden={!gpsOpen} inert={gpsScoreOpen || !gpsOpen} aria-hidden={gpsScoreOpen || !gpsOpen} id="round-hole-map" aria-label="Vista GPS del hoyo">{props.gpsContent({ active: gpsOpen, onBack: () => { setGpsOpen(false); setGpsScoreOpen(false); }, onScore: position => { const index = order.indexOf(position); if (index >= 0) { props.onNavigateHole(index); setGpsScoreOpen(true); } } })}</div>}
+    {gpsOpen && gpsScoreOpen && <section className={styles.gpsScoreBackdrop} role="dialog" aria-modal="true" aria-label={`Anotar score · Hoyo ${hole.number}`}><div className={styles.gpsScorePanel}><h2>Anotar score · Hoyo {hole.number}</h2><p>Captura pendiente de esta misma ronda. Navegar en GPS no guarda scores.</p>{players.map(player => <div className={styles.gpsScoreRow} key={player.id}><b>{player.name}</b><CompactStepper label={`Score ${player.name} hoyo ${hole.number}`} value={scores[player.id]} fallback={hole.par} min={1} onChange={value => props.onScoreChange(player.id, value)} /></div>)}{props.captureErrors?.map(message => <p role="alert" key={message}>{message}</p>)}<button type="button" className="primary" disabled={props.saveDisabled || !props.onSaveHole} onClick={() => { if (props.onSaveHole?.()) setGpsScoreOpen(false); }}>Guardar score</button><button type="button" className="secondary" onClick={() => setGpsScoreOpen(false)}>Volver al mapa · conservar edición</button><button type="button" className="textButton" onClick={() => { setGpsScoreOpen(false); setGpsOpen(false); props.onModeChange("advanced"); }}>Estadísticas / capturas de apuestas</button></div></section>}
     <div className={styles.captureBody} hidden={gpsOpen && Boolean(props.gpsContent)}>
     <section className={styles.hero}>
       <div className={styles.gameBrand}><b>The<br />Backyard</b><span>⛳</span><small>GOLF · FRIENDS · MORE</small></div>

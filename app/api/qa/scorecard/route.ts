@@ -1,6 +1,8 @@
 import type {NextRequest} from 'next/server';
 import {authenticatedRequest} from '../../../../lib/server-auth';
 import {scorecardQaAccount,scorecardQaEnvironment} from '../../../../lib/scorecard-qa-access';
+import { getSupabaseAdmin } from '../../../../lib/supabase/server';
+import { readSavedGpsCourses } from '../../../../lib/golf-gps/saved-courses.server';
 import {completeScorecardQa} from '../../../../lib/scorecard-qa-fixture';
 export const dynamic='force-dynamic';
 export const runtime='nodejs';
@@ -10,5 +12,11 @@ export async function GET(request:NextRequest){
   const account=await authenticatedRequest(request);
   if(!account.ok)return Response.json({error:account.error},{status:account.status,headers});
   if(!scorecardQaAccount(account.userId))return Response.json({error:'Esta demo está reservada a las cuentas QA autorizadas.'},{status:403,headers});
+  if (new URL(request.url).searchParams.get('flow') === 'gps') {
+    const database = getSupabaseAdmin();
+    if (!database) return Response.json({error:'Datos GPS guardados no disponibles.'},{status:503,headers});
+    try { return Response.json({gps:await readSavedGpsCourses(database),mapsEnabled:process.env.GOLF_GPS_MAPS_ENABLED==='true'},{headers}); }
+    catch { return Response.json({error:'No pudimos leer el registro GPS compartido.'},{status:503,headers}); }
+  }
   return Response.json({data:completeScorecardQa},{headers});
 }

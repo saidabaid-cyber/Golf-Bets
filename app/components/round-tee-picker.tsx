@@ -48,7 +48,7 @@ export function RoundTeePicker({
       <span>Configuración</span>
       {profiles.map((profile) => <button type="button" key={profile.id} className={profile.id === profileId ? styles.profileSelected : ""} aria-pressed={profile.id === profileId} onClick={() => setProfileId(profile.id)}>
         <b>{scorecardProfileLabel(profile)}</b>
-        <small>{profile.defaultForPlay ? "Predeterminada para jugar" : "Alternativa disponible"}</small>
+        <small>{profile.id === profiles.find(row => row.defaultForPlay)?.id ? "Predeterminada para jugar" : "Alternativa disponible"}</small>
       </button>)}
     </div>}
     <div className={styles.grid}>

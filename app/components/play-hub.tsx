@@ -9,7 +9,7 @@ import styles from "./play-hub.module.css";
 
 export type PlayHubProps = {
   coursePicker?: React.ReactNode; activeRound?: ActiveRoundSummary | null;
-  onContinueRound: () => void; onEditRound?: () => void; onCancelRound?: () => void;
+  onContinueRound: () => void; onEditRound?: () => void; onCancelRound?: () => void; onFinishRound?: () => void;
   onAiRound: () => void; onNewRound: () => void; onScoreOnly?: () => void; onTotalScore?: () => void;
   onOpenHistory: () => void; onOpenBalances: () => void; onOpenPersonalHistory: () => void;
   onOpenStats: () => void; onOpenCourses: () => void; onOpenGroups: () => void;
@@ -21,17 +21,17 @@ export type PlayHubProps = {
 
 function roundProgress(round: ActiveRoundSummary) {
   if (round.status === "review") return "Captura terminada · falta revisar y guardar";
-  if (round.status === "setup") return `Configura ${round.totalHoles} hoyos y ${round.playerCount || "los"} jugadores`;
+  if (round.status === "setup") return `Configuración pendiente · ${round.totalHoles} hoyos · ${round.playerCount || "sin"} jugadores`;
   return `Hoyo ${round.currentHole || "en juego"}${typeof round.playedHoles === "number" ? ` · ${round.playedHoles}/${round.totalHoles} capturados` : ""}`;
 }
 
-export function PlayHub({ coursePicker, activeRound, onContinueRound, onEditRound, onCancelRound, onAiRound, onNewRound, onScoreOnly, onTotalScore, onOpenBalances, onOpenPersonalHistory, onOpenCourses, onOpenGroups, onOpenStandings, onOpenResults, onOpenGps, clubhouseConfig, onCreateGroup, pendingRounds }: PlayHubProps) {
+export function PlayHub({ coursePicker, activeRound, onContinueRound, onEditRound, onCancelRound, onFinishRound, onAiRound, onNewRound, onScoreOnly, onTotalScore, onOpenBalances, onOpenPersonalHistory, onOpenCourses, onOpenGroups, onOpenStandings, onOpenResults, onOpenGps, clubhouseConfig, onCreateGroup, pendingRounds }: PlayHubProps) {
   return <section className={styles.screen} aria-label="Play">
     <section className={styles.hero} aria-labelledby="play-title"><div className={styles.heroCopy}><h2 id="play-title">A jugar</h2><p>Golf es más que un juego.<br />Es donde las buenas historias<br />siempre encuentran un hoyo más.</p></div>
-      <button type="button" className={styles.playAction} onClick={activeRound ? onContinueRound : onScoreOnly || onNewRound}><span className={styles.symbol}><OfficialPlaySymbol priority /></span><b>{activeRound?.status === "setup" ? "COMPLETAR CONFIGURACIÓN" : activeRound ? "CONTINUAR RONDA" : "INICIAR RONDA"}</b></button>
+      <button type="button" className={styles.playAction} onClick={activeRound ? onContinueRound : onScoreOnly || onNewRound}><span className={styles.symbol}><OfficialPlaySymbol priority /></span><b>{activeRound?.status === "setup" ? "COMPLETAR CONFIGURACIÓN" : activeRound ? "CONTINUAR RONDA" : "NUEVA RONDA"}</b></button>
       <nav className={styles.contextTools} aria-label="Herramientas de ronda"><button type="button" onClick={activeRound ? onContinueRound : onScoreOnly}><BackyardIcon name="score" /><span>Score</span></button><button type="button" onClick={activeRound ? onEditRound || onContinueRound : onNewRound}><BackyardIcon name="handicap" /><span>Apuestas</span></button><button type="button" onClick={onOpenGroups}><BackyardIcon name="players" /><span>Grupos</span></button><button type="button" disabled={!onOpenGps} onClick={onOpenGps} title="Abrir GPS y mapa del hoyo"><BackyardIcon name="strategy" /><span>GPS / Hole Map</span></button></nav>
     </section>
-    {activeRound && <section className={styles.activeRound}><div className={styles.sectionTitle}><h2>{activeRound.courseName}</h2><small>{activeRound.roundDate}</small></div><p>{roundProgress(activeRound)}</p><div className={styles.roundActions}>{onEditRound && <button type="button" onClick={onEditRound}>EDITAR CONFIGURACIÓN</button>}{onCancelRound && <button type="button" onClick={onCancelRound}>CANCELAR RONDA</button>}{activeRound.status === "live" && <><button type="button" onClick={onOpenStandings}>Cómo vamos</button><button type="button" onClick={onOpenResults}>Resultados</button></>}</div></section>}
+    {activeRound && <section className={styles.activeRound}><div className={styles.sectionTitle}><h2>{activeRound.courseName}</h2><small>{activeRound.roundDate}</small></div><p>{roundProgress(activeRound)}</p><div className={styles.roundActions}>{onEditRound && <button type="button" onClick={onEditRound}>EDITAR CONFIGURACIÓN</button>}{onCancelRound && <button type="button" onClick={onCancelRound}>{activeRound.status === "setup" ? "DESCARTAR BORRADOR" : "CANCELAR RONDA"}</button>}{activeRound.status !== "setup" && onFinishRound && <button type="button" onClick={onFinishRound}>{activeRound.status === "review" ? "REVISAR Y FINALIZAR" : "FINALIZAR RONDA"}</button>}{activeRound.status === "live" && <><button type="button" onClick={onOpenStandings}>Cómo vamos</button><button type="button" onClick={onOpenResults}>Resultados</button></>}</div></section>}
     <nav className={styles.recurringGroups} aria-label="Grupos recurrentes"><button type="button" onClick={onOpenGroups}><BackyardIcon name="players" /><span><b>CARGAR GRUPO</b><small>Elige quién juega hoy y carga sus apuestas habituales.</small></span><span aria-hidden="true">›</span></button>{onCreateGroup && <button type="button" onClick={onCreateGroup}><BackyardIcon name="players" /><span><b>CREAR GRUPO</b><small>Guarda tus jugadores y apuestas habituales.</small></span><span aria-hidden="true">›</span></button>}</nav>
     <Clubhouse config={clubhouseConfig} />
     {pendingRounds}

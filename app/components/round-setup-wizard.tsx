@@ -11,7 +11,7 @@ import styles from "./round-setup-wizard.module.css";
 const STEPS = ["Campo", "Jugadores", "Grupales", "Personales"] as const;
 const WizardContext = createContext<{ step: WizardStep; edit: (step: WizardStep) => void; target: { id: string; revision: number } | null }>({ step: 1, edit: () => {}, target: null });
 
-export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, editing = false, scoreOnly = false, initialStep = 1, children }: {
+export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, editing = false, scoreOnly = false, quickSolo = false, onConfigureBets, initialStep = 1, children }: {
   storageKey: string;
   issues: readonly RoundSetupPreflightIssue[];
   onStart: () => Promise<boolean>;
@@ -19,6 +19,8 @@ export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, 
   onExit: () => void;
   editing?: boolean;
   scoreOnly?: boolean;
+  quickSolo?: boolean;
+  onConfigureBets?: () => void;
   initialStep?: WizardStep;
   children: ReactNode;
 }) {
@@ -90,12 +92,13 @@ export function RoundSetupWizard({ storageKey, issues, onStart, onSave, onExit, 
       const completed = number < step && !issues.some((issue) => wizardIssueStep(issue) === number);
       return <button type="button" key={label} aria-current={step === number ? "step" : undefined} aria-label={`${number} ${label} · ${step === number ? "actual" : completed ? "completado" : "pendiente"}`} disabled={starting} onClick={() => number < step ? navigate(number) : advance(number)}><span aria-hidden="true">{completed ? "✓" : number}</span><b>{label}</b></button>;
     })}</nav>
+    {scoreOnly && onConfigureBets && <button type="button" className="textButton" disabled={starting} onClick={onConfigureBets}>Configurar apuestas (opcional)</button>}
     {children}
     {blocking.length > 0 && <section className={styles.preflight} aria-label="Falta completar"><h2>FALTA COMPLETAR</h2><p>Toca para corregir. El resto de tu configuración se conserva.</p>{blocking.map((issue) => <button type="button" key={issue.id} onClick={() => navigate(wizardIssueStep(issue), issue)}><b>{issue.label} ›</b><span>{issue.detail}</span></button>)}</section>}
     {error && <p className="notice bad" role="alert">{error}</p>}
     <footer className={styles.controls}>
       {step > 1 && <button type="button" className="secondary" disabled={starting} onClick={() => navigate(scoreOnly && step === 5 ? 2 : (step - 1) as WizardStep)}>← Atrás</button>}
-      {step < 5 ? <button type="button" className="primary" disabled={blocking.length > 0} onClick={() => advance(scoreOnly && step === 2 ? 5 : (step + 1) as WizardStep)}>{step === 4 || (scoreOnly && step === 2) ? "Revisar y jugar →" : "Continuar →"}</button> : <button type="button" className="primary" disabled={starting || issues.length > 0} onClick={() => void start()}>{starting ? "Iniciando…" : editing ? "Guardar y continuar →" : "Iniciar ronda →"}</button>}
+      {quickSolo && step === 1 ? <><button type="button" className="primary" disabled={starting || issues.length > 0} onClick={() => void start()}>{starting ? "Iniciando…" : "Jugar solo →"}</button><button type="button" className="textButton" disabled={starting} onClick={() => advance(2)}>Agregar jugadores / revisar opciones</button></> : step < 5 ? <button type="button" className="primary" disabled={blocking.length > 0} onClick={() => advance(scoreOnly && step === 2 ? 5 : (step + 1) as WizardStep)}>{step === 4 || (scoreOnly && step === 2) ? "Revisar y jugar →" : "Continuar →"}</button> : <button type="button" className="primary" disabled={starting || issues.length > 0} onClick={() => void start()}>{starting ? "Iniciando…" : editing ? "Guardar y continuar →" : "Iniciar ronda →"}</button>}
       {visitedReview && step < 4 && <button type="button" className="textButton" disabled={starting} onClick={() => advance(5)}>Volver al resumen</button>}
     </footer>
     <ModalShell open={confirmExit} onClose={() => setConfirmExit(false)} label="Guardar configuración y salir"><h2>¿Guardar esta configuración y continuar después?</h2><div className="dialogActions"><button type="button" className="secondary" onClick={() => setConfirmExit(false)}>Cancelar</button><button type="button" className="primary" onClick={() => { setConfirmExit(false); if (save()) onExit(); }}>Guardar y salir</button></div></ModalShell>

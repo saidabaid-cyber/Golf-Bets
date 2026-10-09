@@ -19,12 +19,14 @@ test('remote demo fails closed outside DEV, approved branch, exact DB and server
   for(const id of ['','peer','59952f12-784c-4568-957a-f1e55bbac04d'])assert.equal(scorecardQaAccount(id),false);
 });
 test('QA API verifies real session/account before returning synthetic data; cannot write or publish',async()=>{
-  let account:any={ok:false,status:401,error:'Inicia sesión'},authCalls=0;
+  let account:any={ok:false,status:401,error:'Inicia sesión'},authCalls=0,gpsReads=0;
   const exports:any={},runtimeEnv={...env};
   const source=ts.transpileModule(readFileSync('app/api/qa/scorecard/route.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
-  runInNewContext(source,{exports,Response,process:{env:runtimeEnv},require(path:string){
+  runInNewContext(source,{exports,Response,URL,process:{env:runtimeEnv},require(path:string){
     if(path.endsWith('/server-auth'))return{authenticatedRequest:async()=>{authCalls++;return account;}};
     if(path.endsWith('/scorecard-qa-access'))return{scorecardQaAccount,scorecardQaEnvironment};
+    if(path.endsWith('/supabase/server'))return{getSupabaseAdmin:()=>({})};
+    if(path.endsWith('/saved-courses.server'))return{readSavedGpsCourses:async()=>{gpsReads++;return{courses:[],unavailable:[]};}};
     if(path.endsWith('/scorecard-qa-fixture'))return{completeScorecardQa:fixture};throw new Error(path);
   }});
   const request=new Request('https://dev.thebackyard.com.mx/api/qa/scorecard');
@@ -33,7 +35,12 @@ test('QA API verifies real session/account before returning synthetic data; cann
   account={ok:true,userId:'b182e0a1-d3f5-4e32-a005-29c6d55b6cdf'};const response=await exports.GET(request);
   assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'private, no-store');assert.match(response.headers.get('x-robots-tag')!,/noindex/);
   assert.equal((await response.json()).data.access.roundId,'qa-memory-round');
-  runtimeEnv.VERCEL_ENV='production';assert.equal((await exports.GET(request)).status,404);assert.equal(authCalls,3);
+  const gpsRequest=new Request('https://dev.thebackyard.com.mx/api/qa/scorecard?flow=gps');
+  account={ok:false,status:401,error:'Inicia sesión'};assert.equal((await exports.GET(gpsRequest)).status,401);
+  account={ok:true,userId:'not-QA'};assert.equal((await exports.GET(gpsRequest)).status,403);assert.equal(gpsReads,0);
+  account={ok:true,userId:'b182e0a1-d3f5-4e32-a005-29c6d55b6cdf'};
+  assert.equal((await exports.GET(gpsRequest)).status,200);assert.equal(gpsReads,1);
+  runtimeEnv.VERCEL_ENV='production';assert.equal((await exports.GET(gpsRequest)).status,404);assert.equal(authCalls,6);assert.equal(gpsReads,1);
   for(const method of ['POST','PATCH','PUT','DELETE'])assert.equal(exports[method],undefined);
 });
 test('complete eighteen-hole fixture has coherent gross totals and captured zero, N/A and diverse advanced statistics',()=>{
@@ -67,7 +74,7 @@ test('demo uses the real editor/domain; successful, cancelled, rejected and rese
 test('remote access gate discards responses from a previous identity after account change',async()=>{
   let changed=()=>{},release:(value:any)=>void=()=>{},calls=0;const scheduled:Array<()=>void>=[];
   const client={auth:{getSession:async()=>({data:{session:{access_token:'QA'}}}),onAuthStateChange(fn:()=>void){changed=fn;return{data:{subscription:{unsubscribe(){}}}};}}};
-  const h=socialUI('app/qa/scorecard/scorecard-qa-gate.tsx',{'supabase/client':{getSupabaseBrowser:()=>client},'scorecard-qa':{ScorecardQa:'Demo'}},{setTimeout:(fn:()=>void)=>{scheduled.push(fn);},fetch:async()=>{calls++;return new Promise(resolve=>{release=resolve;});}});
+  const h=socialUI('app/qa/scorecard/scorecard-qa-gate.tsx',{'supabase/client':{getSupabaseBrowser:()=>client},'scorecard-qa':{ScorecardQa:'Demo'},'golf-play-qa':{GolfPlayQa:'GolfDemo'}},{setTimeout:(fn:()=>void)=>{scheduled.push(fn);},fetch:async()=>{calls++;return new Promise(resolve=>{release=resolve;});}});
   h.render('ScorecardQaGate',{});await settleUI();assert.equal(calls,1);
   changed();release({ok:true,json:async()=>({data:fixture})});await settleUI();assert.doesNotMatch(uiText(h.render('ScorecardQaGate',{})),/18 hoyos/);assert.equal(uiFind(h.render('ScorecardQaGate',{}),n=>n.type==='p').props.role,'status');
   scheduled.shift()!();await settleUI();release({ok:false,json:async()=>({error:'Cuenta sin permiso'})});await settleUI();assert.match(uiText(h.render('ScorecardQaGate',{})),/Cuenta sin permiso/);h.unmount();
@@ -78,7 +85,7 @@ test('QA token refresh preserves the mounted demo, while sign-out clears it imme
   let changed:(_event:string,value:typeof session)=>void=()=>{},release:(value:any)=>void=()=>{},calls=0;
   const scheduled:Array<()=>void>=[];
   const client={auth:{getSession:async()=>({data:{session}}),onAuthStateChange(fn:typeof changed){changed=fn;return{data:{subscription:{unsubscribe(){}}}};}}};
-  const h=socialUI('app/qa/scorecard/scorecard-qa-gate.tsx',{'supabase/client':{getSupabaseBrowser:()=>client},'scorecard-qa':{ScorecardQa:'Demo'}},{setTimeout:(fn:()=>void)=>{scheduled.push(fn);},fetch:async()=>{calls++;return new Promise(resolve=>{release=resolve;});}});
+  const h=socialUI('app/qa/scorecard/scorecard-qa-gate.tsx',{'supabase/client':{getSupabaseBrowser:()=>client},'scorecard-qa':{ScorecardQa:'Demo'},'golf-play-qa':{GolfPlayQa:'GolfDemo'}},{setTimeout:(fn:()=>void)=>{scheduled.push(fn);},fetch:async()=>{calls++;return new Promise(resolve=>{release=resolve;});}});
   const render=()=>h.render('ScorecardQaGate',{});
   render();await settleUI();release({ok:true,json:async()=>({data:fixture})});await settleUI();assert.ok(uiFind(render(),n=>n.type==='Demo'));
   changed('TOKEN_REFRESHED',session);assert.ok(uiFind(render(),n=>n.type==='Demo'),'same verified user is never unmounted while revalidating');

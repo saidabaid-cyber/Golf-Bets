@@ -115,3 +115,15 @@ test('resizing/reopening a retained map never creates a second factory or recent
   assert.equal(factories,1);assert.equal(fits,initialFits);assert.equal(resizes,1);
   session.dispose();assert.equal(destroyed,1);
 });
+
+
+test('hole viewport fits saved extent; missing tees use a context view without invented geometry',async()=>{
+ const {holeViewport,measuredDistance}=await import('../lib/golf-gps/model.mjs');
+ const hole={green:{front:[-98.25,19],center:[-98.25,19.0001],back:[-98.25,19.0002]},references:[]};
+ const original=JSON.stringify(hole),base=holeViewport(hole);
+ assert.equal(base.coverage,'GREEN_CONTEXT_ONLY');assert.ok(measuredDistance([base.west,19],[base.east,19]).meters>500);
+ assert.deepEqual(holeViewport(hole,{wgs84:[-99,20]}),base); // Home doesn't force a zoom out.
+ const near=holeViewport(hole,{wgs84:[-98.25,18.996]});assert.ok(near.south<base.south);
+ assert.equal(JSON.stringify(hole),original);assert.equal(holeViewport({green:{},references:[]}),null);
+ const withTee=holeViewport({...hole,references:[{kind:'FRONT_TEE',coordinate:[-98.25,18.996]}]});assert.equal(withTee.coverage,'TEE_AND_GREEN');assert.ok(withTee.south<=18.996);
+});

@@ -481,6 +481,12 @@ type NewRoundIntent =
   | { kind: "players"; players: Player[] }
   | { kind: "group"; group: FrequentGroup; selectedMemberIds: string[]; scoreOnly?: boolean };
 
+function GpsRoundEntry({ ready, onOpen }: { ready: boolean; onOpen: () => void }) {
+  const opened = useRef(false);
+  useEffect(() => { if (ready && !opened.current) { opened.current = true; onOpen(); } }, [ready, onOpen]);
+  return <section className="card"><p role="status">Abriendo GPS con el contexto de tu ronda…</p></section>;
+}
+
 function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
@@ -717,7 +723,7 @@ function GolfBetsApp() {
   const cloudCanonicalSession = useRef(new CloudCanonicalSession());
   const cloudEffectGeneration = useRef(0);
   const cloudConflictResolution = useRef(new CloudConflictResolutionBuffer());
-  const latestSaveAndAdvance = useRef<() => void>(() => undefined);
+  const latestSaveAndAdvance = useRef<(advance?: boolean) => boolean>(() => false);
   const latestSaveRound = useRef<(options?: { prepareReview?: boolean }) => void>(() => undefined);
   const roundSaveInFlight = useRef(false);
   const bettingActionPending = useRef(false);
@@ -998,7 +1004,7 @@ function GolfBetsApp() {
     setRoundReviewPending(Boolean(draft?.reviewPending) || draft?.lifecycleState === "completed");
     setRoundStartedAt(normalizeRoundStartedAt(draft?.startedAt) ?? null);
     setRoundTemplateOrigin(normalizeRoundTemplateOrigin(draft?.templateOrigin));
-    setDraftAvailable(hasRoundProgress(draft));
+    setDraftAvailable(hasRoundToPreserve(draft, identity.userId));
     if (!draft) {
       setRoundResumeContext(null);
       setPlayers([]); setPlayerTeeAssignments([]); setOwnerId(""); setScores({}); setScoreEdits({}); setScorecardPhotoIds([]); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({});
@@ -1126,7 +1132,7 @@ function GolfBetsApp() {
         setNotificationsEnabled(identity.mode === "authenticated"
           ? readAccountDevicePermissionPreferences(localStorage, identity.userId).notificationPreference === "enabled"
           : false);
-        setDraftAvailable(hasRoundProgress(draft));
+        setDraftAvailable(hasRoundToPreserve(draft, identity.userId));
         applyDraft(draft);
       } catch { /* keep safe defaults for structurally invalid legacy data */ }
       const entry = new URLSearchParams(window.location.search);
@@ -1160,7 +1166,7 @@ function GolfBetsApp() {
       try {
         const draft = withDerivedRoundLifecycle({ version: 11, course, courseSelected, courseIdentity: courseSelected ? undefined : pendingCourseIdentity ?? undefined, playerTeeAssignments, startHole, roundHoles, handicapBasis: roundHandicapBasis, presentation: normalizeRoundPresentation(roundPresentation), players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scorecardPhotoIds, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending, templateOrigin: roundTemplateOrigin ?? undefined });
         const previousFingerprint = cloudSyncPayloadFingerprint(collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current));
-        const activeDraft = roundClosed || !hasRoundProgress(draft) ? null : cloudHydrationBoundary.current.projectDraft(draft);
+        const activeDraft = roundClosed || !hasRoundToPreserve(draft, identity.userId) ? null : cloudHydrationBoundary.current.projectDraft(draft);
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
         localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(cloudHydrationBoundary.current.projectHistory(history)));
@@ -1171,8 +1177,8 @@ function GolfBetsApp() {
         localStorage.setItem(STORAGE_KEYS.notifications, String(notificationsEnabled));
         localStorage.setItem(coursePreferenceStorageKey("favorites", identity.userId), JSON.stringify(favoriteCourseIds));
         localStorage.setItem(coursePreferenceStorageKey("recents", identity.userId), JSON.stringify(recentCourseIds));
-        localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(!roundClosed && hasRoundProgress(draft) ? activeDraft : null));
-        setDraftAvailable(!roundClosed && hasRoundProgress(draft));
+        localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(!roundClosed && hasRoundToPreserve(draft, identity.userId) ? activeDraft : null));
+        setDraftAvailable(!roundClosed && hasRoundToPreserve(draft, identity.userId));
         const offline = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
         offline.deviceId = offlineDeviceId.current;
         if (previousFingerprint !== cloudSyncPayloadFingerprint(offline)) requestCloudSync.current?.();
@@ -2504,7 +2510,7 @@ function GolfBetsApp() {
     setRoundPresentation(normalizeRoundPresentation(undefined));
     setPlayers(nextPlayers); setPlayerTeeAssignments([]); setOwnerId(principal?.id || "");
     setScores({}); setScoreEdits({}); setScorecardPhotoIds([]); setScorecardScanStartedAt(null); setPutts({}); setScoreCaptureMode("quick"); setAdvancedStats({}); setShots([]); setUnitEvents([]); setCounterBetEvents([]); setCounterBetKeepers(emptyCounterBetKeepers()); setLobaHoles({}); setBallFriendSetup({}); setPersonalBets([]); setSupplementalBets([]); setManualBets([]); setExpenses(emptyExpenses);
-    setBets(initialBets(nextPlayers.map((player) => player.id))); setRoundHandicapBasis("relative"); setSegments(segmentDefinitions(playOrder(startHole).slice(0, roundHoles), 6)); setCourse(laVista); setCourseSelected(false); setCourseSetupStage("course"); setPendingCourseIdentity(null); setCourseSelectionError(false);
+    setBets(initialBets(nextPlayers.map((player) => player.id))); setRoundHandicapBasis("relative"); setStartHole(1); setRoundHoles(18); setRoundGpsIntent(false); setSegments(segmentDefinitions(playOrder(1), 6)); setCourse(laVista); setCourseSelected(false); setCourseSetupStage("course"); setPendingCourseIdentity(null); setCourseSelectionError(false);
     setCurrentIndex(0); setRoundId(makeId()); setRoundDate(localDateMexico()); setRoundStartedAt(null); setDraftAvailable(false); setHoleSummary([]); setShowDeleteRoundConfirm(false); setShowNewRoundConfirm(false); setNewRoundBackupError(""); setPendingNewRoundIntent(null); undoStack.current = []; setUndoCount(0); setTab("setup");
     if (nextFeedback) setFeedback(nextFeedback);
   }
@@ -2523,7 +2529,7 @@ function GolfBetsApp() {
     setRoundSetupInitialStep(intent.kind === "blank" ? intent.initialStep ?? 1 : 1);
     resetRound(nextFeedback);
     if (intent.kind === "blank") return;
-    if (intent.kind === "scoreOnly") { setBets(initialBets([])); setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" }); return; }
+    if (intent.kind === "scoreOnly") { setRoundGpsIntent(true); setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" }); return; }
     if (intent.kind === "ai") { setTab("aiSetup"); return; }
     if (intent.kind === "group") {
       if (intent.scoreOnly) setRoundPresentation({ version: 1, groupNassauTerm: "polla", playMode: "score_only" });
@@ -2554,7 +2560,7 @@ function GolfBetsApp() {
   }
 
   function requestNewRound() {
-    if (typeof window !== "undefined" && !hasRoundProgress(roundDraftPayload()) && !hasSeenFirstRoundExperience(localStorage, identity.userId)) {
+    if (typeof window !== "undefined" && !hasRoundToPreserve(roundDraftPayload(), identity.userId) && !hasSeenFirstRoundExperience(localStorage, identity.userId)) {
       setShowFirstRoundExperience(true);
       return;
     }
@@ -2923,12 +2929,21 @@ function GolfBetsApp() {
     if (replacingRound.current) return;
     replacingRound.current = true; setRoundLifecycleBusy(true);
     try {
-      await parkActiveRound('cancelled');
+      const hasScores = [scores, scoreEdits].some(rows => Object.values(rows).some(row => Object.values(row || {}).some(value => typeof value === 'number')));
+      if (!roundStartedAt && !hasScores) {
+        if (!ownsLocalWorkspace(localStorage, identity.userId)) throw new Error('La sesión cambió.');
+        localPersistRevision.current += 1;
+        flushLocalState.current = () => true;
+        const previousDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
+        clearActiveRoundStorage(localStorage);
+        trackLocalCloudCheckpoint(localStorage, null, { highContrast, language: 'es-MX', notificationsEnabled, defaultHandicap: identity.defaultHandicap }, previousDraft);
+        requestCloudSync.current?.();
+      } else await parkActiveRound('cancelled');
       applyDraft(null);
       setRoundClosed(true);
       setDraftAvailable(false);
       setShowDeleteRoundConfirm(false);
-      setFeedback('Ronda cancelada. Su tarjeta se conserva en Histórico.');
+      setFeedback(roundStartedAt ? 'Ronda cancelada. Su tarjeta se conserva en Histórico.' : 'Borrador descartado. Las otras rondas se conservan.');
       setTab('play');
     } catch(error) { setNewRoundBackupError(error instanceof Error ? error.message : 'No pudimos cerrar la ronda. No se borró nada.'); }
     finally { replacingRound.current = false; setRoundLifecycleBusy(false); }
@@ -3711,16 +3726,21 @@ function GolfBetsApp() {
     latestSaveAndAdvance.current();
   }
 
+  function saveGpsHole() {
+    commitFocusedNumericCapture();
+    return latestSaveAndAdvance.current(false);
+  }
+
   function requestRoundHistorySave() {
     commitFocusedNumericCapture();
     latestSaveRound.current();
   }
 
-  function saveAndAdvance() {
-    if (holeSummarySession.current) return;
+  function saveAndAdvance(advance = true): boolean {
+    if (holeSummarySession.current) return false;
     if (hasActiveBettingConfiguration() && !hasPersistedBettingConsent()) {
-      runAfterBettingConsent(() => latestSaveAndAdvance.current());
-      return;
+      runAfterBettingConsent(() => latestSaveAndAdvance.current(advance));
+      return false;
     }
     const missingCaptureFacts = requiredRoundCaptureFactErrors({
       players,
@@ -3770,21 +3790,22 @@ function GolfBetsApp() {
     if (validationErrors.length) {
       setFeedback("");
       setHoleValidationErrors(validationErrors);
-      return;
+      return false;
     }
     const committed = commitHoleCapture(scores, scoreEdits, hole, players);
-    if (!committed) { setHoleValidationErrors(["Completa los scores vacíos antes de guardar el hoyo."]); return; }
+    if (!committed) { setHoleValidationErrors(["Completa los scores vacíos antes de guardar el hoyo."]); return false; }
     const startedAt = ensureRoundStarted();
     // Also covers entering Tarjeta directly without pressing Iniciar ronda.
     const savedBets = freezeRoundHandicapBases(bets, players, roundHandicapBasis);
     const savedIndex = currentIndex;
     const checkpointPersisted = persistCommittedHoleBeforeAdvance(committed.scores, committed.edits, savedBets, savedIndex, startedAt);
-    if (!checkpointPersisted) return;
+    if (!checkpointPersisted) return false;
     setHoleValidationErrors([]);
     setFeedback("");
     checkpoint();
     setBets(savedBets);
     setScores(committed.scores); setScoreEdits(committed.edits);
+    if (!advance) { setFeedback(`Score del hoyo ${holeNumber} guardado.`); return true; }
     const savedScores = committed.scores;
     const savedRabbits = roundBetResult(roundPresentation.playMode, 'calculateRabbits', () => calculateRabbits(course, savedScores, players, bets.rabbits, order, roundHandicapBasis));
     const savedSkins = roundBetResult(roundPresentation.playMode, 'calculateSkins', () => calculateSkins(course, savedScores, players, bets.skins, order, roundHandicapBasis));
@@ -3881,6 +3902,7 @@ function GolfBetsApp() {
         else latestSaveRound.current({ prepareReview: true });
       },
     });
+    return true;
   }
   useLayoutEffect(() => { latestSaveAndAdvance.current = saveAndAdvance; });
 
@@ -3927,6 +3949,23 @@ function GolfBetsApp() {
       partialToPar: ownerScore.count > 0 ? ownerScore.gross - ownerScore.par : undefined,
     };
   }, [draftAvailable, roundClosed, roundReviewPending, courseSelected, course.name, course.holes, pendingCourseIdentity, roundDate, roundStartedAt, roundHoles, order, currentIndex, completedHoles, players.length, scores, ownerId]);
+  function openRoundGps() {
+    setRoundGpsIntent(true);
+    if (activeRoundSummary) { continueActiveRound(); return; }
+    requestNewRoundIntent({ kind: "scoreOnly" });
+  }
+  function saveAndExitRound() {
+    commitFocusedNumericCapture();
+    if (flushLocalState.current?.() === false) { setFeedback("No pudimos guardar. La ronda sigue abierta."); return; }
+    setTab("play");
+  }
+  function finishFromGps() {
+    commitFocusedNumericCapture();
+    // Existing finalization validation owns missing facts and settlement.
+    setRoundGpsIntent(false);
+    setTab("results");
+    latestSaveRound.current({ prepareReview: true });
+  }
   const openActiveRound = () => {
     if (betConfigurationIssues.length) {
       setShowBetSetupErrors(true);
@@ -3951,7 +3990,7 @@ function GolfBetsApp() {
   const continueActiveRound = () => {
     const pendingEditIndex = order.findIndex(number => players.some(player => Object.hasOwn(scoreEdits[number] || {}, player.id)));
     const target = activeRoundContinueTarget(activeRoundSummary?.status, courseSelected, pendingEditIndex >= 0);
-    if (target === "round" && pendingEditIndex >= 0) setCurrentIndex(pendingEditIndex);
+    // Continue the last explored/captured hole; other pending edits remain per hole.
     if (target === "round") openActiveRound();
     else setTab(target);
   };
@@ -4055,7 +4094,8 @@ function GolfBetsApp() {
         }} />
       </>}
       clubhouseConfig={identity.homeClubId ? { clubId: identity.homeClubId, label: identity.homeClub || "", enabled: [] } : null}
-      onOpenGps={() => { if (activeRoundSummary?.status === 'live') { setRoundGpsIntent(true); continueActiveRound(); } else setTab('gps'); }}
+      onOpenGps={openRoundGps}
+      onFinishRound={finishFromGps}
       onCancelRound={() => { setNewRoundBackupError(""); setShowDeleteRoundConfirm(true); }}
       activeRound={activeRoundSummary}
       onContinueRound={continueActiveRound}
@@ -4076,7 +4116,7 @@ function GolfBetsApp() {
       onOpenResults={() => setTab("results")}
     />}
 
-    {tab === 'gps' && <><button type="button" className="secondary" onClick={() => setTab('play')}>← Volver a Play</button><GolfGpsReader key={identity.userId} token={identity.accessToken ?? null} onBack={() => setTab("play")} /></>}
+    {tab === "gps" && <GpsRoundEntry ready={hydrated && hydratedWorkspaceOwner === identity.userId} onOpen={openRoundGps} />}
 
     {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} player={principal} accessToken={identity.accessToken} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
 
@@ -4165,9 +4205,10 @@ function GolfBetsApp() {
     {tab === "profile" && <ProfileAccountPanel key={`profile:${identity.userId}`} view="profile" initialLaunchMonitor={launchMonitorEntry} indexControl={indexControl} ghinControl={unifiedGhinControl} rootNavigationKey={profileRootRevision} history={history} focusSection={profileFocus} completionTarget={profileCompletionTarget} onCompletionTargetHandled={() => setProfileCompletionTarget(null)} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} internalNotificationsSaving={internalNotificationsSaving} internalNotificationsMessage={internalNotificationsMessage} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenAccount={() => openAccountSettings()} onOpenAccountSection={openAccountSettings} onOpenPrivacy={() => { setOpenAiPrivacySettings(true); setTab("account"); }} onOpenEquipment={() => setProfileFocus("equipment")} onBackToProfile={openProfileRoot} />}
     {tab === "account" && <ProfileAccountPanel key={`${identity.userId}:account:${accountSection}`} view="account" initialAccountSection={accountSection} openAiPrivacySettings={openAiPrivacySettings} onAiPrivacyOpened={() => setOpenAiPrivacySettings(false)} indexControl={indexControl} ghinControl={unifiedGhinControl} rootNavigationKey={profileRootRevision} highContrast={highContrast} onHighContrastChange={changeHighContrast} notificationsEnabled={notificationsEnabled} onNotificationsEnabledChange={changeNotifications} internalNotificationsSaving={internalNotificationsSaving} internalNotificationsMessage={internalNotificationsMessage} golfInsights={betaGolfInsights} statisticsResetAt={statisticsResetAt} onStatisticsReset={applyStatisticsReset} onOpenStats={() => setTab("stats")} onOpenEquipment={() => { setProfileFocus("equipment"); setTab("profile"); }} onBackToProfile={openProfileRoot} onPageBack={handlePageBack} />}
 
-    {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound} scoreOnly={roundPresentation.playMode === "score_only"} initialStep={roundSetupInitialStep}
+    {tab === "setup" && <RoundSetupWizard key={`${identity.userId}:${roundId}`} storageKey={`backyard-setup-step-v1:${identity.userId}:${roundId}`} issues={roundSetupPreflight} editing={editingRound} scoreOnly={roundPresentation.playMode === "score_only"} quickSolo={!editingRound && roundPresentation.playMode === "score_only" && players.length === 1 && players[0].accountUserId === identity.userId} initialStep={roundSetupInitialStep}
+      onConfigureBets={() => runAfterBettingConsent(() => setRoundPresentation(current => ({ ...current, playMode: undefined })))}
       onSave={() => flushLocalState.current?.()}
-      onExit={() => { setEditingRound(false); setFeedback("Tu configuración quedó guardada como borrador."); setTab("welcome"); }}
+      onExit={() => { setEditingRound(false); setFeedback(roundStartedAt ? "Ronda conservada. Puedes continuar desde Play." : "Configuración guardada. Puedes continuar desde Play."); setTab("play"); }}
       onStart={async () => {
         if (roundSetupPreflight.length) return false;
         if (hasActiveBettingConfiguration() && !hasPersistedBettingConsent() && !await requestBettingConsent()) return false;
@@ -4480,8 +4521,8 @@ function GolfBetsApp() {
       </nav>
       {roundStartedAt && !roundClosed && !editingRound && ownerLiveTransportAllowed(roundId, history) && (() => { const snapshot = currentSnapshot(); return snapshot && <OwnerRoundSync key={`${identity.userId}:${roundId}`} userId={identity.userId} accessToken={identity.accessToken || undefined} snapshot={snapshot} pausedBase={history.find(round => round.id === roundId && round.lifecycleState === 'live')} />; })()}
       <RoundCaptureV2
-        gpsContent={({ active, onBack, onScore }) => <GolfGpsReader token={identity.accessToken ?? null} initialCourseId={course.catalogCourseId || course.id} initialPosition={holeNumber} active={active} onBack={onBack} mappingUnavailable={course.isProvisional === true || Boolean(course.operationsSnapshot?.configurationIds.length)} roundContext={{ roundId, name: course.name, teeName: course.teeName, holes: course.holes.filter(row => order.includes(row.number)), onScore }} />}
-        initialGpsOpen={roundGpsIntent}
+        gpsContent={({ active, onBack, onScore }) => <GolfGpsReader token={identity.accessToken ?? null} initialCourseId={course.catalogCourseId || course.id} initialPosition={holeNumber} active={active} onBack={onBack} mappingUnavailable={course.isProvisional === true || Boolean(course.operationsSnapshot?.configurationIds.length)} roundContext={{ roundId, name: course.name, teeName: course.teeName, holes: order.flatMap(number => course.holes.filter(row => row.number === number)), onNavigate: position => goToHoleIndex(order.indexOf(position)), onExit: saveAndExitRound, onFinish: finishFromGps, onScore }} />}
+        initialGpsOpen={roundGpsIntent || roundPresentation.playMode === "score_only"}
         captureContext={captureContext}
         onCaptureContextChange={(context) => {
           const next = { ...context, roundId, currentIndex };
@@ -4539,6 +4580,8 @@ function GolfBetsApp() {
         onOpenStandings={() => roundPresentation.playMode === "score_only" ? openScorecard() : setTab("standings")}
         onUndo={undoLastAction}
         undoDisabled={undoCount === 0}
+        onSaveHole={saveGpsHole}
+        captureErrors={holeValidationErrors}
         onSaveAndAdvance={requestSaveAndAdvance}
         saveDisabled={holeSummary.length > 0}
         saveLabel={currentIndex < order.length - 1 ? "Guardar y siguiente" : "Terminar ronda"}
@@ -4779,7 +4822,7 @@ function GolfBetsApp() {
       </div>{!groupBetSubeditor && <div className="groupWizardActions"><button type="button" className="secondary" disabled={frequentGroupSaving} onClick={() => frequentGroupEditorTab === "members" ? requestCloseGroupEditor() : setFrequentGroupEditorTab("members")}>{frequentGroupEditorTab === "members" ? "Cancelar" : "← Atrás"}</button><button type="button" className="primary" disabled={frequentGroupSaving || !frequentGroupDraft.name.trim() || !frequentGroupDraft.players.length || frequentGroupDraft.players.some(member => !member.name.trim())} onClick={frequentGroupEditorTab === "members" ? openFrequentGroupBetEditor : saveFrequentGroupEdit}>{frequentGroupSaving ? "Guardando…" : frequentGroupEditorTab === "members" ? "Siguiente →" : "Guardar grupo"}</button></div>}
     </section></div>}
 
-    <ModalShell className="confirmDialog roundLifecycleDialog" open={showDeleteRoundConfirm} onClose={() => { if (!roundLifecycleBusy) { setShowDeleteRoundConfirm(false); setNewRoundBackupError(''); } }} closeDisabled={roundLifecycleBusy} labelledBy="delete-round-title"><h2 id="delete-round-title">¿Cancelar esta ronda?</h2><p>La ronda dejará de estar activa. No se perderá accidentalmente otra información guardada. Conservaremos su tarjeta sin marcarla como terminada.</p>{newRoundBackupError && <p role="alert">{newRoundBackupError}</p>}<div className="dialogActions"><button autoFocus className="secondary" disabled={roundLifecycleBusy} onClick={() => setShowDeleteRoundConfirm(false)}>Seguir jugando</button><button className="dangerButton" disabled={roundLifecycleBusy} onPointerDown={commitFocusedNumericCapture} onClick={() => void deleteActiveRound()}>{roundLifecycleBusy ? 'Guardando…' : 'Cancelar ronda'}</button></div></ModalShell>
+    <ModalShell className="confirmDialog roundLifecycleDialog" open={showDeleteRoundConfirm} onClose={() => { if (!roundLifecycleBusy) { setShowDeleteRoundConfirm(false); setNewRoundBackupError(''); } }} closeDisabled={roundLifecycleBusy} labelledBy="delete-round-title"><h2 id="delete-round-title">{activeRoundSummary?.status === "setup" ? "¿Descartar este borrador?" : "¿Cancelar esta ronda?"}</h2><p>La ronda dejará de estar activa. No se perderá accidentalmente otra información guardada. Conservaremos su tarjeta sin marcarla como terminada.</p>{newRoundBackupError && <p role="alert">{newRoundBackupError}</p>}<div className="dialogActions"><button autoFocus className="secondary" disabled={roundLifecycleBusy} onClick={() => setShowDeleteRoundConfirm(false)}>Seguir jugando</button><button className="dangerButton" disabled={roundLifecycleBusy} onPointerDown={commitFocusedNumericCapture} onClick={() => void deleteActiveRound()}>{roundLifecycleBusy ? 'Guardando…' : activeRoundSummary?.status === 'setup' ? 'Descartar borrador' : 'Cancelar ronda'}</button></div></ModalShell>
 
     {historicalRoundToDelete && <div className="modalBackdrop" role="presentation"><section className="confirmDialog" role="dialog" aria-modal="true" aria-labelledby="delete-history-round-title" aria-describedby="delete-history-round-description"><ModalCloseButton onClose={() => setHistoricalRoundToDelete(null)} /><h2 id="delete-history-round-title">¿Eliminar esta ronda del histórico?</h2><p id="delete-history-round-description">Esta acción eliminará definitivamente esta ronda guardada y sus resultados.</p><div className="dialogActions"><button autoFocus className="secondary" onClick={() => setHistoricalRoundToDelete(null)}>Cancelar</button><button className="dangerButton" onClick={confirmHistoricalRoundDeletion}>Eliminar</button></div></section></div>}
 

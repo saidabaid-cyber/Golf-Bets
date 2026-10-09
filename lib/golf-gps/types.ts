@@ -7,6 +7,6 @@ export type GpsHole = {
 };
 export type GpsCourse = {
   id: string; name: string; physicalHoleCount: number; cardPositionCount: number;
-  holes: GpsHole[]; source: { provider: 'GOLFAPI'; recordUpdatedAt: string | null; fieldVerified: false; accuracyMeters: null; coordinateCaptureDate: null };
+  holes: GpsHole[]; source: { provider: 'GOLFAPI'; recordUpdatedAt: string | null; fieldVerified: false; accuracyMeters: null; coordinateCaptureDate: null; mappingEvidence?: string };
 };
 export type GpsCoursesResponse = { schemaVersion: 1; courses: GpsCourse[]; unavailable: string[]; mapsEnabled: boolean };

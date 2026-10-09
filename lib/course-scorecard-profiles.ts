@@ -75,6 +75,7 @@ export function scorecardProfilesForCards(cards: readonly Course[]): ScorecardPr
   }
   return [...groups.values()].filter((profile) => !profile.historical)
     .sort((left, right) => Number(right.defaultForPlay) - Number(left.defaultForPlay)
+      || scorecardProvenancePlayPriority(left.provenance) - scorecardProvenancePlayPriority(right.provenance)
       || left.name.localeCompare(right.name, "es-MX") || left.id.localeCompare(right.id));
 }
 

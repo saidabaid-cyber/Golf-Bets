@@ -9,6 +9,9 @@ type RoundReplacementStorage = Pick<Storage, "getItem" | "setItem">;
 export function hasRoundToPreserve(draft: Record<string, unknown>, userId: string) {
   const players = Array.isArray(draft.players) ? draft.players : [];
   const automaticOwner = players.length === 1 && players[0]?.accountUserId === userId;
+  const pending = draft.courseIdentity as { catalogClubId?: string; catalogCourseId?: string } | undefined;
+  // A chosen club/configuration is real work, even with an incomplete card.
+  if (pending?.catalogClubId || pending?.catalogCourseId) return true;
   return hasRoundProgress(automaticOwner ? { ...draft, players: [{ ...players[0], name: '' }] } : draft);
 }
 
