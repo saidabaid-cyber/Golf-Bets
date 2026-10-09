@@ -4,7 +4,7 @@ import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
 import ts from 'typescript';
 import {scorecardQaEnvironment,scorecardQaAccount} from '../lib/scorecard-qa-access';
-import {completeScorecardQa as fixture} from '../lib/scorecard-qa-fixture';
+import {multiplayerScorecardQa,completeScorecardQa as fixture} from '../lib/scorecard-qa-fixture';
 import * as domain from '../lib/premium-scorecard';
 import {socialUI,uiFind,uiNodes,uiText,settleUI} from './helpers/social-ui';
 
@@ -49,7 +49,7 @@ test('complete eighteen-hole fixture has coherent gross totals and captured zero
 });
 test('demo uses the real editor/domain; successful, cancelled, rejected and reset captures remain in memory',async()=>{
   const original=JSON.stringify(fixture);
-  const h=socialUI('app/qa/scorecard/scorecard-qa.tsx',{'scorecard-boundary':{ScorecardBoundary:'Boundary'},'premium-scorecard':domain});
+  const h=socialUI('app/qa/scorecard/scorecard-qa.tsx',{'scorecard-boundary':{ScorecardBoundary:'Boundary'},'premium-scorecard':domain,'scorecard-qa-fixture':{multiplayerScorecardQa}});
   const render=()=>h.render('ScorecardQa',{fixture});let tree=render();
   assert.match(uiText(tree),/DEMO QA — DATOS DE PRUEBA/);
   let boundary=uiFind(tree,n=>n.type==='Boundary');assert.equal(boundary.props.access.readOnly,true);

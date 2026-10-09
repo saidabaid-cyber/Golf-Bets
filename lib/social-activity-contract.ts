@@ -41,6 +41,8 @@ export type SocialRoundCard = {
   firPct?: number;
   /** Only account-linked participants with independently authorized social cards. */
   leaderboard?: Array<{userId:string;name:string;avatarUrl:string|null;score:number;toPar?:number;holes:number}>;
+  /** Detail endpoint only: each card passed its own audience, account-link and revision checks. */
+  playerCards?: Array<{author:SocialActivityAuthor;activityId:string;sourceVersion:number;round:Omit<SocialRoundCard,'leaderboard'|'playerCards'>}>;
   /** Only captured, non-financial hole facts are exposed to the eligible audience. */
   scorecard?: Array<{ hole: number; par: number; score: number | null; yards?: number; strokeIndex?: number; putts?: number; stats?: import("./types").AdvancedHoleStat }>;
 };
@@ -69,6 +71,7 @@ export type SocialActivityCard = {
   /** The target for attestation is the real account-linked author, never a name from the query. */
   targetUserId: string | null;
   pendingAttestRequests?: number;
+  remainingAttestCompanions?: number;
 };
 
 export type SocialActivityPage = {

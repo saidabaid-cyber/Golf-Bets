@@ -605,7 +605,7 @@ export async function getActivity(ctx: SocialContext, id: string, recoverSources
   await prepareSocialPresentation(ctx,[row]);
   const card = await cardFromAuthorizedRow(ctx, row, true);
   if (!card) throw new SocialServiceError("STALE_REVISION", 409, "La ronda cambió; actualiza para verla.");
-  await attachVisibleLeaderboards(ctx,[card]);
+  await attachVisibleLeaderboards(ctx,[card],true);
   await attachPendingRequests(ctx,[card]);
   return { data: card };
 }
@@ -617,7 +617,13 @@ async function attachPendingRequests(ctx:SocialContext,cards:SocialActivityCard[
   if((requests.data?.length??0)>600)throw new SocialServiceError('MUTATION_FAILED',503,'No se pudo consultar el estado completo.');
   const confirmations=await ctx.client.from('social_round_attestations_v3').select('activity_id,attester_id,expected_hash').in('activity_id',own.map(c=>c.id)).limit(1000);
   if(confirmations.error)dbError(confirmations.error);
-  for(const card of own)card.pendingAttestRequests=(requests.data||[]).filter(r=>r.activity_id===card.id&&r.expected_hash===card.currentHash&&!(confirmations.data||[]).some(t=>t.activity_id===card.id&&t.expected_hash===r.expected_hash&&t.attester_id===r.recipient_id)).length;
+  for(const card of own){
+    card.pendingAttestRequests=(requests.data||[]).filter(r=>r.activity_id===card.id&&r.expected_hash===card.currentHash&&!(confirmations.data||[]).some(t=>t.activity_id===card.id&&t.expected_hash===r.expected_hash&&t.attester_id===r.recipient_id)).length;
+    const roster=await ctx.client.rpc('attest_request_roster_v1',{activity:card.id,expected_hash:card.currentHash});
+    if(roster.error)dbError(roster.error);
+    const data=roster.data as Array<{userId?:string;eligible?:boolean;state?:string}>|null;
+    if(Array.isArray(data))card.remainingAttestCompanions=data.filter(p=>p.userId&&p.eligible&&p.state!=='PENDING'&&p.state!=='ATTESTED').length;
+  }
 }
 
 /** Bounded, account-authorized presentation batch. Large engagement sets fail honestly rather than reporting truncated counts. */
@@ -650,7 +656,7 @@ async function prepareSocialPresentation(ctx:SocialContext,rows:ActivityRow[]) {
 }
 
 /** Every ranked account passes independent activity RLS and current hash checks. Guests and bets are excluded. */
-async function attachVisibleLeaderboards(ctx:SocialContext,cards:SocialActivityCard[]) {
+async function attachVisibleLeaderboards(ctx:SocialContext,cards:SocialActivityCard[],includeCards=false) {
   const ids=[...new Set(cards.flatMap(c=>c.roundId?[c.roundId]:[]))];if(!ids.length)return;
   const peers=await ctx.client.from("social_activities_v3").select("*").in("source_round_id",ids).eq("event_kind","ROUND_COMPLETED").eq("active",true).limit(200);
   if(peers.error)dbError(peers.error);
@@ -659,13 +665,21 @@ async function attachVisibleLeaderboards(ctx:SocialContext,cards:SocialActivityC
   for(const card of cards){if(!card.round||!card.roundId)continue;
     const source=requestCache(ctx).sources.get(card.roundId);if(!source)continue;
     const ranking:NonNullable<SocialRoundCard["leaderboard"]>=[];
+    const playerCards:NonNullable<SocialRoundCard['playerCards']>=[];
     for(const row of rows.filter(r=>r.source_round_id===card.roundId)){
       if(row.source_version!==source.version||!await sourceRound(ctx,row))continue;
       const hash=await roundMaterialFingerprint(source.snapshot,row.author_id);if(hash!==row.material_hash)continue;
+      const preferences=await cachedPrefs(ctx,row.author_id);
+      if(row.author_id!==ctx.userId&&!preferences.shareRounds)continue;
       const facts=safeSocialRoundCard(source,row.author_id,false,false);if(!facts||facts.ownerScore===null||facts.holesPlayed!==card.round.holesPlayed)continue;
       const author=await cachedAuthor(ctx,row.author_id);ranking.push({userId:row.author_id,name:author.displayName,avatarUrl:author.avatarUrl,score:facts.ownerScore,holes:facts.holesPlayed,...(facts.toPar!==undefined?{toPar:facts.toPar}:{})});
+      if(includeCards&&!playerCards.some(p=>p.author.userId===row.author_id)){
+        const detail=safeSocialRoundCard(source,row.author_id,true,row.author_id===ctx.userId||preferences.shareCourses);
+        if(detail)playerCards.push({author,activityId:row.id,sourceVersion:row.source_version,round:detail});
+      }
     }
     if(ranking.length>=2)card.round.leaderboard=ranking.sort((a,b)=>a.score-b.score||a.name.localeCompare(b.name));
+    if(includeCards)card.round.playerCards=playerCards;
   }
 }
 

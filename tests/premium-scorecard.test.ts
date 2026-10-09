@@ -109,7 +109,12 @@ test("round → card → hole → card → round keeps parent navigation and rej
 test("scorecard and manual hole detail expose real data, readable labels and read-only actions", () => {
   const props = { roundId: "test-round", course, players: [player, other], order, scores, advancedStats, putts: { 1: { owner: 0 } }, ownerId: player.id, accountUserId: player.accountUserId, onBack() {}, onHole() {} };
   const card = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, view: { kind: "card" } }));
-  for (const label of ["Tarjeta de golf", "Ida", "1–9", "Vuelta", "10–18", "Ida / OUT", "Vuelta / IN", "TOTAL", "Stroke index", "Distancia · yd", "Solo lectura", "Eagle o mejor", "Doble bogey o más"]) assert.ok(card.includes(label), label);
+  for (const label of ["Tarjeta de golf", "Ida", "1–9", "Vuelta", "10–18", "Ida / OUT", "Vuelta / IN", "TOTAL", "Solo lectura", "Eagle o mejor", "Doble bogey o más"]) assert.ok(card.includes(label), label);
+  assert.match(card, /aria-expanded="false"/);
+  assert.doesNotMatch(card, /Stroke index|Distancia · yd/);
+  const focused = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, initialPlayerId: player.id, view: { kind: "card" } }));
+  assert.match(focused, /Stroke index/); assert.match(focused, /Distancia · yd/);
+  assert.equal((focused.match(/data-scorecard-player=/g) ?? []).length, 2, 'expanded statistics keep both players');
   assert.match(card, /scope="row"/); assert.match(card, /Ver detalle del hoyo 1/); assert.doesNotMatch(card, /Editar score|undefined|NaN|Strokes Gained|GHIN verificado/);
   const hole = renderToStaticMarkup(createElement(PremiumScorecard, { ...props, view: { kind: "hole", hole: 1, playerId: player.id } }));
   assert.match(hole, /Sin golpes registrados/); assert.match(hole, /premiumHolePrimary/); assert.match(hole, /Volver a tarjeta/);

@@ -38,6 +38,8 @@
 .premiumHoleTable th,.premiumHoleTable td{box-sizing:border-box;width:52px;min-width:52px;height:36px;text-align:center;padding:3px 0;border:0;border-bottom:1px solid #e9ece4;border-right:1px solid #edf0e8;background:#fffefa;color:#173e32}
 .premiumHoleTable th:first-child{width:100px;min-width:100px;max-width:100px;position:sticky;left:0;z-index:1;text-align:left;font-size:12px;font-weight:600;background:#f1f3eb;padding:5px 6px;white-space:normal;box-shadow:2px 0 4px rgb(25 53 37 / .08)}
 .premiumHoleTable thead th{background:#edf2e8;font-weight:600}
+.premiumHoleTable thead th{position:sticky;top:0;z-index:2}.premiumHoleTable thead th:first-child{z-index:3}
+.premiumHoleScroll[data-multiplayer=true]{max-height:60vh;overflow-y:auto}
 .premiumHoleTable th button{width:52px;height:44px;border:0;background:transparent;color:inherit;font-weight:700}
 .premiumHoleTable tr:last-child th,.premiumHoleTable tr:last-child td{border-bottom:0}
 .scorecardScoreButton{width:44px;min-height:44px;padding:3px;border:0;background:transparent;display:inline-grid;place-items:center}
@@ -93,3 +95,18 @@
 .premiumCapturedSummary{display:flex;justify-content:space-around;gap:12px;margin:0 0 12px;padding:8px 0;border-top:1px solid #dbe0d5;border-bottom:1px solid #dbe0d5;font-variant-numeric:tabular-nums}.premiumCapturedSummary>div{text-align:center}.premiumCapturedSummary dt{font-size:12px;color:#617165}.premiumCapturedSummary dd{font-size:18px;font-weight:650;margin:3px 0 0}
 .premiumHorizontalNav{display:flex;justify-content:space-between;gap:8px;margin:0 0 4px}.premiumHorizontalNav button{min-height:44px;padding:6px 2px;border:0;background:transparent;color:#285540;font-size:12px;font-weight:600}
 .scorecardQaShell{box-sizing:border-box;padding-bottom:calc(32px + env(safe-area-inset-bottom,0px))}.scorecardQaBanner{overflow-wrap:anywhere}.premiumHoleScroll{position:relative}.premiumInlineHole>header button{width:44px;height:44px}
+
+/* Grid scale is local to the card; document and application zoom stay unchanged. */
+.premiumEnlarge{display:block;margin:6px 0 10px auto;padding:9px 12px;border:1px solid var(--by-line,#d5ddd3);border-radius:18px;background:#f8faf5;color:#173e30;font-size:13px;min-height:40px}
+.premiumHoleScroll[data-multiplayer=true] .premiumHoleTable th:first-child{min-width:150px;width:150px;max-width:150px}
+.premiumPlayerScoreRow th{padding:0!important;background:#f0f4ed!important}
+.premiumPlayerScoreRow th>button{display:flex;align-items:center;gap:7px;width:100%;min-height:70px;text-align:left;padding:10px 8px;color:#143c2d;background:none;border:0;font-size:14px;white-space:normal}
+.premiumPlayerScoreRow th>button>span:nth-child(2){flex:1;overflow-wrap:anywhere}
+.premiumPlayerScoreRow th small{display:block;font-size:11px;font-weight:400;margin-top:3px}
+.premiumPlayerScoreRow th b{font-size:18px}
+.premiumPlayerInitial{display:grid;place-items:center;flex:none;width:28px;height:28px;border-radius:50%;background:#dde7d9;font-family:Georgia,serif;font-size:16px}
+.premiumPlayerScoreRow td{background:#fffdf6}
+.premiumHoleScroll[data-enlarged=true] .premiumHoleTable td,.premiumHoleScroll[data-enlarged=true] .premiumHoleTable th:not(:first-child){min-width:76px;height:65px;font-size:18px}
+.premiumHoleScroll[data-enlarged=true] .premiumHoleTable th:first-child{min-width:165px;max-width:165px;font-size:15px}
+.premiumHoleScroll[data-enlarged=true] .golfScoreSymbol{width:36px;height:36px;font-size:21px}
+.premiumUnshared{font-size:13px;padding:10px 0;color:#596b5e}

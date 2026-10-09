@@ -23,3 +23,13 @@ const advancedStats:AdvancedStatsByHole=Object.fromEntries(pars.map((par,i)=>{
 const access:QuickEditAccess={currentDraft:true,roundId:'qa-memory-round',lifecycle:'live',readOnly:false,closed:false,ownerId:player.id,accountUserId:player.accountUserId,organizerAccountUserId:player.accountUserId};
 export const completeScorecardQa={player,course,order:course.holes.map(h=>h.number),scores,putts,advancedStats,access};
 export type ScorecardQaFixture=typeof completeScorecardQa;
+
+/** Isolated presentation variations; no real IDs or persistence service. */
+export function multiplayerScorecardQa(fixture:ScorecardQaFixture,count:number){
+  const n=Number.isInteger(count)?Math.max(1,Math.min(5,count)):1;
+  const players=Array.from({length:n},(_,i)=>i?{id:`qa-peer-${i}`,name:`Jugador DEMO QA ${i+1}`,handicap:0}:fixture.player);
+  const course:Course={...fixture.course,playerHoleCards:Object.fromEntries(players.map((p,i)=>[p.id,fixture.course.holes.map(h=>({...h,yards:Math.max(80,(h.yards??350)-i*25),...(i===2&&h.number===1?{par:5}:{})}))]))};
+  const scores:ScoreRows=Object.fromEntries(fixture.order.map(h=>[h,Object.fromEntries(players.map((p,i)=>[p.id,(fixture.scores[h]?.[fixture.player.id]??4)+i]))]));
+  const assignments=players.map((p,i)=>({playerId:p.id,courseId:course.id,teeId:`qa-tee-${i}`,teeName:i?'Dorado QA':'Blanco QA',source:'legacy' as const,capturedAt:'2026-10-08'}));
+  return {players,course,scores,assignments};
+}
