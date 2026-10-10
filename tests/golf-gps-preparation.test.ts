@@ -52,7 +52,7 @@ test('real reader reads privately once per token; course/hole changes keep real 
   const exports: any = {}, states: any[] = [], effects: any[] = []; let cursor = 0, reads = 0;
   const body = { schemaVersion: 1, courses: [{ id: 'stored' }], unavailable: [], mapsEnabled: true }, view = Symbol('real-view');
   runInNewContext(compile('app/components/golf-gps/golf-gps-reader.tsx'), { exports, AbortController, window: { setTimeout: () => 1, clearTimeout: () => undefined }, fetch: async (url: string, options: any) => {
-    reads++; assert.equal(url, '/api/golf-gps/courses'); assert.equal(options.headers.authorization, 'Bearer SYNTHETIC_TOKEN'); assert.equal(options.cache, 'no-store'); return { ok: true, json: async () => body };
+    reads++; assert.equal(url, '/api/golf-gps/courses'); assert.match(options.headers.authorization, /^Bearer (SYNTHETIC_TOKEN|REFRESHED_TOKEN)$/); assert.equal(options.cache, 'no-store'); return { ok: true, json: async () => body };
   }, require(id: string) {
     if (id === 'react/jsx-runtime') return { Fragment: 'fragment', jsx: (type: unknown, props: object) => ({ type, props }), jsxs: (type: unknown, props: object) => ({ type, props }) };
     if (id === 'react') return { useState(initial: unknown) { const i = cursor++; if (!(i in states)) states[i] = initial; return [states[i], (next: any) => { states[i] = typeof next === 'function' ? next(states[i]) : next; }]; }, useEffect(fn: () => any, deps: any[]) { const i = cursor++; const old = effects[i]; if (old && deps.every((d, n) => d === old.deps[n])) return; old?.cleanup?.(); effects[i] = { deps, cleanup: fn() }; } };
@@ -68,4 +68,7 @@ test('real reader reads privately once per token; course/hole changes keep real 
   const unmapped = render({ token: 'SYNTHETIC_TOKEN', mappingUnavailable: true });
   assert.equal(unmapped.type, 'section'); assert.equal(reads, 1);
   assert.equal(render({ token: null }).type, 'section'); assert.equal(reads, 1);
+  render({token:'SYNTHETIC_TOKEN',sessionKey:'account-A'}); for(let i=0;i<5;i++)await Promise.resolve();
+  assert.equal(render({token:'REFRESHED_TOKEN',sessionKey:'account-A'}).type,view,'token refresh keeps map mounted while revalidating');
+  assert.equal(render({token:'REFRESHED_TOKEN',sessionKey:'account-B'}).type,'section','account switch hides the preceding projection immediately');
 });

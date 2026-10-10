@@ -4174,7 +4174,7 @@ function GolfBetsApp() {
       onOpenResults={() => setTab("results")}
     />}
 
-    {tab === "gps" && <GolfGpsReader token={identity.accessToken ?? null} onBack={() => setTab("play")} />}
+    {tab === "gps" && <GolfGpsReader sessionKey={identity.userId} token={identity.accessToken ?? null} onBack={() => setTab("play")} />}
 
     {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} player={principal} accessToken={identity.accessToken} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
 
@@ -4603,7 +4603,7 @@ function GolfBetsApp() {
       {roundStartedAt && !roundClosed && !roundLifecycleBusy && !editingRound && ownerLiveTransportAllowed(roundId, history) && (() => { const snapshot = currentSnapshot(); return snapshot && <OwnerRoundSync key={`${identity.userId}:${roundId}`} userId={identity.userId} accessToken={identity.accessToken || undefined} snapshot={snapshot} pausedBase={history.find(round => round.id === roundId && round.lifecycleState === 'live')} />; })()}
       <RoundCaptureV2
         cardScores={scores}
-        gpsContent={({ active, onBack, onScore, onCard }) => <GolfGpsReader token={identity.accessToken ?? null} initialCourseId={course.catalogCourseId || course.id} initialPosition={holeNumber} active={active} onBack={onBack} mappingUnavailable={course.isProvisional === true || Boolean(course.operationsSnapshot?.configurationIds.length)} roundContext={{ roundId, name: course.name, teeName: course.teeName, holes: order.flatMap(number => course.holes.filter(row => row.number === number)), onNavigate: position => goToHoleIndex(order.indexOf(position)), onExit: saveAndExitRound, onFinish: finishFromGps, onScore, onCard }} />}
+        gpsContent={({ active, onBack, onScore, onCard }) => <GolfGpsReader sessionKey={identity.userId} token={identity.accessToken ?? null} initialCourseId={course.catalogCourseId || course.id} initialPosition={holeNumber} active={active} onBack={onBack} mappingUnavailable={course.isProvisional === true || Boolean(course.operationsSnapshot?.configurationIds.length)} roundContext={{ roundId, name: course.name, teeName: course.teeName, holes: order.flatMap(number => course.holes.filter(row => row.number === number)), onNavigate: position => goToHoleIndex(order.indexOf(position)), onExit: saveAndExitRound, onFinish: finishFromGps, onScore, onCard }} />}
         initialGpsOpen={roundGpsIntent || roundPresentation.playMode === "score_only"}
         captureContext={captureContext}
         onCaptureContextChange={(context) => {

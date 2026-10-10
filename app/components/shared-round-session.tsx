@@ -93,6 +93,25 @@ export function SharedRoundSession({ roundId, onExit }: { roundId: string; onExi
     const ids = new Set(patches.map(p => p.id)); store({ ...latest.current, outbox: [...latest.current.outbox.filter(p => !ids.has(p.id)), ...patches] });
     if (await sync(patches)) { if (gpsVisible) setPanel(null); }
   }
+  async function saveAndExit() {
+    if (flight.current) return;
+    const current = latest.current;
+    const pending = new Map(current.outbox.map(p => [p.id, p]));
+    for (const patch of Object.values(current.drafts)) pending.set(patch.id, patch);
+    const patches = [...pending.values()];
+    if (patches.length) {
+      store({ ...current, outbox: patches });
+      // The endpoint accepts at most 25 cells. Keep every unsent batch durable
+      // and leave the view open on failure rather than claiming a remote save.
+      for (let offset = 0; offset < patches.length; offset += 25) {
+        if (!await sync(patches.slice(offset, offset + 25))) {
+          if (gpsVisible) setPanel("score");
+          return;
+        }
+      }
+    }
+    onExit();
+  }
   const scorePanel = <><div className={styles.sheetTitle}><h2>Hoyo {hole}{holeCard ? ` · Par ${holeCard.par}` : ""}</h2><button onClick={() => { setPanel(null); if (!gpsVisible) setGpsVisible(true); setGpsVisited(true); }}>Volver al mapa</button></div>
     {card.joined ? editable.map(p => { const draft = workspace.drafts[cell(hole, p.id)]; const value = draft ? draft.score : round.scores?.[hole]?.[p.id]; const assignment = round.playerTeeAssignments?.find(t => t.playerId === p.id);
       return <div className={styles.player} key={p.id}><b>{p.name}{!p.accountUserId ? " · Sin app" : ""}</b><small>{assignment?.teeName || round.teeName} · HCP {p.handicap ?? "—"}</small><label>Score<input type="number" inputMode="numeric" min={1} max={20} aria-label={`Score ${p.name} hoyo ${hole}`} value={value ?? ""} onChange={e => edit(p.id, "score", e.target.value === "" ? null : Number(e.target.value))} /></label><details><summary>Putts opcionales</summary><input type="number" inputMode="numeric" min={0} max={20} aria-label={`Putts ${p.name} hoyo ${hole}`} value={draft?.putts ?? round.putts?.[hole]?.[p.id] ?? ""} onChange={e => edit(p.id, "putts", e.target.value === "" ? null : Number(e.target.value))} /></details></div>; }) : <button disabled={busy} onClick={() => { setBusy(true); void write({ action: "join" }).catch(e => setError(e.message)).finally(() => setBusy(false)); }}>Unirme a esta ronda</button>}
@@ -103,10 +122,10 @@ export function SharedRoundSession({ roundId, onExit }: { roundId: string; onExi
     <p className={styles.pending}>Pendientes en H{hole}: {round.players?.filter(p => round.scores?.[hole]?.[p.id] == null).map(p => p.name).join(", ") || "ninguno"}. Apuestas y clasificación provisionales mientras falten resultados.</p></>;
   const fullCard = <><div className={styles.sheetTitle}><h2>Tarjeta compartida</h2><button onClick={() => { setPanel(null); if (!gpsVisible) { setGpsVisited(true); setGpsVisible(true); } }}>Volver al GPS</button></div><div className={styles.table}><table><thead><tr><th>Hoyo</th>{round.players?.map(p => <th key={p.id}>{p.name}</th>)}</tr></thead><tbody>{order.map(h => <tr key={h}><th>{h}</th>{round.players?.map(p => <td key={p.id}>{round.scores?.[h]?.[p.id] ?? "—"}</td>)}</tr>)}</tbody></table></div><p>Una misma ronda · {card.id} · revisión {card.version}</p><button onClick={() => { const drafts = { ...workspace.drafts }; for (const key of Object.keys(drafts)) { if (drafts[key].hole === hole) delete drafts[key]; } store({ drafts, outbox: workspace.outbox.filter(p => p.hole !== hole) }); setError(""); setPanel("score"); }}>Usar scores de nube en este hoyo</button></>;
   return <section className={styles.root} aria-label="Ronda compartida" data-round-id={card.id}>
-    <header><button onClick={onExit}>Guardar y salir a Play</button><h1>{round.courseName}</h1><p>{round.scorekeeping?.mode === "self" ? "Cada jugador lleva su tarjeta" : "El organizador captura a todos"}</p></header>
+    <header><button disabled={busy} onClick={() => void saveAndExit()}>Guardar y salir a Play</button><h1>{round.courseName}</h1><p>{round.scorekeeping?.mode === "self" ? "Cada jugador lleva su tarjeta" : "El organizador captura a todos"}</p></header>
     <nav><button disabled={holeIndex === 0} onClick={() => navigate(order[holeIndex - 1])}>Anterior</button><label>Hoyo<select aria-label="Hoyo de mi tarjeta" value={hole} onChange={e => navigate(Number(e.target.value))}>{order.map(h => <option key={h}>{h}</option>)}</select></label><button disabled={holeIndex === order.length - 1} onClick={() => navigate(order[holeIndex + 1])}>Siguiente</button><button onClick={() => { setGpsVisited(true); setGpsVisible(true); setPanel(null); }}>GPS</button><button onClick={() => setPanel("score")}>Anotar</button><button onClick={() => setPanel("card")}>Tarjeta</button></nav>
     {!gpsVisible && (panel === "card" ? fullCard : scorePanel)}
-    {gpsVisited && <div hidden={!gpsVisible}><GolfGpsReader token={token ?? null} active={gpsVisible} initialCourseId={course?.catalogCourseId || course?.id} initialPosition={hole} mappingUnavailable={course?.isProvisional === true || Boolean(course?.operationsSnapshot?.configurationIds.length)} onBack={() => { setGpsVisible(false); setPanel("score"); }} roundContext={{ roundId: card.id, name: round.courseName, teeName: round.teeName, holes: order.flatMap(h => course?.holes.filter(row => row.number === h) || []), onScore: next => { navigate(next); setPanel("score"); }, onCard: () => setPanel("card"), onNavigate: navigate, onExit, onFinish: card.ownerId === identity.userId ? () => { setGpsVisible(false); setPanel("card"); setConfirmFinish(true); } : undefined }} /></div>}
+    {gpsVisited && <div hidden={!gpsVisible}><GolfGpsReader sessionKey={identity.userId} token={token ?? null} active={gpsVisible} initialCourseId={course?.catalogCourseId || course?.id} initialPosition={hole} mappingUnavailable={course?.isProvisional === true || Boolean(course?.operationsSnapshot?.configurationIds.length)} onBack={() => { setGpsVisible(false); setPanel("score"); }} roundContext={{ roundId: card.id, name: round.courseName, teeName: round.teeName, holes: order.flatMap(h => course?.holes.filter(row => row.number === h) || []), onScore: next => { navigate(next); setPanel("score"); }, onCard: () => setPanel("card"), onNavigate: navigate, onExit: () => void saveAndExit(), onFinish: card.ownerId === identity.userId ? () => { setGpsVisible(false); setPanel("card"); setConfirmFinish(true); } : undefined }} /></div>}
     {gpsVisible && panel !== null && <div className={styles.backdrop}><section className={styles.sheet} role="dialog" aria-modal="true" aria-label={panel === "score" ? "Anotar score" : "Tarjeta compartida"}>{panel === "score" ? scorePanel : fullCard}</section></div>}
     <footer>
       <button onClick={() => { void navigator.clipboard.writeText(`${location.origin}/?sharedRound=${card.id}`).then(() => setNotice("Enlace copiado; sólo podrán entrar las cuentas vinculadas.")).catch(() => setNotice(`Enlace: ${location.origin}/?sharedRound=${card.id}`)); }}>Copiar enlace para jugadores</button>

@@ -29,7 +29,7 @@ const [a, b, outsider] = accounts, dir = '.qa-artifacts/play-shared-gps-20261009
 let previous;
 try { previous = JSON.parse(readFileSync(`${dir}/two-session-e2e.json`, 'utf8')); } catch { /* First run. */ }
 if (previous) { assert.equal(previous.database, ref); assert.deepEqual(previous.actors, accounts.map(({id,key}) => ({id,key}))); }
-const report = { generatedAt: new Date().toISOString(), buildSha: config.expectedSha, database: ref, actors: accounts.map(({ id, key }) => ({ id, key })), tests: previous?.tests || {}, rounds: previous?.rounds || [], providers: previous?.providers || { GolfAPI: 0, Mapbox: 0, GoogleInitializations: 0 } };
+const report = { ...previous, generatedAt: new Date().toISOString(), buildSha: config.expectedSha, database: ref, actors: accounts.map(({ id, key }) => ({ id, key })), tests: previous?.tests || {}, rounds: previous?.rounds || [], providers: previous?.providers || { GolfAPI: 0, Mapbox: 0, GoogleInitializations: 0 } };
 const journal = () => writeFileSync(`${dir}/two-session-e2e.json`, JSON.stringify(report, null, 2));
 const pass = name => { report.tests[name] = 'PASS'; journal(); console.log(name, 'PASS'); };
 async function api(actor, path, method = 'GET', body, expected = 200) {
@@ -39,9 +39,17 @@ async function api(actor, path, method = 'GET', body, expected = 200) {
 const catalog = await api(a, '/api/courses/catalog?courseId=course-la-vista-club-current');
 const course = catalog.cards.find(c => c.holes?.length === 18); assert.ok(course);
 if (process.argv.includes('--prepare')) { console.log('QA identities and deployed DEV/database binding verified. No round writes.'); process.exit(0); }
+if (process.argv.includes('--verify')) {
+  const saved = report.rounds.find(row => row.mode === 'self' && row.localId.startsWith('qa-shared-self-')); assert.ok(saved);
+  const left = (await api(a, `/api/shared-rounds?roundId=${saved.id}`)).data;
+  const right = (await api(b, `/api/shared-rounds?roundId=${saved.id}`)).data;
+  assert.equal(left.snapshot.scores[1][`account-${a.id}`],4); assert.equal(right.snapshot.scores[1][`account-${b.id}`],5);
+  assert.deepEqual(left.snapshot.scores,right.snapshot.scores); report.cardA=left.snapshot.scores;report.cardB=right.snapshot.scores;pass('new_authenticated_sessions_same_persisted_card');
+  console.log('Fresh authenticated sessions: persisted card verified; no writes.'); process.exit(0);
+}
 const { initialBets } = require('../.test-dist/lib/new-round-bets.js');
 async function create(mode, suffix, guests = false) {
-  const existing = report.rounds.find(row => row.mode === mode);
+  const existing = report.rounds.find(row => row.mode === mode && row.localId.startsWith(`qa-shared-${suffix}-`));
   if (existing) {
     const saved = (await api(a, `/api/shared-rounds?roundId=${existing.id}`)).data;
     assert.equal(saved.ownerId, a.id); assert.equal(saved.snapshot.id, existing.localId);
@@ -59,6 +67,25 @@ async function create(mode, suffix, guests = false) {
     expenses: { caddie: 0, food: 0, drinks: 0, greenFee: 0, cartRental: 0, other: 0 } };
   const saved = await api(a, '/api/cloud/rounds', 'POST', { round }, 201);
   assert.ok(saved.roundId); report.rounds.push({ id: saved.roundId, localId: round.id, mode, retained: true }); journal(); return { round, id: saved.roundId };
+}
+if (process.argv.includes('--finish')) {
+  const final = await create('self','finalize'), id=final.id;
+  let state=(await api(a,`/api/shared-rounds?roundId=${id}`)).data;
+  if(state.snapshot.lifecycleState==='live') {
+    const base=state.version;
+    await Promise.all([a,b].map((actor,index)=>api(actor,'/api/shared-rounds','PATCH',{roundId:id,patches:final.round.order.map(hole=>({id:randomUUID(),playerKey:`account-${actor.id}`,hole,score:index?5:4,baseVersion:base}))})));
+    state=(await api(a,`/api/shared-rounds?roundId=${id}`)).data;
+    const result=await api(a,'/api/shared-rounds','PATCH',{roundId:id,action:'finish',expectedVersion:state.version});
+    assert.equal(result.data.snapshot.lifecycleState,'completed'); report.finalDelivery=result.delivery;
+    const before=(await api(b,'/api/cloud/rounds')).rounds.filter(r=>r.cloudRoundId===id); assert.equal(before.length,1); assert.equal(before[0].cloudParticipant,undefined); pass('completed_participant_card_unconfirmed_not_attributed');
+  }
+  const card=(await api(b,`/api/social/rounds/card?roundId=${id}`)).data; assert.equal(card.completed,true);
+  const body={playerKey:card.myPlayerKey,expectedVersion:card.version,expectedHash:card.materialHash};
+  await api(b,`/api/social/rounds/${id}/links`,'POST',body); await api(b,`/api/social/rounds/${id}/links`,'POST',body);
+  const after=(await api(b,'/api/cloud/rounds')).rounds.filter(r=>r.cloudRoundId===id); assert.equal(after.length,1); assert.equal(after[0].cloudParticipant.accountUserId,b.id);
+  assert.equal(after[0].scores[1][`account-${b.id}`],5); pass('self_confirm_retry_one_history_card_correct_score');
+  await api(outsider,`/api/social/rounds/${id}/links`,'POST',body,403); pass('outsider_cannot_claim_completed_card');
+  report.finalizedRound=id;journal();console.log('Canonical finalization and existing confirmation verified.');process.exit(0);
 }
 const current = await create('self', 'self', true), id = current.id;
 const read = async actor => (await api(actor, `/api/shared-rounds?roundId=${id}`)).data;
