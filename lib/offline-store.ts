@@ -13,6 +13,9 @@ const FALLBACK_OUTBOX_PREFIX = "backyard-offline-outbox-fallback-v1:";
 const FALLBACK_ACK_PREFIX = "backyard-offline-ack-fallback-v1:";
 const FALLBACK_DEVICE_KEY = "backyard-offline-device-v1";
 let sessionDeviceId: string | undefined;
+// A suspended/private browser may never deliver an IndexedDB event. Fall back
+// to the existing verified local copy, rather than leave Play hydrating forever.
+const STORAGE_WAIT_MS = 4_000;
 
 export type OfflineWorkspace = {
   ownerId: string;
@@ -40,16 +43,21 @@ export type OfflineAcknowledgement = {
 
 function requestResult<T>(request: IDBRequest<T>) {
   return new Promise<T>((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("IndexedDB no respondió"));
+    const timer = setTimeout(() => reject(new Error("IndexedDB no respondió a tiempo")), STORAGE_WAIT_MS);
+    request.onsuccess = () => { clearTimeout(timer); resolve(request.result); };
+    request.onerror = () => { clearTimeout(timer); reject(request.error || new Error("IndexedDB no respondió")); };
   });
 }
 
 function transactionDone(transaction: IDBTransaction) {
   return new Promise<void>((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(transaction.error || new Error("IndexedDB canceló la operación"));
-    transaction.onerror = () => reject(transaction.error || new Error("IndexedDB no pudo guardar"));
+    const timer = setTimeout(() => {
+      try { transaction.abort(); } catch { /* already ended */ }
+      reject(new Error("IndexedDB no confirmó la operación a tiempo"));
+    }, STORAGE_WAIT_MS);
+    transaction.oncomplete = () => { clearTimeout(timer); resolve(); };
+    transaction.onabort = () => { clearTimeout(timer); reject(transaction.error || new Error("IndexedDB canceló la operación")); };
+    transaction.onerror = () => { clearTimeout(timer); reject(transaction.error || new Error("IndexedDB no pudo guardar")); };
   });
 }
 
@@ -57,15 +65,22 @@ function openOfflineDb() {
   if (typeof indexedDB === "undefined") return Promise.resolve<IDBDatabase | null>(null);
   return new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let settled = false;
+    const fail = (error: Error) => { settled = true; clearTimeout(timer); reject(error); };
+    const timer = setTimeout(() => fail(new Error("No se pudo abrir el almacenamiento offline a tiempo")), STORAGE_WAIT_MS);
     request.onupgradeneeded = () => {
+      if (settled) { request.transaction?.abort(); return; }
       const db = request.result;
       if (!db.objectStoreNames.contains(WORKSPACES)) db.createObjectStore(WORKSPACES, { keyPath: "ownerId" });
       if (!db.objectStoreNames.contains(OUTBOX)) db.createObjectStore(OUTBOX, { keyPath: "ownerId" });
       if (!db.objectStoreNames.contains(META)) db.createObjectStore(META, { keyPath: "key" });
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error || new Error("No se pudo abrir el almacenamiento offline"));
-    request.onblocked = () => reject(new Error("Otra pestaña está actualizando el almacenamiento offline"));
+    request.onsuccess = () => {
+      if (settled) { request.result.close(); return; }
+      settled = true; clearTimeout(timer); resolve(request.result);
+    };
+    request.onerror = () => fail(request.error || new Error("No se pudo abrir el almacenamiento offline"));
+    request.onblocked = () => fail(new Error("Otra pestaña está actualizando el almacenamiento offline"));
   });
 }
 
@@ -220,8 +235,9 @@ export async function persistOfflineBundle(ownerId: string, bundle: CloudDataBun
   const now = nextOfflineTimestamp(ownerId);
   const workspace = { ownerId, bundle, fingerprint, savedAt: now } satisfies OfflineWorkspace;
   const outbox = queueForCloud ? { ownerId, bundle, fingerprint, queuedAt: now, attempts: 0 } satisfies OfflineOutbox : undefined;
+  let db: IDBDatabase | null = null;
   try {
-    const db = await openOfflineDb();
+    db = await openOfflineDb();
     if (!db) throw new Error("IndexedDB no está disponible");
     if (!accountWriteAllowed(ownerId)) throw new Error("Account deletion in progress");
     const tx = db.transaction(queueForCloud ? [WORKSPACES, OUTBOX] : [WORKSPACES], "readwrite");
@@ -249,29 +265,34 @@ export async function persistOfflineBundle(ownerId: string, bundle: CloudDataBun
       throw new Error("Account deletion in progress");
     }
   }
+  finally { db?.close(); }
   if (outbox) clearAcknowledgement(ownerId);
   return fingerprint;
 }
 
 export async function readOfflineBundle(ownerId: string) {
   let indexedDbRecord: OfflineWorkspace | null = null;
+  let db: IDBDatabase | null = null;
   try {
-    const db = await openOfflineDb();
+    db = await openOfflineDb();
     if (db) {
       indexedDbRecord = (await requestResult(db.transaction(WORKSPACES, "readonly").objectStore(WORKSPACES).get(ownerId)) as OfflineWorkspace | undefined) || null;
     }
   } catch { /* use the verified fallback below */ }
+  finally { db?.close(); }
   return selectNewestOfflineWorkspace(indexedDbRecord, readFallback<OfflineWorkspace>(FALLBACK_WORKSPACE_PREFIX, ownerId));
 }
 
 export async function readOfflineOutbox(ownerId: string) {
   let indexedDbRecord: OfflineOutbox | null = null;
+  let db: IDBDatabase | null = null;
   try {
-    const db = await openOfflineDb();
+    db = await openOfflineDb();
     if (db) {
       indexedDbRecord = (await requestResult(db.transaction(OUTBOX, "readonly").objectStore(OUTBOX).get(ownerId)) as OfflineOutbox | undefined) || null;
     }
   } catch { /* use the verified fallback below */ }
+  finally { db?.close(); }
   return selectPendingOfflineOutbox(
     indexedDbRecord,
     readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId),
@@ -391,11 +412,13 @@ export async function acknowledgeOfflineBundle(ownerId: string, fingerprint: str
   }
 
   let indexedDbAcknowledged = false;
+  let db: IDBDatabase | null = null;
   try {
-    const db = await openOfflineDb();
+    db = await openOfflineDb();
     if (db) {
       const tx = db.transaction([WORKSPACES, OUTBOX], "readwrite");
       const done = transactionDone(tx);
+      void done.catch(() => {});
       const outboxStore = tx.objectStore(OUTBOX);
       const workspaceStore = tx.objectStore(WORKSPACES);
       const [storedOutbox, storedWorkspace] = await Promise.all([
@@ -408,6 +431,7 @@ export async function acknowledgeOfflineBundle(ownerId: string, fingerprint: str
       indexedDbAcknowledged = true;
     }
   } catch { /* the durable watermark prevents an old IndexedDB row resurfacing */ }
+  finally { db?.close(); }
 
   if (!acknowledgementPersisted && !indexedDbAcknowledged) return false;
   const fallbackOutbox = readFallback<OfflineOutbox>(FALLBACK_OUTBOX_PREFIX, ownerId);
@@ -436,14 +460,17 @@ export async function markOfflineAttempt(ownerId: string, error: string) {
   }
   const db = await openOfflineDb();
   if (!db) return;
-  const tx = db.transaction(OUTBOX, "readwrite");
-  const done = transactionDone(tx);
-  const store = tx.objectStore(OUTBOX);
-  const stored = await requestResult(store.get(ownerId)) as OfflineOutbox | undefined;
-  if (stored?.fingerprint === current.fingerprint) {
-    store.put({ ...stored, attempts: stored.attempts + 1, lastError: error.slice(0, 240) });
-  }
-  await done;
+  try {
+    const tx = db.transaction(OUTBOX, "readwrite");
+    const done = transactionDone(tx);
+    void done.catch(() => {});
+    const store = tx.objectStore(OUTBOX);
+    const stored = await requestResult(store.get(ownerId)) as OfflineOutbox | undefined;
+    if (stored?.fingerprint === current.fingerprint) {
+      store.put({ ...stored, attempts: stored.attempts + 1, lastError: error.slice(0, 240) });
+    }
+    await done;
+  } finally { db.close(); }
 }
 
 export function writeCloudBundleToStorage(storage: Pick<Storage, "getItem" | "setItem">, bundle: CloudDataBundle) {

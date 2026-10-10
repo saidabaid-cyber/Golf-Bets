@@ -5,7 +5,9 @@ import { CLOUD_LOCAL_META_KEY, type CloudDataBundle } from "../lib/cloud-sync";
 import { accountDeletionMarkerKey } from "../lib/account-state";
 import {
   acknowledgeOfflineBundle,
+  getOfflineDeviceId,
   persistOfflineBundle,
+  readOfflineBundle,
   readOfflineOutbox,
   restoreOfflineWorkspace,
   selectNewestOfflineWorkspace,
@@ -15,6 +17,17 @@ import {
   type OfflineWorkspace,
 } from "../lib/offline-store";
 import { STORAGE_KEYS } from "../lib/round-utils";
+
+function replaceBrowserStorage(storage: unknown, indexedDb: unknown) {
+  const oldStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const oldDb = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
+  Object.defineProperty(globalThis, "indexedDB", { configurable: true, value: indexedDb });
+  return () => {
+    if (oldStorage) Object.defineProperty(globalThis, "localStorage", oldStorage); else Reflect.deleteProperty(globalThis, "localStorage");
+    if (oldDb) Object.defineProperty(globalThis, "indexedDB", oldDb); else Reflect.deleteProperty(globalThis, "indexedDB");
+  };
+}
 
 class MemoryStorage {
   values = new Map<string, string>();
@@ -44,6 +57,52 @@ function workspace(fingerprint: string, savedAt: string): OfflineWorkspace {
 function outbox(fingerprint: string, queuedAt: string): OfflineOutbox {
   return { ownerId: "account-1", bundle: bundle(fingerprint), fingerprint, queuedAt, attempts: 0 };
 }
+
+test("an IndexedDB open that never answers falls back without blocking hydration or deleting the active card", async t => {
+  const storage = new MemoryStorage(); storage.setItem(STORAGE_KEYS.draft, JSON.stringify(bundle("pending-local").activeDraft));
+  const requests: any[] = [];
+  const restore = replaceBrowserStorage(storage, { open: () => { const request = {}; requests.push(request); return request; } });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const device = getOfflineDeviceId(); t.mock.timers.tick(4_001);
+    assert.ok(await device);
+    const recovering = restoreOfflineWorkspace("account-1", storage as unknown as Storage, null, "fixture-device");
+    t.mock.timers.tick(4_001); assert.equal(await recovering, null);
+    assert.deepEqual(JSON.parse(storage.getItem(STORAGE_KEYS.draft)!), bundle("pending-local").activeDraft);
+    let closed = 0; requests[0].result = { close: () => closed++ }; requests[0].onsuccess();
+    assert.equal(closed, 1, "a late successful open cannot leak a database connection after fallback");
+  } finally { t.mock.timers.reset(); restore(); }
+});
+
+test("a stalled offline write aborts and preserves a durable fallback snapshot with all pending edits", async t => {
+  const storage = new MemoryStorage(); let aborted = 0, closed = 0;
+  const tx = { objectStore: () => ({ put() {} }), abort: () => { aborted++; } };
+  const db = { transaction: () => tx, close: () => closed++ };
+  const restore = replaceBrowserStorage(storage, { open: () => { const request: any = { result: db }; queueMicrotask(() => request.onsuccess()); return request; } });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const pending = bundle("pending-write"); (pending.activeDraft as any).scoreEdits = { 8: { player: 7 } };
+    const saving = persistOfflineBundle("account-1", pending, true);
+    await new Promise<void>(resolve => setImmediate(resolve)); t.mock.timers.tick(4_001); await saving;
+    assert.equal(aborted, 1); assert.equal(closed, 1);
+    const durable = JSON.parse(storage.getItem("backyard-offline-workspace-fallback-v1:account-1")!);
+    assert.deepEqual(durable.bundle.activeDraft, pending.activeDraft);
+    assert.ok(storage.getItem("backyard-offline-outbox-fallback-v1:account-1"));
+  } finally { t.mock.timers.reset(); restore(); }
+});
+
+test("a stalled offline read releases its connection and selects the previously verified fallback", async t => {
+  const storage = new MemoryStorage(); const saved = workspace("new-score", "2026-10-10T12:00:00Z");
+  storage.setItem("backyard-offline-workspace-fallback-v1:account-1", JSON.stringify(saved));
+  let closed = 0; const db = { transaction: () => ({ objectStore: () => ({ get: () => ({}) }) }), close: () => closed++ };
+  const restore = replaceBrowserStorage(storage, { open: () => { const request: any = { result: db }; queueMicrotask(() => request.onsuccess()); return request; } });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const reading = readOfflineBundle("account-1");
+    await new Promise<void>(resolve => setImmediate(resolve)); t.mock.timers.tick(4_001);
+    assert.deepEqual(await reading, saved); assert.equal(closed, 1);
+  } finally { t.mock.timers.reset(); restore(); }
+});
 
 test("un fallback posterior gana sobre IndexedDB antiguo y conserva el score más reciente", () => {
   const indexedDb = workspace("old-score", "2026-09-06T12:00:00.000Z");
