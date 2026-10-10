@@ -4,6 +4,7 @@ import test from "node:test";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { CloudHydrationBoundary } from "../lib/cloud-hydration";
+import { RoundDraftTabBoundary } from "../lib/round-draft-tab-boundary";
 import { persistRoundDraftCheckpoint } from "../lib/round-review";
 import { STORAGE_KEYS } from "../lib/round-utils";
 import { CLOUD_LOCAL_META_KEY, cloudDraftApplyPlan, cloudSyncPayloadFingerprint, collectLocalCloudData, mergeLocalAndCloud, persistCloudMetadata, restoreLocalRoundUi, type CloudDataBundle } from "../lib/cloud-sync";
@@ -29,10 +30,11 @@ test("a confirmed hole fences the previous render's autosave before cloud readba
     return true;
   };
   const flush = { current: staleAutosave };
+  const boundary = new RoundDraftTabBoundary(); boundary.remember(staleDraft);
   const exports: Record<string, unknown> = {};
   const noOp = () => undefined;
   runInNewContext(source, { exports, STORAGE_KEYS, localStorage: storage, window: { localStorage: storage },
-    localPersistRevision: revision, flushLocalState: flush, cloudHydrationBoundary: { current: new CloudHydrationBoundary() },
+    localPersistRevision: revision, flushLocalState: flush, cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, localDraftTabBoundary: { current: boundary },
     identity: { userId: "qa-owner", mode: "authenticated", defaultHandicap: null },
     accountDeletionMarkerKey: () => "qa-deletion-marker",
     readStoredJson: (_store: unknown, key: string) => JSON.parse(storage.getItem(key) || "null"),
@@ -82,7 +84,7 @@ test("cloud reconciliation fences a queued React autosave before the next render
   const exports: Record<string, unknown> = {};
   runInNewContext(source, { exports, STORAGE_KEYS, localStorage: storage,
     localPersistRevision: revision, flushLocalState: flush,
-    cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, useCallback: (callback: unknown) => callback, mergeLocalAndCloud: () => reconciled,
+    cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, localDraftTabBoundary: { current: new RoundDraftTabBoundary() }, useCallback: (callback: unknown) => callback, mergeLocalAndCloud: () => reconciled,
     stableValue: (value: unknown) => value,
     cloudDraftApplyPlan: () => ({ changed: true, preservePrevious: false }),
     preserveDraftConflict: noOp, setFeedback: noOp, applyDraft: noOp,
@@ -126,7 +128,7 @@ test("applying a merged in-flight checkpoint preserves the actual server base fo
   const noOp = () => undefined;
   const exports: Record<string, unknown> = {};
   runInNewContext(source, { exports, STORAGE_KEYS, localStorage: storage,
-    localPersistRevision: { current: 0 }, flushLocalState: { current: noOp }, cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, useCallback: (callback: unknown) => callback,
+    localPersistRevision: { current: 0 }, flushLocalState: { current: noOp }, cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, localDraftTabBoundary: { current: new RoundDraftTabBoundary() }, useCallback: (callback: unknown) => callback,
     mergeLocalAndCloud, stableValue: (value: unknown) => value, cloudDraftApplyPlan, preserveDraftConflict: noOp, setFeedback: noOp, applyDraft: noOp,
     mergeDefaultCourses: (courses: unknown) => courses, normalizeHistorySnapshot: (item: unknown) => item,
     setCourses: noOp, setHistory: noOp, setSavedPersonalRivals: noOp, setFrequentPlayers: noOp, setFrequentGroups: noOp,
@@ -168,7 +170,7 @@ test("the autosave installer captures its render revision before a confirmed cli
     window: { setTimeout: (save: () => unknown) => { delayedAutosave = save; return 1; }, clearTimeout: noOp },
     localStorage: storage, STORAGE_KEYS, hydrated: true, hydratedWorkspaceOwner: "qa-owner", roundClosed: false,
     scores: oldScores, scoreEdits: { 2: { qa: 5 } }, identity: { userId: "qa-owner", defaultHandicap: null },
-    localPersistRevision: revision, flushLocalState: { current: noOp },
+    localPersistRevision: revision, flushLocalState: { current: noOp }, applyDraft: noOp,
     accountDeletionMarkerKey: () => "qa-marker", ownsLocalWorkspace: () => true,
     withDerivedRoundLifecycle: (draft: unknown) => draft, normalizeRoundPresentation: (value: unknown) => value,
     trackLocalCloudEdits: noOp, serializeFrequentGroups: JSON.stringify,

@@ -165,6 +165,7 @@ import { RoundSavedConfirmation } from "./components/round-saved-confirmation";
 import { RoundCaptureV2 } from "./components/round-capture-v2";
 import { GolfGpsReader } from "./components/golf-gps/golf-gps-reader";
 import { PendingRoundRecoveryPanel } from "./components/pending-round-recovery";
+import { RoundDraftTabBoundary } from "../lib/round-draft-tab-boundary";
 import { GolfLeaderboard } from "./components/golf-leaderboard";
 import { LiveRoundQuestion } from "./components/live-round-question";
 import { canEditSnapshot, restoreRoundSnapshot, resultSummaryText } from "../lib/round-editing";
@@ -729,6 +730,7 @@ function GolfBetsApp() {
   const [holeSummaryPaused, setHoleSummaryPaused] = useState(false);
   const flushLocalState = useRef<(() => boolean) | null>(null);
   const localPersistRevision = useRef(0);
+  const localDraftTabBoundary = useRef(new RoundDraftTabBoundary());
   const requestCloudSync = useRef<(() => void) | null>(null);
   const cloudCanonicalSession = useRef(new CloudCanonicalSession());
   const cloudEffectGeneration = useRef(0);
@@ -1123,6 +1125,7 @@ function GolfBetsApp() {
       const savedHistory = readStoredJson<unknown>(localStorage, STORAGE_KEYS.history, null);
       const savedRivals = readStoredJson<unknown>(localStorage, STORAGE_KEYS.rivals, null);
       const rawDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
+      localDraftTabBoundary.current.remember(rawDraft);
       const draft = normalizeRoundDraft(rawDraft, resolvedOwnerIdForRoundDraft(rawDraft, identity.userId));
       const savedFrequentPlayers = readStoredJson<unknown>(localStorage, STORAGE_KEYS.frequentPlayers, []);
       const savedFrequentGroups = parseFrequentGroups(localStorage.getItem(STORAGE_KEYS.frequentGroups));
@@ -1179,6 +1182,23 @@ function GolfBetsApp() {
         const draft = withDerivedRoundLifecycle({ version: 11, course, courseSelected, courseIdentity: courseSelected ? undefined : pendingCourseIdentity ?? undefined, playerTeeAssignments, startHole, roundHoles, handicapBasis: roundHandicapBasis, presentation: normalizeRoundPresentation(roundPresentation), players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, putts, scorecardPhotoIds, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, startedAt: roundStartedAt ?? undefined, currentIndex, reviewPending: roundReviewPending, templateOrigin: roundTemplateOrigin ?? undefined });
         const previousFingerprint = cloudSyncPayloadFingerprint(collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current));
         const activeDraft = roundClosed || !hasRoundToPreserve(draft, identity.userId) ? null : cloudHydrationBoundary.current.projectDraft(draft);
+        const storedDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
+        if (!localDraftTabBoundary.current.isCurrent(storedDraft)) {
+          const rebased = localDraftTabBoundary.current.reconcile(activeDraft, storedDraft);
+          if (rebased.preserveLocal) {
+            if (!preserveDraftConflict(localStorage, activeDraft) || (storedDraft && !preserveDraftConflict(localStorage, storedDraft))) {
+              setSaveStatus("error");
+              setFeedback("No pudimos conservar tu captura local. Mantén esta pestaña abierta y reintenta guardar.");
+              return false;
+            }
+            setFeedback("Otra pestaña actualizó la ronda. Conservamos ambas capturas en la recuperación local.");
+          }
+          localPersistRevision.current += 1;
+          flushLocalState.current = () => true;
+          localDraftTabBoundary.current.remember(storedDraft);
+          applyDraft(rebased.draft, { preserveLocalUi: Boolean(roundId && (rebased.draft as { roundId?: string } | null)?.roundId === roundId) });
+          return false;
+        }
         trackLocalCloudEdits(localStorage, activeDraft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap });
         localStorage.setItem(STORAGE_KEYS.courses, JSON.stringify(courses));
         localStorage.setItem(STORAGE_KEYS.history, JSON.stringify(cloudHydrationBoundary.current.projectHistory(history)));
@@ -1190,6 +1210,7 @@ function GolfBetsApp() {
         localStorage.setItem(coursePreferenceStorageKey("favorites", identity.userId), JSON.stringify(favoriteCourseIds));
         localStorage.setItem(coursePreferenceStorageKey("recents", identity.userId), JSON.stringify(recentCourseIds));
         localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(!roundClosed && hasRoundToPreserve(draft, identity.userId) ? activeDraft : null));
+        localDraftTabBoundary.current.remember(activeDraft);
         setDraftAvailable(!roundClosed && hasRoundToPreserve(draft, identity.userId));
         const offline = collectLocalCloudData(localStorage, identity.defaultHandicap, hadLocalPreferences.current);
         offline.deviceId = offlineDeviceId.current;
@@ -1206,7 +1227,7 @@ function GolfBetsApp() {
     flushLocalState.current = persist;
     const timer = window.setTimeout(persist, 250);
     return () => window.clearTimeout(timer);
-  }, [hydrated, hydratedWorkspaceOwner, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, pendingCourseIdentity, playerTeeAssignments, startHole, roundHoles, roundHandicapBasis, roundPresentation, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, scorecardPhotoIds, putts, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, roundTemplateOrigin, currentIndex]);
+  }, [hydrated, hydratedWorkspaceOwner, identity.userId, identity.mode, identity.defaultHandicap, cloudLinked, courses, favoriteCourseIds, recentCourseIds, history, savedPersonalRivals, frequentPlayers, frequentGroups, highContrast, notificationsEnabled, roundClosed, roundReviewPending, course, courseSelected, pendingCourseIdentity, playerTeeAssignments, startHole, roundHoles, roundHandicapBasis, roundPresentation, players, ownerId, bets, segments, personalBets, supplementalBets, manualBets, scores, scoreEdits, scorecardPhotoIds, putts, scoreCaptureMode, advancedStats, shots, unitEvents, counterBetEvents, counterBetKeepers, lobaHoles, ballFriendSetup, expenses, roundId, roundDate, roundStartedAt, roundTemplateOrigin, currentIndex, applyDraft]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -1214,13 +1235,18 @@ function GolfBetsApp() {
     const flushWhenHidden = () => {
       if (document.visibilityState === "hidden") flush();
     };
+    const reconcileOtherTab = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEYS.draft && ownsLocalWorkspace(localStorage, identity.userId)) flush();
+    };
     window.addEventListener("pagehide", flush);
+    window.addEventListener("storage", reconcileOtherTab);
     document.addEventListener("visibilitychange", flushWhenHidden);
     return () => {
       window.removeEventListener("pagehide", flush);
+      window.removeEventListener("storage", reconcileOtherTab);
       document.removeEventListener("visibilitychange", flushWhenHidden);
     };
-  }, [hydrated]);
+  }, [hydrated, identity.userId]);
 
   const applyCloudBundle = useCallback((data: CloudDataBundle, local: CloudDataBundle) => {
     // Cloud responses can arrive after a local-first finalization. Reconcile
@@ -1274,6 +1300,7 @@ function GolfBetsApp() {
       currentIndex: currentIndexRef.current,
     });
     localStorage.setItem(STORAGE_KEYS.draft, JSON.stringify(localDraftWithNavigation));
+    localDraftTabBoundary.current.remember(localDraftWithNavigation);
     localStorage.setItem(CLOUD_TOMBSTONES_KEY, JSON.stringify(reconciled.tombstones));
     persistCloudMetadata(localStorage, reconciled);
     hadLocalPreferences.current = true;
@@ -2224,7 +2251,9 @@ function GolfBetsApp() {
     try {
       if (localStorage.getItem(accountDeletionMarkerKey(identity.userId))) return false;
       const previousDraft = readStoredJson<unknown>(window.localStorage, STORAGE_KEYS.draft, null);
+      if (!localDraftTabBoundary.current.isCurrent(previousDraft)) { flushLocalState.current?.(); return false; }
       const draft = persistPendingRoundReview(window.localStorage, cloudHydrationBoundary.current.projectDraft(roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: true, startedAt, scorecardPhotoIds: savedPhotoIds })));
+      localDraftTabBoundary.current.remember(draft);
       // Fence timers/read callbacks from the previous React render. Until the
       // next persistence effect installs its fresh closure, the verified
       // checkpoint is already durable and must not be overwritten by that render.
@@ -2255,7 +2284,9 @@ function GolfBetsApp() {
       const draft = cloudHydrationBoundary.current.projectDraft(roundDraftPayload({ scores: savedScores, scoreEdits: savedEdits, bets: savedBets, currentIndex: savedIndex, reviewPending: false, startedAt, scorecardPhotoIds: savedPhotoIds, ...capture, ...configuration }));
       // localStorage is the synchronous durability boundary used by Safari/PWA.
       // Metadata and the offline outbox are created only after exact readback.
+      if (!localDraftTabBoundary.current.isCurrent(previousDraft)) { flushLocalState.current?.(); return false; }
       persistRoundDraftCheckpoint(window.localStorage, draft);
+      localDraftTabBoundary.current.remember(draft);
       localPersistRevision.current += 1;
       flushLocalState.current = () => true;
       trackLocalCloudCheckpoint(localStorage, draft, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap }, previousDraft);
@@ -2423,6 +2454,7 @@ function GolfBetsApp() {
           flushLocalState.current = () => true;
           const previousDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
           clearActiveRoundStorage(localStorage);
+          localDraftTabBoundary.current.remember(null);
           trackLocalCloudCheckpoint(localStorage, null, { highContrast, language: "es-MX", notificationsEnabled, defaultHandicap: identity.defaultHandicap }, previousDraft);
           setHistory(verifiedHistory.map(normalizeHistorySnapshot));
           setRoundClosed(true);
@@ -2921,6 +2953,7 @@ function GolfBetsApp() {
     localPersistRevision.current += 1;
     flushLocalState.current = () => true;
     clearActiveRoundStorage(localStorage);
+    localDraftTabBoundary.current.remember(null);
     trackLocalCloudCheckpoint(localStorage, null, { highContrast, language: 'es-MX', notificationsEnabled, defaultHandicap: identity.defaultHandicap }, previousDraft);
     requestCloudSync.current?.();
   }
@@ -2950,6 +2983,7 @@ function GolfBetsApp() {
         flushLocalState.current = () => true;
         const previousDraft = readStoredJson<unknown>(localStorage, STORAGE_KEYS.draft, null);
         clearActiveRoundStorage(localStorage);
+        localDraftTabBoundary.current.remember(null);
         trackLocalCloudCheckpoint(localStorage, null, { highContrast, language: 'es-MX', notificationsEnabled, defaultHandicap: identity.defaultHandicap }, previousDraft);
         requestCloudSync.current?.();
       } else await parkActiveRound('cancelled');
@@ -4139,7 +4173,8 @@ function GolfBetsApp() {
     }} onFindRival={() => openCareerFriends("search")} onRetry={() => setStatisticsRetry(value => value + 1)} username={identity.username} club={identity.homeClub} city={identity.city} ghin={unifiedGhinControl} accessToken={identity.accessToken} onOpenProfile={openProfileRoot} onExploreTournaments={POLLA_LIVE_RELEASED && pollaCloudConfigured ? () => setTab("pollaLive") : undefined} />}
     {tab === "coach" && <MyCoach insights={betaGolfInsights} ready={statisticsReady} onBallFit={() => openCoachFitting(false)} onLaunchMonitor={() => openCoachFitting(true)} onProgress={() => setTab("stats")} onEquipment={() => { setLaunchMonitorEntry(false); setProfileCompletionTarget("equipment"); setProfileFocus("equipment"); setTab("profile"); }} />}
 
-    {tab === "play" && <PlayHub
+    {tab === "play" && (!hydrated || hydratedWorkspaceOwner !== identity.userId) && <p role="status">Recuperando tu ronda guardada…</p>}
+    {tab === "play" && hydrated && hydratedWorkspaceOwner === identity.userId && <PlayHub
       pendingRounds={<>
         <SharedRoundsEntry token={identity.accessToken} onOpen={openSharedRound} />
         {history.filter(row => row.lifecycleState === 'live' && row.id !== roundId && !row.cloudReadOnly).map(row => <section className="card" key={row.id}><h3>{row.courseName}</h3><p>{row.date} · {Object.keys(row.scores || {}).length}/{row.order?.length || row.roundHoles || 18} hoyos capturados · Pendiente</p><button type="button" className="secondary" onClick={() => requestNewRoundIntent({ kind: 'resume', snapshot: row })}>Continuar</button><button type="button" className="textButton" onClick={() => openHistoricalRound(row.id)}>Ver tarjeta</button><button type="button" className="textButton" onClick={() => setPendingRoundToClose(row)}>Cerrar / cancelar</button></section>)}
@@ -4296,6 +4331,7 @@ function GolfBetsApp() {
           // The confirmed canonical card is now the workspace, not an owned
           // local score copy that could overwrite another participant.
           setRoundClosed(true); setDraftAvailable(false); localStorage.setItem(STORAGE_KEYS.draft, "null");
+          localDraftTabBoundary.current.remember(null);
           setEditingRound(false); openSharedRound(canonicalId); return true;
         }
         setSharedRoundId(null);
@@ -4596,7 +4632,7 @@ function GolfBetsApp() {
       clubs={ownerClubChoices.map(club => club.label)} access={scorecardEditAccess()} onSaveHole={saveScorecardHole}
       navigation={<AppBottomNav activeTab={tab} onNavigate={navigateFromBottomBar} onResumeRound={globalRoundAvailable ? resumeActiveRound : undefined} />}>{openScorecard => <>
       <nav className="roundSessionActions" aria-label="Administrar ronda en curso">
-        <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={() => { if (flushLocalState.current?.()) setTab("play"); }}>Guardar y salir</button>
+        <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={saveAndExitRound}>Guardar y salir</button>
         <button type="button" className="secondary" onPointerDown={commitFocusedNumericCapture} onClick={requestNewRound}>Nueva ronda</button>
         <button type="button" className="textButton" onClick={() => { setNewRoundBackupError(''); setShowDeleteRoundConfirm(true); }}>Cerrar sin completar / cancelar</button>
       </nav>

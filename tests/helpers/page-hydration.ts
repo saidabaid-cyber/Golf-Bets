@@ -3,6 +3,7 @@ import { runInNewContext } from "node:vm";
 import { createRequire } from "node:module";
 import ts from "typescript";
 import { CloudHydrationBoundary } from "../../lib/cloud-hydration";
+import { RoundDraftTabBoundary } from "../../lib/round-draft-tab-boundary";
 import { CLOUD_LOCAL_META_KEY } from "../../lib/cloud-sync";
 import { DEFAULT_COURSES } from "../../lib/golf-course-directory";
 
@@ -15,7 +16,7 @@ export function pageHydrationHarness(text = readFileSync("app/page.tsx", "utf8")
     hydrated: true, hydratedWorkspaceOwner: "qa-owner", cloudLinked: true, highContrast: true, notificationsEnabled: false, roundClosed: false, editingRound: false, history: [], savedPersonalRivals: [],
     frequentPlayers: [], frequentGroups: [], courses: [fixture.course], pendingCourseIdentity: null, holeSummarySession: { current: null },
     undoStack: { current: [] }, currentIndexRef: { current: 0 }, favoriteCourseIds: [], recentCourseIds: [], roundHandicapBasis: "relative", roundTemplateOrigin: null,
-    cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, CLOUD_LOCAL_META_KEY, defaultCourses: DEFAULT_COURSES, laVista: fixture.course,
+    cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, localDraftTabBoundary: { current: new RoundDraftTabBoundary() }, CLOUD_LOCAL_META_KEY, defaultCourses: DEFAULT_COURSES, laVista: fixture.course,
   };
   for (const node of page.statements) {
     if (!ts.isImportDeclaration(node) || !node.importClause?.namedBindings || !ts.isNamedImports(node.importClause.namedBindings)) continue;

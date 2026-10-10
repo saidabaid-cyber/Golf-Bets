@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { CloudHydrationBoundary } from "../lib/cloud-hydration";
+import { RoundDraftTabBoundary } from "../lib/round-draft-tab-boundary";
 import { stableValue, cloudDraftApplyPlan, restoreLocalRoundUi } from "../lib/cloud-sync";
 import { recoveredRoundResumeIndex } from "../lib/active-round-navigation";
 import { STORAGE_KEYS } from "../lib/round-utils";
@@ -26,6 +27,7 @@ test("the actual cloud apply callback recovers H2 on a cold workspace and preser
     runInNewContext(js, {
       exports: exported, cloudHydrationBoundary: { current: new CloudHydrationBoundary() }, mergeLocalAndCloud: (_local: unknown, remote: unknown) => remote,
       stableValue, cloudDraftApplyPlan, restoreLocalRoundUi, localPersistRevision: revision,
+      localDraftTabBoundary: { current: new RoundDraftTabBoundary() },
       flushLocalState: { current: () => true }, preserveDraftConflict() {}, setFeedback() {},
       applyDraft: (value: typeof draft, options: { preserveLocalUi: boolean }) => { preserve = options.preserveLocalUi; if (!preserve) index = recoveredRoundResumeIndex(value, ["a", "b"], [1, 2, 3]); },
       mergeDefaultCourses: (courses: unknown) => courses, normalizeHistorySnapshot: (round: unknown) => round,

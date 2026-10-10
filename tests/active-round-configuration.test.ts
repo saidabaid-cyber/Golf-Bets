@@ -7,6 +7,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { normalizeRoundDraft } from "../lib/round-utils";
 import { CloudHydrationBoundary } from "../lib/cloud-hydration";
+import { RoundDraftTabBoundary } from "../lib/round-draft-tab-boundary";
 import { wizardEngineFixture } from "./fixtures/round-wizard-engine";
 import { applyRoundCourseHandicaps } from "../features/handicap/round-player-handicap";
 import { withPlayerCourseCards } from "../lib/player-course-card";
@@ -175,7 +176,7 @@ test("online cancel closes canonical cloud before clearing the active draft; fai
     saveRoundHistoryLocalFirst: async () => { events.push("local-save"); return { history: [] }; },
     offlineDeviceId: { current: "qa-device" }, hadLocalPreferences: { current: false },
     setHistory() {}, normalizeHistorySnapshot: (value: unknown) => value, clearActiveRoundStorage: () => { events.push("clear-active"); },
-    localPersistRevision: { current: 0 }, trackLocalCloudCheckpoint() {}, highContrast: false, notificationsEnabled: false, requestCloudSync: { current() {} },
+    localPersistRevision: { current: 0 }, localDraftTabBoundary: { current: new RoundDraftTabBoundary() }, trackLocalCloudCheckpoint() {}, highContrast: false, notificationsEnabled: false, requestCloudSync: { current() {} },
   };
   await execute("parkActiveRound", dependencies)("cancelled");
   assert.deepEqual(events, ["cloud-cancel", "local-save", "clear-active"]);
