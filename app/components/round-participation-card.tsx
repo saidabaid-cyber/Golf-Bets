@@ -35,7 +35,7 @@ export function RoundParticipationCard({ accessToken, roundId, localRoundId, onC
     <span className="eyebrow">{card?.completed ? "REVISAR TARJETA" : "RONDA COMPARTIDA"}</span>
     <h2>{card?.courseName || "Tarjeta de participantes"}</h2>
     {card?.groupName && <p>{card.groupName}</p>}
-    {card && <><p>{card.completed ? "Cada jugador vinculado confirma su propia participación antes de incorporar esta tarjeta a sus estadísticas." : "El organizador registra los scores en esta ronda. La captura desde otros teléfonos todavía no está disponible."}</p>
+    {card && <><p>{card.completed ? "Cada jugador vinculado confirma su propia participación antes de incorporar esta tarjeta a sus estadísticas." : card.scorekeeping === "self" ? "Cada participante puede capturar su tarjeta desde la misma ronda compartida." : "El organizador registra los scores de todos en esta ronda."}</p>
       <ul className={styles.players}>{card.players.map(player => <li key={player.playerKey}><span><b>{player.name}</b><small>{player.status === "GUEST" ? "Sin app" : player.status === "CONFIRMED" ? "Confirmado" : "Pendiente de revisión"}</small></span><strong>{player.score ?? "—"}</strong></li>)}</ul>
       {card.myPlayerKey && <details><summary>Mi tarjeta hoyo por hoyo</summary><div className={styles.holes}>{card.players.find(player => player.playerKey === card.myPlayerKey)?.scorecard.map(hole => <span key={hole.hole}>H{hole.hole}<b>{hole.score ?? "—"}</b></span>)}</div></details>}
       {card.myBalance !== null && <p>Mi balance · {new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN" }).format(card.myBalance)}</p>}

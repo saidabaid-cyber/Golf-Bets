@@ -112,7 +112,7 @@ test("the DNF explanation runs before the generic missing-score archive guard", 
   assert.match(page.slice(specificGuard, genericGuard), /no captures scores ficticios/);
   assert.match(page.slice(specificGuard, genericGuard), /solo se usa para calcular Presiones/);
 
-  const liveStart = page.indexOf("function saveAndAdvance()");
+  const liveStart = page.indexOf("function saveAndAdvance(");
   const liveGuard = page.indexOf("abandonedPressurePlayersWithMissingScores([holeNumber]", liveStart);
   const liveValidation = page.indexOf("collectHoleValidationErrors", liveStart);
   const liveCommit = page.indexOf("commitHoleCapture", liveStart);
@@ -392,7 +392,7 @@ test("Card AI reusa las puertas finales y no muestra resultados con una Personal
 
 test("el último hoyo digital conserva el borrador vivo y pasa todas las puertas antes de promover revisión", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const liveStart = page.indexOf("function saveAndAdvance()");
+  const liveStart = page.indexOf("function saveAndAdvance(");
   const liveEnd = page.indexOf("useLayoutEffect(() => { latestSaveAndAdvance", liveStart);
   const liveFlow = page.slice(liveStart, liveEnd);
   assert.ok(liveStart >= 0 && liveEnd > liveStart);
@@ -457,7 +457,7 @@ test("Card AI treats untouched Camellos and Peces facts as zero optional events"
 
 test("live digital capture derives Camellos and Peces but only gates required facts", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const liveStart = page.indexOf("function saveAndAdvance()");
+  const liveStart = page.indexOf("function saveAndAdvance(");
   const liveEnd = page.indexOf("const savedRabbits", liveStart);
   const liveFlow = page.slice(liveStart, liveEnd);
   const factGuard = liveFlow.indexOf("requiredRoundCaptureFactErrors");

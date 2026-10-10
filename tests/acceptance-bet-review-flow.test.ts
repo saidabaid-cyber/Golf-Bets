@@ -239,7 +239,7 @@ test("un error de cuota conserva intacto el último borrador confirmado", () => 
 
 test("la UI persiste cada hoyo antes del resumen y de avanzar", () => {
   const page = readFileSync("app/page.tsx", "utf8");
-  const saveStart = page.indexOf("function saveAndAdvance()");
+  const saveStart = page.indexOf("function saveAndAdvance(");
   const checkpoint = page.indexOf("const checkpointPersisted", saveStart);
   const committedCall = page.indexOf("persistCommittedHoleBeforeAdvance(committed.scores, committed.edits", checkpoint);
   const blocked = page.indexOf("if (!checkpointPersisted) return", checkpoint);

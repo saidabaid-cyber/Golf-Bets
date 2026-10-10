@@ -7,7 +7,7 @@ import { hasRoundToPreserve } from '../lib/new-round-safety';
 import { initialBets } from '../lib/new-round-bets';
 import { collectRoundSetupPreflightIssues } from '../lib/round-setup-preflight';
 import { collectHoleValidationErrors } from '../lib/hole-validation';
-import { commitHoleCapture } from '../lib/score-capture';
+import { commitHoleCapture, applyPendingScoreEdits } from '../lib/score-capture';
 
 // Execute the actual orchestration functions, not a second round implementation.
 const page = ts.createSourceFile('page.tsx',readFileSync('app/page.tsx','utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
@@ -28,6 +28,7 @@ test('fresh round drops previous participants, bets, start hole and duration; it
  const observed:Record<string,unknown>={};
  const globals:any={identity:{mode:'authenticated'},accountIndex:null,accountPrimaryRoundPlayer:()=>owner,initialBets,normalizeRoundPresentation:()=>({playMode:'normal'}),emptyCounterBetKeepers:()=>({}),emptyExpenses:{},playOrder:()=>Array.from({length:18},(_,i)=>i+1),segmentDefinitions:()=>[],laVista:{id:'default-not-selected'},makeId:()=> 'NEW-ID',localDateMexico:()=> '2026-10-09',undoStack:{current:[]}};
  const fn=page.getText().slice(page.getText().indexOf('  function resetRound('),page.getText().indexOf('  function applyNewRoundIntent('));
+ globals.URL=URL; globals.window={location:{href:'https://qa.invalid/?sharedRound=old'},history:{replaceState:()=>{}}};
  for(const name of new Set(fn.match(/set[A-Z]\w+/g)||[]))globals[name]=(value:unknown)=>observed[name]=value;
  actualFunction('resetRound',globals)();
  assert.deepEqual(JSON.parse(JSON.stringify(observed.setPlayers)),[owner]);assert.equal(observed.setRoundId,'NEW-ID');assert.equal(observed.setStartHole,1);assert.equal(observed.setRoundHoles,18);
@@ -57,5 +58,12 @@ test('GPS explicit save checkpoints the same hole and never advances or opens a 
  assert.equal(save(false),true);assert.equal(persisted,1);assert.deepEqual(JSON.parse(JSON.stringify(committed.scores)),{1:{owner:4},3:{owner:5}});
  // No summary/camera/navigation functions are supplied: calling one would fail.
  scope.scoreEdits={};scope.scores={};scope.scoreCaptureComplete=false;
+ scope.savePartialHole=actualFunction('savePartialHole',{...scope,applyPendingScoreEdits,setCurrentIndex:()=>{}});
  const missing=actualFunction('saveAndAdvance',scope);assert.equal(missing(false),false);assert.equal(persisted,1);
+});
+
+test('owner may save one explicit player without confirming suggested pars of others',()=>{
+ let checkpoint:any; const scope={holeNumber:1,currentIndex:0,order:[1,2,3],players:[owner,{id:'other',name:'Other'}],scores:{},scoreEdits:{1:{owner:4}},bets:initialBets([]),applyPendingScoreEdits,
+ persistCommittedHoleBeforeAdvance:(scores:unknown,edits:unknown,_bets:unknown,index:number)=>{checkpoint={scores,edits,index};return true;},setScores:()=>{},setScoreEdits:()=>{},setCurrentIndex:()=>{},setFeedback:()=>{}};
+ assert.equal(actualFunction('savePartialHole',scope)(true),true);assert.deepEqual(JSON.parse(JSON.stringify(checkpoint.scores)),{1:{owner:4}});assert.equal(checkpoint.index,1);
 });

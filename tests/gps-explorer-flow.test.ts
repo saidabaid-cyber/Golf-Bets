@@ -62,7 +62,7 @@ test('round exploration preserves round ID and navigates without capturing score
   for (const hole of [2, 3, 1]) ui.find('Hoyo GPS').props.onChange({ target: { value: String(hole) } });
   assert.deepEqual(navigated, [2, 3, 1]); assert.deepEqual(scored, []);
   assert.equal(ui.find('GPS dedicado').props['data-round-id'], 'SYNTHETIC-ROUND');
-  const score = nodes(ui.render()).find(node => node.type === 'button' && Array.isArray(node.props.children) && node.props.children[0] === 'Anotar score · ')!;
+  const score = nodes(ui.render()).find(node => node.type === 'button' && Array.isArray(node.props.children) && node.props.children[0] === 'Anotar · ')!;
   score.props.onClick(); assert.deepEqual(scored, [1]);
 });
 

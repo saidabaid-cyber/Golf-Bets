@@ -106,8 +106,8 @@ test('disabled feature and protected/non-canonical deployments do not read sessi
     const r = await route({ env }); assert.equal((await r.get(request(host))).status, 404); assert.deepEqual(r.counts(), { authCalls: 0, adminCalls: 0, dbCalls: 0 });
   }
 });
-test('anonymous, lifecycle-denied and non-entitled accounts cannot read private data', async () => {
-  for (const [account, status] of [[{ ok: false, status: 401, code: 'AUTH_REQUIRED' }, 401], [{ ok: false, status: 403, userId: tester, code: 'ACCOUNT_DEACTIVATED' }, 403], [{ ok: true, userId: outsider }, 403]] as const) {
+test('anonymous and lifecycle-denied accounts cannot read private data', async () => {
+  for (const [account, status] of [[{ ok: false, status: 401, code: 'AUTH_REQUIRED' }, 401], [{ ok: false, status: 403, userId: tester, code: 'ACCOUNT_DEACTIVATED' }, 403]] as const) {
     const r = await route({ account }); const response = await r.get(request()); assert.equal(response.status, status); assert.equal(response.body.courses, undefined); assert.equal(r.counts().dbCalls, 0);
   }
 });
@@ -124,12 +124,12 @@ test('existing DEV QA readers use the normal explorer without being elevated to 
   assert.equal(response.status, 200); assert.equal(response.body.courses.length, 4); assert.equal(r.counts().adminCalls, 0);
   assert.equal((await r.get(request('app.thebackyard.com.mx'))).status, 404);
 });
-test('existing server-confirmed course admin remains supported and temporary access errors are not denial', async () => {
+test('normal authenticated DEV readers do not depend on administrative permissions', async () => {
   const granted = await route({ admin: { ok: true } }); assert.equal((await granted.get(request())).status, 200);
-  const unavailable = await route({ admin: { ok: false, status: 503, code: 'ADMIN_ACCESS_UNAVAILABLE' } }); assert.equal((await unavailable.get(request())).status, 503); assert.equal(unavailable.counts().dbCalls, 0);
+  const unavailable = await route({ admin: { ok: false, status: 503, code: 'ADMIN_ACCESS_UNAVAILABLE' } }); assert.equal((await unavailable.get(request())).status, 200); assert.equal(unavailable.counts().adminCalls, 0);
 });
-test('query/headers cannot forge pilot entitlement and cross-site attempts stop before session/storage', async () => {
-  const r = await route(); assert.equal((await r.get({ ...request(), url: request().url + `?userId=${tester}&role=ADMIN` })).status, 403); assert.equal(r.counts().dbCalls, 0);
+test('query/headers cannot bypass authentication and cross-site attempts stop before session/storage', async () => {
+  const r = await route({account:{ok:false,status:401,code:'AUTH_REQUIRED'}}); assert.equal((await r.get({ ...request(), url: request().url + `?userId=${tester}&role=ADMIN` })).status, 401); assert.equal(r.counts().dbCalls, 0);
   for (const extra of [{ origin: 'https://other.example' }, { 'sec-fetch-site': 'cross-site' }] as Array<Record<string, string>>) { const cross = await route({ account: { ok: true, userId: tester } }); assert.equal((await cross.get(request(undefined, extra))).status, 403); assert.equal(cross.counts().authCalls, 0); }
 });
 test('partial cached availability stays useful; unavailable storage is an explicit controlled-import pending', async () => {

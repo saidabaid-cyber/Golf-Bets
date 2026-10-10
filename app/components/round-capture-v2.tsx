@@ -30,7 +30,8 @@ type CounterQuantities = Record<CounterBetKind, Record<string, number | undefine
 
 export type RoundCaptureV2Props = {
   initialGpsOpen?: boolean;
-  gpsContent?: (controls: { active: boolean; onBack: () => void; onScore: (position: number) => void }) => ReactNode;
+  gpsContent?: (controls: { active: boolean; onBack: () => void; onScore: (position: number) => void; onCard: () => void }) => ReactNode;
+  cardScores?: Record<number, Record<string, number | null | undefined>>;
   course: Pick<Course, "name" | "teeName" | "latitude" | "longitude" | "playerHoleCards">;
   hole: Hole;
   order: number[];
@@ -155,6 +156,7 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   const [gpsOpen, setGpsOpen] = useState(Boolean(props.initialGpsOpen));
   const [gpsVisited, setGpsVisited] = useState(Boolean(props.initialGpsOpen));
   const [gpsScoreOpen, setGpsScoreOpen] = useState(false);
+  const [gpsCardOpen, setGpsCardOpen] = useState(false);
   const [gpsScoreSaving, setGpsScoreSaving] = useState(false);
   const [gpsScoreError, setGpsScoreError] = useState('');
   const gpsSaveFlight = useRef(false);
@@ -341,7 +343,8 @@ export function RoundCaptureV2(props: RoundCaptureV2Props) {
   }
 
   return <div className={styles.screen} data-game-screen="approved-compact-v1">
-    {gpsVisited && props.gpsContent && <div hidden={!gpsOpen} inert={gpsScoreOpen || !gpsOpen} aria-hidden={gpsScoreOpen || !gpsOpen} id="round-hole-map" aria-label="Vista GPS del hoyo">{props.gpsContent({ active: gpsOpen, onBack: () => { setGpsOpen(false); setGpsScoreOpen(false); }, onScore: position => { const index = order.indexOf(position); if (index >= 0) { props.onNavigateHole(index); setGpsScoreOpen(true); } } })}</div>}
+    {gpsVisited && props.gpsContent && <div hidden={!gpsOpen} inert={gpsScoreOpen || gpsCardOpen || !gpsOpen} aria-hidden={gpsScoreOpen || gpsCardOpen || !gpsOpen} id="round-hole-map" aria-label="Vista GPS del hoyo">{props.gpsContent({ active: gpsOpen, onBack: () => { setGpsOpen(false); setGpsScoreOpen(false); setGpsCardOpen(false); }, onScore: position => { const index = order.indexOf(position); if (index >= 0) { props.onNavigateHole(index); setGpsScoreOpen(true); setGpsCardOpen(false); } }, onCard: () => { setGpsScoreOpen(false); setGpsCardOpen(true); } })}</div>}
+    {gpsOpen && gpsCardOpen && <section className={styles.gpsScoreBackdrop} role="dialog" aria-modal="true" aria-label="Tarjeta de la ronda"><div className={styles.gpsScorePanel}><h2>Tarjeta de la ronda</h2><div style={{ overflowX: "auto" }}><table><thead><tr><th>Hoyo</th>{players.map(player => <th key={player.id}>{player.name}</th>)}</tr></thead><tbody>{order.map(number => <tr key={number}><th>{number}</th>{players.map(player => <td key={player.id}>{props.cardScores?.[number]?.[player.id] ?? "—"}</td>)}</tr>)}</tbody></table></div><p>Scores guardados. Los valores sugeridos y las ediciones pendientes no se incluyen.</p><button type="button" className="secondary" onClick={() => setGpsCardOpen(false)}>Volver al mapa</button></div></section>}
     {gpsOpen && gpsScoreOpen && <section className={styles.gpsScoreBackdrop} role="dialog" aria-modal="true" aria-label={`Anotar score · Hoyo ${hole.number}`}><div className={styles.gpsScorePanel}><h2>Anotar score · Hoyo {hole.number}</h2><p>Captura pendiente de esta misma ronda. Navegar en GPS no guarda scores.</p>{players.map(player => <div className={styles.gpsScoreRow} key={player.id}><b>{player.name}</b><CompactStepper label={`Score ${player.name} hoyo ${hole.number}`} value={scores[player.id]} fallback={hole.par} min={1} onChange={value => props.onScoreChange(player.id, value)} /></div>)}{props.captureErrors?.map(message => <p role="alert" key={message}>{message}</p>)}<button type="button" className="primary" disabled={props.saveDisabled || gpsScoreSaving || !props.onSaveHole} onClick={() => void saveGpsHole()}>{gpsScoreSaving ? "Guardando…" : "Guardar score"}</button>{gpsScoreError && <p role="alert">{gpsScoreError}</p>}<button type="button" className="secondary" disabled={gpsScoreSaving} onClick={() => setGpsScoreOpen(false)}>Volver al mapa · conservar edición</button><button type="button" className="textButton" disabled={gpsScoreSaving} onClick={() => { setGpsScoreOpen(false); setGpsOpen(false); props.onModeChange("advanced"); }}>Estadísticas / capturas de apuestas</button></div></section>}
     <div className={styles.captureBody} hidden={gpsOpen && Boolean(props.gpsContent)}>
     <section className={styles.hero}>
