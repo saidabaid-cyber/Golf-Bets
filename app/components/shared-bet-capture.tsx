@@ -22,6 +22,7 @@ export function SharedPlayerBetCapture({ round, player, hole, draft, onChange }:
   const bets = round.betConfig;
   if (!bets || round.presentation?.playMode === "score_only") return null;
   const active = (key: "camels" | "fish" | "units" | "vipers") => bets[key].enabled && bets[key].participantIds.includes(player.id);
+  if (!(["camels", "fish", "units", "vipers"] as const).some(active)) return null;
   const change = (key: keyof SharedPlayerFacts, value: string) => onChange({ ...draft, [key]: value === "" ? null : Number(value) });
   return <details><summary>Eventos de mis apuestas</summary><p>Guarda con tu score. Las unidades naturales se calculan automáticamente; aquí captura sólo las adicionales.</p>
     {(["camels", "fish"] as const).filter(active).map(key => <label key={key}>{key === "camels" ? "Entradas a bunker" : "Entradas al agua / área de penalidad"}<input aria-label={`${key === "camels" ? "Bunkers" : "Agua"} ${player.name} hoyo ${hole}`} type="number" inputMode="numeric" min={0} max={20}
