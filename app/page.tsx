@@ -4278,7 +4278,7 @@ function GolfBetsApp() {
           ? await loadCourseOperations(course, startedAt, null, identity.accessToken).catch(() => course) : course;
         const savedBets = freezeRoundHandicapBases(bets, startedPlayers, roundHandicapBasis);
         const savedIndex = editingRound ? currentIndex : 0;
-        if ((scorekeepingMode === "self" || startedPlayers.length > 1) && identity.mode === "authenticated" && !editingRound) {
+        if (scorekeepingMode === "self" && identity.mode === "authenticated" && !editingRound) {
           const base = currentSnapshot(); if (!base || !identity.accessToken) return false;
           const snapshot = { ...base, courseSnapshot: resolvedCourse, players: startedPlayers, betConfig: savedBets,
             startedAt, completedAt: undefined, lifecycleState: "live", scorekeeping: { version: 1, mode: scorekeepingMode, organizerAccountUserId: identity.userId },

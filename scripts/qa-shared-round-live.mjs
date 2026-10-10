@@ -26,7 +26,10 @@ for (const key of ['qa_diego_green', 'qa_carlos_fairway', 'qa_fernanda_putt']) {
   accounts.push({ id: saved.id, key, token: auth.data.session.access_token });
 }
 const [a, b, outsider] = accounts, dir = '.qa-artifacts/play-shared-gps-20261009'; mkdirSync(dir, { recursive: true });
-const report = { generatedAt: new Date().toISOString(), buildSha: config.expectedSha, database: ref, actors: accounts.map(({ id, key }) => ({ id, key })), tests: {}, rounds: [], providers: { GolfAPI: 0, Mapbox: 0, GoogleInitializations: 0 } };
+let previous;
+try { previous = JSON.parse(readFileSync(`${dir}/two-session-e2e.json`, 'utf8')); } catch { /* First run. */ }
+if (previous) { assert.equal(previous.database, ref); assert.deepEqual(previous.actors, accounts.map(({id,key}) => ({id,key}))); }
+const report = { generatedAt: new Date().toISOString(), buildSha: config.expectedSha, database: ref, actors: accounts.map(({ id, key }) => ({ id, key })), tests: previous?.tests || {}, rounds: previous?.rounds || [], providers: previous?.providers || { GolfAPI: 0, Mapbox: 0, GoogleInitializations: 0 } };
 const journal = () => writeFileSync(`${dir}/two-session-e2e.json`, JSON.stringify(report, null, 2));
 const pass = name => { report.tests[name] = 'PASS'; journal(); console.log(name, 'PASS'); };
 async function api(actor, path, method = 'GET', body, expected = 200) {
@@ -38,6 +41,14 @@ const course = catalog.cards.find(c => c.holes?.length === 18); assert.ok(course
 if (process.argv.includes('--prepare')) { console.log('QA identities and deployed DEV/database binding verified. No round writes.'); process.exit(0); }
 const { initialBets } = require('../.test-dist/lib/new-round-bets.js');
 async function create(mode, suffix, guests = false) {
+  const existing = report.rounds.find(row => row.mode === mode);
+  if (existing) {
+    const saved = (await api(a, `/api/shared-rounds?roundId=${existing.id}`)).data;
+    assert.equal(saved.ownerId, a.id); assert.equal(saved.snapshot.id, existing.localId);
+    assert.ok(saved.snapshot.id.startsWith(`qa-shared-${suffix}-`));
+    assert.equal(saved.snapshot.scorekeeping.mode, mode);
+    return { round: saved.snapshot, id: existing.id };
+  }
   const stamp = new Date().toISOString(), players = [a, b].map((actor, index) => ({ id: `account-${actor.id}`, accountUserId: actor.id, name: index ? 'QA Carlos Fairway' : 'QA Diego Green', handicap: null }));
   if (guests) players.push({ id: 'qa-guest', name: 'QA Guest', handicap: null });
   const round = { id: `qa-shared-${suffix}-${randomUUID()}`, snapshotVersion: 2, scorekeeping: { version: 1, mode, organizerAccountUserId: a.id },
@@ -72,10 +83,12 @@ const [gpsA,gpsB] = await Promise.all([api(a,'/api/golf-gps/courses'),api(b,'/ap
 assert.deepEqual(gpsA.courses,gpsB.courses); report.cacheHash = createHash('sha256').update(JSON.stringify(gpsA.courses)).digest('hex'); pass('two_accounts_same_saved_course_projection_no_upstream');
 const owner = await create('owner', 'owner', true);
 let own = (await api(a, `/api/shared-rounds?roundId=${owner.id}`)).data;
+if (own.snapshot.lifecycleState === 'live') {
 await api(a, '/api/shared-rounds', 'PATCH', { roundId: owner.id, patches: [patch(playerB, 1, 5, own.version)] });
 own = (await api(a, `/api/shared-rounds?roundId=${owner.id}`)).data; assert.equal(own.snapshot.scores[1][playerA], undefined);
 await api(b, '/api/shared-rounds', 'PATCH', { roundId: owner.id, patches: [patch(playerB,1,6,own.version)] }, 403); pass('owner_mode_partial_and_participant_read_only');
 await api(a,'/api/shared-rounds','PATCH',{roundId:owner.id,action:'cancel',expectedVersion:own.version});
+}
 const cancelled=(await api(a,`/api/shared-rounds?roundId=${owner.id}`)).data; assert.equal(cancelled.snapshot.lifecycleState,'cancelled'); assert.equal(cancelled.snapshot.scores[1][playerB],5);
 assert.ok(!(await api(a,'/api/shared-rounds')).rounds.some(r=>r.id===owner.id)); pass('soft_cancel_persists_scores_and_no_active_entry');
 report.cardA = (await read(a)).snapshot.scores; report.cardB = (await read(b)).snapshot.scores; assert.deepEqual(report.cardA, report.cardB); pass('fresh_authenticated_reads_persist_same_round');

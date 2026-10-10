@@ -47,8 +47,9 @@ export async function saveSharedLive(ctx: SocialContext, roundId: string, body: 
     }
     // Authorization is against the canonical roster above. Service credentials
     // stay server-side; a client cannot send a replacement snapshot or actor ID.
-    const saved = await ctx.admin.from("rounds_cloud").update({ snapshot, updated_at: new Date().toISOString() })
-      .eq("id", row.id).eq("version", row.version).select("id,owner_id,version,snapshot").maybeSingle();
+    const result = await ctx.admin.rpc("shared_round_live_cas_v1", { p_round_id: row.id, p_expected_version: row.version,
+      p_actor: ctx.userId, p_snapshot: snapshot });
+    const saved = { error: result.error, data: result.data?.[0] as typeof row | undefined };
     if (saved.error) { console.error("shared_score_write_failed", { code: saved.error.code }); throw new SharedLiveError("WRITE_FAILED", 503, "Captura local conservada; sincronización pendiente."); }
     if (saved.data) {
       let delivery;
