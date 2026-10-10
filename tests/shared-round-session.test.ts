@@ -12,7 +12,7 @@ test("real shared view saves only explicit own score; GPS stays mounted under sc
   let card:any={id:"canonical",version:1,ownerId:"A",snapshot:round,editablePlayerKeys:["a"],joined:true};
   const storage={getItem:(key:string)=>values.get(key)||null,setItem:(key:string,value:string)=>values.set(key,value)};
   runInNewContext(ts.transpileModule(readFileSync("app/components/shared-round-session.tsx","utf8"),{compilerOptions:{module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.ReactJSX,target:ts.ScriptTarget.ES2022}}).outputText,{
-    exports,AbortController,crypto:{randomUUID},localStorage:storage,sessionStorage:storage,
+    exports,AbortController,TextEncoder,crypto:{randomUUID},localStorage:storage,sessionStorage:storage,
     window:{addEventListener(){},removeEventListener(){}},document:{hidden:false},setInterval:()=>1,clearInterval(){},
     fetch:async (_url:string,options:any)=>{if(options?.method==="PATCH"){const body=JSON.parse(options.body);writes.push(body);if(failNext){failNext=false;return{ok:false,json:async()=>({error:"Offline fixture",code:"WRITE_FAILED"})};}const scores={...card.snapshot.scores}; for(const p of body.patches)scores[p.hole]={...scores[p.hole],[p.playerKey]:p.score}; card={...card,version:card.version+1,snapshot:{...card.snapshot,scores}};}return{ok:true,json:async()=>({data:card})};},
     require(name:string){
@@ -26,6 +26,7 @@ test("real shared view saves only explicit own score; GPS stays mounted under sc
       if(name==="./account-provider")return{useBackyardAccount:()=>({identity:{mode:"authenticated",userId:"A",accessToken:"synthetic"},openAccess(){}})};
       if(name==="./golf-gps/golf-gps-reader")return{GolfGpsReader:reader};
       if(name==="./round-participation-card")return{RoundParticipationCard:"confirmed-card"};
+      if(name==="./shared-bet-capture")return{SharedGroupBetCapture:"group-bets",SharedPlayerBetCapture:"player-bets",sharedBetPending:()=>null,sharedPuttsRequired:()=>false};
       if(name.endsWith(".css"))return{default:new Proxy({}, {get:(_target,key)=>String(key)})};throw Error(name);
     }
   });

@@ -775,7 +775,7 @@ export type RoundSnapshot = {
     cellVersions: Record<string, number>;
     operationIds: string[];
     joinedUserIds: string[];
-    audit: Array<{ id: string; actorId: string; playerKey: string; hole: number; kind: "SCORE_SET" | "PUTTS_SET"; value: number | null; baseVersion: number; resultingVersion: number; createdAt: string }>;
+    audit: Array<{ id: string; actorId: string; playerKey: string; hole: number; kind: "SCORE_SET" | "PUTTS_SET" | "STAT_PATCH" | "ROUND_SETTINGS_PATCH"; value: unknown; baseVersion: number; resultingVersion: number; createdAt: string }>;
   };
   /** In-progress rounds can be parked in history without entering statistics. */
   pausedAt?: string;

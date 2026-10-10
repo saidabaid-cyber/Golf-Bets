@@ -6,6 +6,8 @@ import { RoundParticipationCard } from "./round-participation-card";
 import type { RoundSnapshot } from "../../lib/types";
 import type { SharedScorePatch } from "../../lib/shared-round-live";
 import styles from "./shared-round-session.module.css";
+import { SharedGroupBetCapture, SharedPlayerBetCapture, sharedBetPending, sharedPuttsRequired } from "./shared-bet-capture";
+import type { SharedGroupFacts, SharedPlayerFacts } from "../../lib/shared-round-bet-capture";
 
 type LiveCard = { id: string; version: number; ownerId: string; snapshot: RoundSnapshot; editablePlayerKeys: string[]; joined: boolean };
 type Workspace = { drafts: Record<string, SharedScorePatch>; outbox: SharedScorePatch[] };
@@ -71,14 +73,26 @@ export function SharedRoundSession({ roundId, onExit }: { roundId: string; onExi
     } catch (failure) { setError((failure as Error).message); setNotice("Pendiente de sincronizar; conservado en este dispositivo."); return false; }
     finally { flight.current = false; setBusy(false); }
   }
+  async function syncAll(patches: SharedScorePatch[]) {
+    let batch: SharedScorePatch[] = [];
+    for (const patch of patches) {
+      if (batch.length && (batch.length === 25 || new TextEncoder().encode(JSON.stringify([...batch, patch])).length > 7000)) {
+        if (!await sync(batch)) return false;
+        batch = [];
+      }
+      batch.push(patch);
+    }
+    return !batch.length || await sync(batch);
+  }
   // Only explicitly saved outbox entries are retried; typing never saves.
-  useEffect(() => { const reconnect = () => { if (latest.current.outbox.length) void sync(latest.current.outbox); }; window.addEventListener("online", reconnect); return () => window.removeEventListener("online", reconnect); });
+  useEffect(() => { const reconnect = () => { if (latest.current.outbox.length) void syncAll(latest.current.outbox); }; window.addEventListener("online", reconnect); return () => window.removeEventListener("online", reconnect); });
   if (identity.mode !== "authenticated") return <section className="card"><h1>Ronda compartida</h1><p>Inicia sesión con la cuenta vinculada a esta ronda.</p><button type="button" onClick={openAccess}>Iniciar sesión</button></section>;
   if (!card) return <section className="card" role="status"><p>{error || "Leyendo la ronda compartida…"}</p><button onClick={() => void read().catch(e => setError(e.message))}>Reintentar</button><button onClick={onExit}>Volver a Play</button></section>;
   const round = card.snapshot, order = round.order || [], course = round.courseSnapshot;
   const hole = order.includes(position) ? position : order[0];
   const holeIndex = order.indexOf(hole), holeCard = course?.holes.find(h => h.number === hole);
   const editable = round.players?.filter(p => card.editablePlayerKeys.includes(p.id)) || [];
+  const pendingBets = sharedBetPending(round);
   function navigate(next: number) { setPosition(next); sessionStorage.setItem(`${storageKey}:hole`, String(next)); }
   function edit(playerKey: string, field: "score" | "putts", value: number | null) {
     if (flight.current) return;
@@ -87,8 +101,16 @@ export function SharedRoundSession({ roundId, onExit }: { roundId: string; onExi
     const patch: SharedScorePatch = previous && !queued ? previous : { ...previous, id: crypto.randomUUID(), playerKey, hole, baseVersion: card!.version, score: previous?.score ?? round.scores?.[hole]?.[playerKey] ?? null };
     store({ ...latest.current, outbox: queued ? latest.current.outbox.filter(p => p.id !== previous.id) : latest.current.outbox, drafts: { ...latest.current.drafts, [key]: { ...patch, [field]: value } } });
   }
+  function editFacts(playerKey: string, values: { facts?: SharedPlayerFacts; group?: SharedGroupFacts }) {
+    if (flight.current) return;
+    const key = cell(hole, playerKey), previous = latest.current.drafts[key];
+    const queued = previous && latest.current.outbox.some(p => p.id === previous.id);
+    const patch: SharedScorePatch = previous && !queued ? previous : { ...previous, id: crypto.randomUUID(), playerKey, hole, baseVersion: card!.version, score: previous?.score ?? round.scores?.[hole]?.[playerKey] ?? null };
+    store({ ...latest.current, outbox: queued ? latest.current.outbox.filter(p => p.id !== previous.id) : latest.current.outbox,
+      drafts: { ...latest.current.drafts, [key]: { ...patch, ...values } } });
+  }
   async function save() {
-    const patches = editable.flatMap(p => workspace.drafts[cell(hole, p.id)] ? [workspace.drafts[cell(hole, p.id)]] : []);
+    const patches = [...editable.map(p => p.id), ...(card!.ownerId === identity.userId ? ["@round"] : [])].flatMap(id => workspace.drafts[cell(hole, id)] ? [workspace.drafts[cell(hole, id)]] : []);
     if (!patches.length) { setNotice("No hay cambios para guardar."); return; }
     const ids = new Set(patches.map(p => p.id)); store({ ...latest.current, outbox: [...latest.current.outbox.filter(p => !ids.has(p.id)), ...patches] });
     if (await sync(patches)) { if (gpsVisible) setPanel(null); }
@@ -103,23 +125,23 @@ export function SharedRoundSession({ roundId, onExit }: { roundId: string; onExi
       store({ ...current, outbox: patches });
       // The endpoint accepts at most 25 cells. Keep every unsent batch durable
       // and leave the view open on failure rather than claiming a remote save.
-      for (let offset = 0; offset < patches.length; offset += 25) {
-        if (!await sync(patches.slice(offset, offset + 25))) {
-          if (gpsVisible) setPanel("score");
-          return;
-        }
+      if (!await syncAll(patches)) {
+        if (gpsVisible) setPanel("score");
+        return;
       }
     }
     onExit();
   }
   const scorePanel = <><div className={styles.sheetTitle}><h2>Hoyo {hole}{holeCard ? ` · Par ${holeCard.par}` : ""}</h2><button onClick={() => { setPanel(null); if (!gpsVisible) setGpsVisible(true); setGpsVisited(true); }}>Volver al mapa</button></div>
     {card.joined ? editable.map(p => { const draft = workspace.drafts[cell(hole, p.id)]; const value = draft ? draft.score : round.scores?.[hole]?.[p.id]; const assignment = round.playerTeeAssignments?.find(t => t.playerId === p.id);
-      return <div className={styles.player} key={p.id}><b>{p.name}{!p.accountUserId ? " · Sin app" : ""}</b><small>{assignment?.teeName || round.teeName} · HCP {p.handicap ?? "—"}</small><label>Score<input type="number" inputMode="numeric" min={1} max={20} aria-label={`Score ${p.name} hoyo ${hole}`} value={value ?? ""} onChange={e => edit(p.id, "score", e.target.value === "" ? null : Number(e.target.value))} /></label><details><summary>Putts opcionales</summary><input type="number" inputMode="numeric" min={0} max={20} aria-label={`Putts ${p.name} hoyo ${hole}`} value={draft?.putts ?? round.putts?.[hole]?.[p.id] ?? ""} onChange={e => edit(p.id, "putts", e.target.value === "" ? null : Number(e.target.value))} /></details></div>; }) : <button disabled={busy} onClick={() => { setBusy(true); void write({ action: "join" }).catch(e => setError(e.message)).finally(() => setBusy(false)); }}>Unirme a esta ronda</button>}
+      const requiredPutts = sharedPuttsRequired(round, p.id, hole);
+      return <div className={styles.player} key={p.id}><b>{p.name}{!p.accountUserId ? " · Sin app" : ""}</b><small>{assignment?.teeName || round.teeName} · HCP {p.handicap ?? "—"}</small><label>Score<input type="number" inputMode="numeric" min={1} max={20} aria-label={`Score ${p.name} hoyo ${hole}`} value={value ?? ""} onChange={e => edit(p.id, "score", e.target.value === "" ? null : Number(e.target.value))} /></label><details open={requiredPutts}><summary>{requiredPutts ? "Putts necesarios para la apuesta" : "Putts opcionales"}</summary><input type="number" inputMode="numeric" min={0} max={20} aria-label={`Putts ${p.name} hoyo ${hole}`} value={draft && Object.hasOwn(draft, "putts") ? draft.putts ?? "" : round.putts?.[hole]?.[p.id] ?? ""} onChange={e => edit(p.id, "putts", e.target.value === "" ? null : Number(e.target.value))} /></details><SharedPlayerBetCapture round={round} player={p} hole={hole} draft={draft?.facts} onChange={facts => editFacts(p.id, { facts })} /></div>; }) : <button disabled={busy} onClick={() => { setBusy(true); void write({ action: "join" }).catch(e => setError(e.message)).finally(() => setBusy(false)); }}>Unirme a esta ronda</button>}
+    {card.ownerId === identity.userId && round.lifecycleState === "live" && <SharedGroupBetCapture round={round} hole={hole} draft={workspace.drafts[cell(hole, "@round")]?.group} onChange={group => editFacts("@round", { group })} />}
     {card.joined && !editable.length && <p>{round.lifecycleState === "live" ? "El organizador lleva tu tarjeta en este modo." : "Ronda cerrada; tarjeta conservada."}</p>}
-    {editable.length > 0 && card.joined && <button className="primary" disabled={busy} onClick={() => void save()}>Guardar mi captura</button>}
-    <p role="status">{notice || "Sólo los scores guardados aparecen en la tarjeta compartida."}</p>{workspace.outbox.length > 0 && <button disabled={busy} onClick={() => void sync(workspace.outbox)}>Reintentar sincronización ({workspace.outbox.length})</button>}
+    {(editable.length > 0 || (card.ownerId === identity.userId && round.lifecycleState === "live")) && card.joined && <button className="primary" disabled={busy} onClick={() => void save()}>Guardar mi captura</button>}
+    <p role="status">{notice || "Sólo los scores guardados aparecen en la tarjeta compartida."}</p>{workspace.outbox.length > 0 && <button disabled={busy} onClick={() => void syncAll(workspace.outbox)}>Reintentar sincronización ({workspace.outbox.length})</button>}
     {error && <p role="alert">{error}</p>}
-    <p className={styles.pending}>Pendientes en H{hole}: {round.players?.filter(p => round.scores?.[hole]?.[p.id] == null).map(p => p.name).join(", ") || "ninguno"}. Apuestas y clasificación provisionales mientras falten resultados.</p></>;
+    <p className={styles.pending}>Pendientes en H{hole}: {round.players?.filter(p => round.scores?.[hole]?.[p.id] == null).map(p => p.name).join(", ") || "ninguno"}. Apuestas y clasificación provisionales mientras falten resultados.</p>{pendingBets && <p role="status">Apuestas pendientes · H{pendingBets.holeNumber}: {pendingBets.errors.join(" ")}</p>}</>;
   const fullCard = <><div className={styles.sheetTitle}><h2>Tarjeta compartida</h2><button onClick={() => { setPanel(null); if (!gpsVisible) { setGpsVisited(true); setGpsVisible(true); } }}>Volver al GPS</button></div><div className={styles.table}><table><thead><tr><th>Hoyo</th>{round.players?.map(p => <th key={p.id}>{p.name}</th>)}</tr></thead><tbody>{order.map(h => <tr key={h}><th>{h}</th>{round.players?.map(p => <td key={p.id}>{round.scores?.[h]?.[p.id] ?? "—"}</td>)}</tr>)}</tbody></table></div><p>Una misma ronda · {card.id} · revisión {card.version}</p><button onClick={() => { const drafts = { ...workspace.drafts }; for (const key of Object.keys(drafts)) { if (drafts[key].hole === hole) delete drafts[key]; } store({ drafts, outbox: workspace.outbox.filter(p => p.hole !== hole) }); setError(""); setPanel("score"); }}>Usar scores de nube en este hoyo</button></>;
   return <section className={styles.root} aria-label="Ronda compartida" data-round-id={card.id}>
     <header><button disabled={busy} onClick={() => void saveAndExit()}>Guardar y salir a Play</button><h1>{round.courseName}</h1><p>{round.scorekeeping?.mode === "self" ? "Cada jugador lleva su tarjeta" : "El organizador captura a todos"}</p></header>

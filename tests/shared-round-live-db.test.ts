@@ -16,14 +16,16 @@ test("canonical CAS keeps table permissions, immutable context, revisions and pr
       create trigger version_and_audit before update on public.rounds_cloud for each row execute function public.bump_test();
       grant usage on schema public to service_role,authenticated,anon;`);
     await db.exec(readFileSync("supabase/migrations/20261010050000_shared_round_live_cas.sql", "utf8"));
+    await db.exec(readFileSync("supabase/migrations/20261010070000_shared_round_bet_capture.sql", "utf8"));
     await db.query("insert into public.rounds_cloud(id,owner_id,snapshot) values($1,$2,$3)", [id, a, JSON.stringify(card)]);
     await db.exec("set request.jwt.claim.role='service_role'; set role service_role;");
     const call = (revision: number, actor: string, next: object) => db.query<{ version: number; snapshot: typeof card }>("select * from public.shared_round_live_cas_v1($1,$2,$3,$4)", [id, revision, actor, JSON.stringify(next)]);
-    const next = { ...card, scores: { 1: { b: 5 } } };
+    const next = { ...card, scores: { 1: { b: 5 } }, unitEvents: [{ id: "synthetic", hole: 1, playerId: "b", amount: 2 }], ballFriendSetup: { 1: { teamA: ["a", "b"] } } };
     const saved = await call(1, b, next); assert.equal(Number(saved.rows[0].version), 2);
     assert.deepEqual(saved.rows[0].snapshot.scores, { 1: { b: 5 } });
     assert.equal((await call(1, a, { ...next, scores: { 1: { a: 4 } } })).rows.length, 0);
     await assert.rejects(call(2, a, { ...next, courseName: "Wrong course" }), /Immutable round context/);
+    await assert.rejects(call(2, a, { ...next, personalBets: [{ id: "unauthorized-rule", baseValue: 1000 }] }), /Immutable personal rules/);
     await assert.rejects(call(2, "00000000-0000-4000-8000-000000000004", next), /Invalid live membership/);
     await assert.rejects(call(2, b, { ...next, lifecycleState: "cancelled" }), /Immutable round context/);
     await assert.rejects(call(2, a, { ...next, lifecycleState: null }), /Immutable round context/);
