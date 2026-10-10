@@ -15,6 +15,7 @@ import { runInNewContext } from "node:vm";
 import ts from "typescript";
 import { createHash } from "node:crypto";
 import { finalizeOwnerRound } from "../lib/owner-round-finalize";
+import { cancellationMaterial } from "../lib/owner-round-cancel";
 import { preserveRoundStatisticsOrigin } from "../lib/statistics-reset";
 
 const A = "11111111-1111-4111-8111-111111111111", B = "22222222-2222-4222-8222-222222222222", C = "33333333-3333-4333-8333-333333333333";
@@ -213,6 +214,7 @@ function ownerRoute(db: CloudDb, userId = A) {
     if (name.endsWith("/pending-round-recovery")) return {};
     if (name.endsWith("/shared-round-participants.server")) return { syncSharedRoundParticipants: async () => {} };
     if (name.endsWith("/shared-round-participants")) return { linkedRoundPlayers };
+    if (name.endsWith("/owner-round-cancel")) return { cancellationMaterial };
     throw new Error(name);
   } });
   return exported;

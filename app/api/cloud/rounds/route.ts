@@ -53,11 +53,15 @@ export async function POST(request: NextRequest) {
   const authenticated = await account(request);
   if ("error" in authenticated) return NextResponse.json({ error: authenticated.error, code: authenticated.code || "AUTH_REQUIRED" }, { status: authenticated.status });
   const { supabase, userId } = authenticated;
-  const body = await request.json().catch(() => null) as { round?: { id?: string; cloudReadOnly?: boolean } } | null;
+  const body = await request.json().catch(() => null) as { round?: RoundSnapshot } | null;
   if (typeof body?.round?.id !== "string" || !body.round.id) return NextResponse.json({ error: "Ronda inválida." }, { status: 400 });
   if (body.round.cloudReadOnly || body.round.id.startsWith("shared:")) return NextResponse.json({ error: "Esta tarjeta compartida es de sólo lectura." }, { status: 403 });
   try { linkedRoundPlayers(body.round as RoundSnapshot); }
   catch { return NextResponse.json({ error: "Identidades de jugadores inválidas o duplicadas." }, { status: 400 }); }
+  if (body.round.scorekeeping?.version === 1 && (body.round.scorekeeping.organizerAccountUserId !== userId
+    || !body.round.players?.some(p => p.id === body.round!.ownerId && p.accountUserId === userId)
+    || !["owner", "self"].includes(body.round.scorekeeping.mode))) return NextResponse.json({ error: "Organizador inválido." }, { status: 403 });
+  if (body.round.sharedLive) body.round.sharedLive = { cellVersions: {}, operationIds: [], joinedUserIds: [], audit: [] };
   const { data: existing } = await supabase.from("rounds_cloud").select("id").eq("owner_id", userId).eq("local_round_id", body.round.id).maybeSingle();
   if (existing) return NextResponse.json({ duplicate: true }, { status: 409 });
   const { data, error } = await supabase.from("rounds_cloud").insert({ owner_id: userId, local_round_id: body.round.id, local_id: body.round.id, snapshot: body.round }).select("id,version").single();
@@ -89,6 +93,7 @@ export async function PUT(request: NextRequest) {
   const existing = await authenticated.supabase.from("rounds_cloud").select("id,version,snapshot").eq("owner_id", authenticated.userId).eq("local_id", round.id).maybeSingle();
   if (existing.error) return NextResponse.json({ error: "No pudimos consultar la ronda." }, { status: 503 });
   if (!existing.data) return NextResponse.json({ error: "Ronda no disponible." }, { status: 404 });
+  if (existing.data.snapshot?.scorekeeping?.mode === "self" || existing.data.snapshot?.sharedLive) return NextResponse.json({ code: "SHARED_PATCH_REQUIRED", error: "Guarda cada tarjeta desde la ronda compartida." }, { status: 409 });
   const alreadyCancelled = round.lifecycleState === "cancelled" && existing.data.snapshot?.lifecycleState === "cancelled"
     && cancellationMaterial(round) === cancellationMaterial(existing.data.snapshot);
   if (Number(existing.data.version) !== body?.expectedVersion || (!alreadyCancelled && existing.data.snapshot?.lifecycleState !== "live"))

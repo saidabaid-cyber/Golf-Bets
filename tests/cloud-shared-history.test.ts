@@ -215,6 +215,7 @@ test("published rounds route uses participant-aware reader and refuses shared re
     if (name.endsWith("/pending-round-recovery")) return { readPendingOwnerRounds };
     if (name.endsWith("/shared-round-participants.server")) return { syncSharedRoundParticipants: async () => {} };
     if (name.endsWith("/shared-round-participants")) return { linkedRoundPlayers: () => [] };
+    if (name.endsWith("/owner-round-cancel")) return {};
     throw new Error(name);
   }, URL });
   const response = await exports.GET(new Request("https://qa.invalid/api/cloud/rounds", { headers: { authorization: "Bearer fixture" } }));

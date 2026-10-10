@@ -64,11 +64,11 @@ export async function syncSharedRoundParticipants(client: SupabaseClient, ownerI
     if (snapshot.scorekeeping?.version !== 1) continue;
     if (!["live", "completed"].includes(snapshot.lifecycleState || "")) continue;
     const linked = linkedRoundPlayers(snapshot);
-    await auditOwnerScores(client, ownerId, { id: row.id, version: Number(row.version), snapshot });
-    // VIEWER is deliberately read-only until a real participant write transport
-    // is available. The owner retains the existing owner scorekeeper permission.
+    // Cell patches already carry their authenticated author in the canonical
+    // audit. Do not retrospectively attribute a participant's score to owner.
+    if (!snapshot.sharedLive) await auditOwnerScores(client, ownerId, { id: row.id, version: Number(row.version), snapshot });
     const participants = linked.map(player => ({ round_id: row.id, user_id: player.accountUserId,
-      player_key: player.id, role: player.accountUserId === ownerId ? "ORGANIZER" : "VIEWER" }));
+      player_key: player.id, role: player.accountUserId === ownerId ? "ORGANIZER" : snapshot.scorekeeping?.mode === "self" ? "PLAYER" : "VIEWER" }));
     const existing = await client.from("round_participants_v2").select("id,user_id").eq("round_id", row.id);
     if (existing.error) throw existing.error;
     // The existing uniqueness constraint is a partial index: PostgREST's
@@ -77,7 +77,7 @@ export async function syncSharedRoundParticipants(client: SupabaseClient, ownerI
     for (const participant of participants) {
       const previous = (existing.data || []).find(item => item.user_id === participant.user_id);
       const saved = previous
-        ? await client.from("round_participants_v2").update({ player_key: participant.player_key }).eq("id", previous.id)
+        ? await client.from("round_participants_v2").update({ player_key: participant.player_key, role: participant.role }).eq("id", previous.id)
         : await client.from("round_participants_v2").insert(participant);
       if (saved.error && saved.error.code !== "23505") throw saved.error;
     }

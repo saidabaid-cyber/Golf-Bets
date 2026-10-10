@@ -16,7 +16,7 @@ export async function readPendingOwnerRounds(client: SupabaseClient, userId: str
   const rows: PendingRoundRecovery[] = (result.data || []).flatMap(row => {
     const snapshot = row.snapshot as RoundSnapshot;
     if (!snapshot?.id || snapshot.cloudReadOnly || snapshot.lifecycleState !== "live"
-      || snapshot.scorekeeping?.version !== 1 || snapshot.scorekeeping.mode !== "owner"
+      || snapshot.scorekeeping?.version !== 1 || snapshot.scorekeeping.mode !== "owner" || snapshot.sharedLive
       || snapshot.scorekeeping.organizerAccountUserId !== userId
       || !snapshot.players?.some(player => player.id === snapshot.ownerId && player.accountUserId === userId)
       || !Number.isInteger(Number(row.version)) || Number(row.version) < 1) return [];

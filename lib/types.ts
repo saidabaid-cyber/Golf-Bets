@@ -769,8 +769,14 @@ export type PersonalOpponentResult = {
 };
 
 export type RoundSnapshot = {
-  /** Owner capture is available; participant multiwriter is not advertised. */
-  scorekeeping?: { version: 1; mode: "owner"; organizerAccountUserId?: string };
+  scorekeeping?: { version: 1; mode: "owner" | "self"; organizerAccountUserId?: string };
+  /** Server-owned CAS receipts on the canonical snapshot. Navigation is local. */
+  sharedLive?: {
+    cellVersions: Record<string, number>;
+    operationIds: string[];
+    joinedUserIds: string[];
+    audit: Array<{ id: string; actorId: string; playerKey: string; hole: number; kind: "SCORE_SET" | "PUTTS_SET"; value: number | null; baseVersion: number; resultingVersion: number; createdAt: string }>;
+  };
   /** In-progress rounds can be parked in history without entering statistics. */
   pausedAt?: string;
   resumeHoleIndex?: number;

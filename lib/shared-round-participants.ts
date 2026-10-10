@@ -7,7 +7,7 @@ export type SharedRoundCard = {
     score: number | null; status: "CONFIRMED" | "PENDING_CONFIRMATION" | "GUEST";
     scorecard: Array<{ hole: number; score: number | null }> }>;
   myPlayerKey: string | null; myBalance: number | null; canConfirm: boolean;
-  scorekeeping: "owner";
+  scorekeeping: "owner" | "self";
   ghin: { canPostOwnScore: false; canPostScoreForAnotherUser: false };
 };
 
@@ -45,6 +45,6 @@ export function participantCard(roundId: string, ownerId: string, version: numbe
     }),
     myPlayerKey: mine?.id || null, myBalance: mine && completed && Number.isFinite(snapshot.playerBalances?.[mine.id]) ? snapshot.playerBalances![mine.id] : null,
     canConfirm: completed && ownerId !== viewerId && Boolean(mine) && !confirmed.has(viewerId),
-    scorekeeping: "owner", ghin: { canPostOwnScore: false, canPostScoreForAnotherUser: false },
+    scorekeeping: snapshot.scorekeeping?.mode || "owner", ghin: { canPostOwnScore: false, canPostScoreForAnotherUser: false },
   };
 }
