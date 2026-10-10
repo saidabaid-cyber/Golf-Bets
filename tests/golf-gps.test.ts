@@ -10,6 +10,7 @@ import { GPS_SAVED_COURSES, gpsCourseProjection, reviewedClubCardGps } from '../
 import type { GolfApiSnapshot } from '../lib/golfapi/normalize.mjs';
 import { isGpsPilotTester } from '../lib/gps-pilot-la-vista-1/access';
 import { isCrossSiteRequest } from '../lib/backyard-ai/server/http-security';
+import { scorecardQaAccount } from '../lib/scorecard-qa-access';
 
 // Synthetic contract fixture. These are NOT geographic measurements of Puebla.
 function snapshot(index = 0): GolfApiSnapshot {
@@ -87,6 +88,7 @@ async function route(options: { account?: Access; admin?: Access; env?: Record<s
   runInNewContext(routeJs, { exports, Promise, process: { env: { GOLF_GPS_ENABLED: 'true', GOLF_GPS_MAPS_ENABLED: 'false', GPS_LA_VISTA_1_PILOT_USER_IDS: tester, VERCEL_GIT_COMMIT_REF: 'integration/backyard-current', VERCEL_ENV: 'preview', ...options.env } }, require(specifier: string) {
     if (specifier === 'next/server') return { NextResponse: { json: (body: unknown, config: object) => ({ body, ...config }) } };
     if (specifier.endsWith('server-auth')) return { authenticatedRequest: async () => { authCalls++; return options.account ?? { ok: true, userId: outsider }; } };
+    if (specifier.endsWith('scorecard-qa-access')) return { scorecardQaAccount };
     if (specifier.endsWith('admin-mode.server')) return { requireAdminMode: async (_: unknown, module: string) => { assert.equal(module, 'courses'); adminCalls++; return options.admin ?? { ok: false, status: 403, code: 'ADMIN_PERMISSION_DENIED' }; } };
     if (specifier.endsWith('supabase/server')) return { getSupabaseAdmin: () => { dbCalls++; return options.database === false ? null : {}; } };
     if (specifier.endsWith('http-security')) return { isCrossSiteRequest };
@@ -114,6 +116,13 @@ test('tester gets a private minimal DTO through cached reads without global admi
   assert.equal(response.status, 200); assert.equal(response.body.courses.length, 4); assert.equal(response.body.mapsEnabled, false);
   assert.equal(response.headers['cache-control'], 'private, no-store'); assert.equal(r.counts().adminCalls, 0);
   assert.deepEqual(r.reads, GPS_SAVED_COURSES.map(c => c.externalId)); assert.equal(JSON.stringify(response.body).includes('PRIVATE_'), false);
+});
+
+test('existing DEV QA readers use the normal explorer without being elevated to course admin', async () => {
+  const r = await route({ account: { ok: true, userId: 'b182e0a1-d3f5-4e32-a005-29c6d55b6cdf' } });
+  const response = await r.get(request());
+  assert.equal(response.status, 200); assert.equal(response.body.courses.length, 4); assert.equal(r.counts().adminCalls, 0);
+  assert.equal((await r.get(request('app.thebackyard.com.mx'))).status, 404);
 });
 test('existing server-confirmed course admin remains supported and temporary access errors are not denial', async () => {
   const granted = await route({ admin: { ok: true } }); assert.equal((await granted.get(request())).status, 200);
