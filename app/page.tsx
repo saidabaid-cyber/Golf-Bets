@@ -481,12 +481,6 @@ type NewRoundIntent =
   | { kind: "players"; players: Player[] }
   | { kind: "group"; group: FrequentGroup; selectedMemberIds: string[]; scoreOnly?: boolean };
 
-function GpsRoundEntry({ ready, onOpen }: { ready: boolean; onOpen: () => void }) {
-  const opened = useRef(false);
-  useEffect(() => { if (ready && !opened.current) { opened.current = true; onOpen(); } }, [ready, onOpen]);
-  return <section className="card"><p role="status">Abriendo GPS con el contexto de tu ronda…</p></section>;
-}
-
 function GolfBetsApp() {
   const { identity, bettingConsentGranted, requestBettingConsent, cloudLinked, cloudStatus, setCloudStatus, applyCloudPreferences, reportCloudSyncError, clearCloudSyncError, refreshCloudSession } = useBackyardAccount();
   const indexControl = useBackyardIndexPreference(identity.userId, identity.mode === "authenticated");
@@ -3979,9 +3973,9 @@ function GolfBetsApp() {
     };
   }, [draftAvailable, roundClosed, roundReviewPending, courseSelected, course.name, course.holes, pendingCourseIdentity, roundDate, roundStartedAt, roundHoles, order, currentIndex, completedHoles, players.length, scores, ownerId]);
   function openRoundGps() {
-    setRoundGpsIntent(true);
-    if (activeRoundSummary) { continueActiveRound(); return; }
-    requestNewRoundIntent({ kind: "scoreOnly" });
+    // Exploring saved greens never creates or resumes a round/draft.
+    // RoundCapture supplies its own course and score-hole context when playing.
+    setTab("gps");
   }
   function saveAndExitRound() {
     commitFocusedNumericCapture();
@@ -4145,7 +4139,7 @@ function GolfBetsApp() {
       onOpenResults={() => setTab("results")}
     />}
 
-    {tab === "gps" && <GpsRoundEntry ready={hydrated && hydratedWorkspaceOwner === identity.userId} onOpen={openRoundGps} />}
+    {tab === "gps" && <GolfGpsReader token={identity.accessToken ?? null} onBack={() => setTab("play")} />}
 
     {tab === "totalScore" && (() => { const principal = accountPrimaryRoundPlayer(identity, accountIndex); return principal ? <TotalScoreEntry key={identity.userId} courses={courseOptions} player={principal} accessToken={identity.accessToken} onSave={saveTotalHistory} onBack={() => setTab("play")} /> : <section className="card"><p>Inicia sesión para guardar tu tarjeta.</p><button type="button" onClick={() => setTab("play")}>Volver a Jugar</button></section>; })()}
 
