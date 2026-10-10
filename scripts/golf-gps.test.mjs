@@ -81,6 +81,8 @@ test('Google adapter draws points/accuracy/lines, moves target and cleans overla
   const scene = { holeKey: 'synthetic:1', hole, player: state().reading, target: [.5, 0], unit: 'yd', playerTargetLabel: '10', targetCenterLabel: '20' };
   const surface = await googleMapsFactory({ enabled: true, apiKey: 'SYNTHETIC' }, b.runtime)(element, { onTarget: point => targets.push(point), onError: code => errors.push(code) }, undefined, scene);
   surface.update(scene); surface.fitHole(scene); assert.equal(b.mapsCreated.length, 1); assert.deepEqual(b.mapsCreated[0].options.center, { lat: 0, lng: 1 }); assert.equal(b.mapsCreated[0].options.mapTypeId, 'satellite');
+  assert.equal(b.mapsCreated[0].options.disableDefaultUI, true); assert.equal(b.mapsCreated[0].options.cameraControl, false); assert.equal(b.mapsCreated[0].options.zoomControl, false); assert.equal(b.mapsCreated[0].options.gestureHandling, 'greedy');
+  assert.ok(element.children.some(c=>c.attributes['aria-label']==='Centro del green'&&c.textContent==='C'));
   b.mapsCreated[0].events.click({ latLng: { lng: () => .3, lat: () => .4 } }); assert.deepEqual(targets[0], [.3, .4]);
   const target = element.children.find(c => c.attributes['aria-label']?.startsWith('Objetivo'));
   target.events.pointerdown({ clientX: 0, clientY: 0, pointerId: 1, preventDefault() {}, stopPropagation() {} }); target.events.pointermove({ pointerId: 1, clientX: 10, clientY: 20, preventDefault() {}, stopPropagation() {} }); target.events.pointerup({ pointerId: 1, stopPropagation() {} }); assert.deepEqual(targets.at(-1), [1.5, -2]); assert.equal(b.mapsCreated[0].options.draggable, true);
